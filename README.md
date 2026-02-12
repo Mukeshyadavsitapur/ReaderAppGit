@@ -1,50 +1,158 @@
-# Welcome to your Expo app 👋
+# Reader App 📚
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A comprehensive language learning and reading application built with React Native and Expo, featuring AI-powered tools, custom audio support, and intelligent content management.
 
-## Get started
+---
 
-1. Install dependencies
+## ✨ Features
 
+### Core Capabilities
+- 📖 **Interactive Reading**: Tap-to-translate with instant word lookup
+- 🎧 **Audio Support**: Text-to-speech with custom audio upload
+- 📝 **Smart Notes**: Quick notes with rich formatting and audio
+- 📚 **Library Management**: Organize articles, stories, and reading materials
+- 🎯 **Quiz & Flashcards**: AI-generated quizzes and spaced repetition learning
+- 📖 **Personal Dictionary**: Save words with translations and pronunciations
+
+### Latest Updates
+- ✨ **Custom Audio Upload**: Upload your own pronunciation files for words
+- 📥 **Dictionary Drive Import**: Download dictionaries from Google Drive links
+- 🗑️ **Unified Delete System**: Consistent soft-delete with Recycle Bin across all content types
+- 🧹 **Smart File Cleanup**: Automatic audio file management and cleanup
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (v16 or higher)
+- npm or yarn
+- Expo CLI
+- Android Studio (for Android) or Xcode (for iOS)
+
+### Installation
+
+1. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. **Start the development server:**
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Run on your device:**
+   - Scan the QR code with Expo Go app
+   - Press `a` for Android emulator
+   - Press `i` for iOS simulator
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Configuration
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+1. **API Key Setup**: Enter your Gemini API key in Settings
+2. **Language Preferences**: Configure your target learning language
+3. **Customize Appearance**: Choose theme and reading preferences
 
-## Get a fresh project
+---
 
-When you're ready, run:
+## 📖 Documentation
 
-```bash
-npm run reset-project
+For detailed feature documentation, usage guides, and troubleshooting:
+
+👉 **[Read the User Guide](USER_GUIDE.md)**
+
+The user guide includes:
+- Complete feature documentation
+- Step-by-step tutorials for new features
+- Tips and best practices
+- Troubleshooting guide
+- Keyboard shortcuts
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: React Native with Expo
+- **Language**: TypeScript
+- **AI Integration**: Google Gemini API
+- **Storage**: AsyncStorage
+- **Audio**: Expo AV
+- **File System**: Expo FileSystem
+- **UI Components**: Custom components with Lucide icons
+
+---
+
+## 📱 Key Features Explained
+
+### Custom Audio Upload
+Upload your own audio files to use as pronunciation guides for dictionary words. Supports MP3, M4A, WAV, and AAC formats.
+
+### Dictionary Import from Drive
+Quickly import entire dictionaries by pasting a Google Drive share link. Perfect for sharing vocabulary lists or importing pre-made dictionaries.
+
+### Unified Delete System
+All content types (Notes, Library, Stories, Quizzes) use a consistent soft-delete system:
+- Items move to Recycle Bin when deleted
+- Restore accidentally deleted items
+- Permanent deletion with automatic file cleanup
+- Smart storage management
+
+---
+
+## 🔧 Development
+
+### Project Structure
+```
+ReaderApp/
+├── app/                 # Main application code
+│   └── index.tsx       # Primary app component
+├── components/         # Reusable UI components
+├── constants/          # App constants and configuration
+├── hooks/              # Custom React hooks
+├── types/              # TypeScript type definitions
+├── utils/              # Utility functions
+└── assets/             # Images, fonts, and static files
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Available Scripts
 
-## Learn more
+- `npm start` - Start Expo development server
+- `npm run android` - Run on Android
+- `npm run ios` - Run on iOS
+- `npm run web` - Run on web browser
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 🤝 Contributing
 
-## Join the community
+Contributions are welcome! Please follow these steps:
 
-Join our community of developers creating universal apps.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- Built with [Expo](https://expo.dev)
+- Powered by [Google Gemini API](https://ai.google.dev)
+- Icons by [Lucide](https://lucide.dev)
+
+---
+
+## 📞 Support
+
+For detailed usage instructions and troubleshooting, please refer to the [User Guide](USER_GUIDE.md).
+
+---
+
+**Happy Learning! 🎓**

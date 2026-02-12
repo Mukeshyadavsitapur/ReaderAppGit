@@ -1,0 +1,61 @@
+diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
+index dbae14c..7b77622 100644
+--- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
++++ b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
+@@ -36,9 +36,13 @@ internal class StatusBarModule(reactContext: ReactApplicationContext?) :
+   override fun getTypedExportedConstants(): Map<String, Any> {
+     val currentActivity = reactApplicationContext.currentActivity
+     val statusBarColor =
+-        currentActivity?.window?.statusBarColor?.let { color ->
+-          String.format("#%06X", 0xFFFFFF and color)
+-        } ?: "black"
++        if (Build.VERSION.SDK_INT < 35) {
++          currentActivity?.window?.statusBarColor?.let { color ->
++            String.format("#%06X", 0xFFFFFF and color)
++          } ?: "black"
++        } else {
++          "transparent"
++        }
+     return mapOf(
+         HEIGHT_KEY to PixelUtil.toDIPFromPixel(getStatusBarHeightPx(currentActivity).toFloat()),
+         DEFAULT_BACKGROUND_COLOR_KEY to statusBarColor,
+@@ -64,6 +68,9 @@ internal class StatusBarModule(reactContext: ReactApplicationContext?) :
+     UiThreadUtil.runOnUiThread(
+         object : GuardedRunnable(reactApplicationContext) {
+           override fun runGuarded() {
++            if (Build.VERSION.SDK_INT >= 35) {
++              return
++            }
+             val window = activity.window ?: return
+             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+             if (animated) {
+diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
+index 60f2a94..ed75c23 100644
+--- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
++++ b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
+@@ -75,7 +75,11 @@ private fun Window.statusBarHide() {
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+       // Ensure the content extends into the cutout area
+       attributes.layoutInDisplayCutoutMode =
+-          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
++          if (Build.VERSION.SDK_INT >= 35) {
++            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
++          } else {
++            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
++          }
+       setDecorFitsSystemWindows(false)
+     }
+     addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+@@ -93,7 +97,11 @@ private fun Window.statusBarShow() {
+   } else {
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+       attributes.layoutInDisplayCutoutMode =
+-          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
++          if (Build.VERSION.SDK_INT >= 35) {
++            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
++          } else {
++            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
++          }
+       setDecorFitsSystemWindows(true)
+     }
+     addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)

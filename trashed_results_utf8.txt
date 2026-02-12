@@ -1,0 +1,55 @@
+﻿
+    Trash2,
+                trashed: false
+                                // Found Existing: 
+Update timestamp to bump to top and restore if 
+trashed
+                                if 
+(updated.trashed) updated.trashed = false;
+            trashed: false,
+            .filter((s: any) => s.toolId === 
+'quick_notes' && !s.trashed)
+                .filter(s => !s.trashed)
+                .filter((s: any) => (s.toolId === 
+'story_generator' || s.toolId === 
+'editorial_writer') && !s.trashed);
+                    .filter(s => s.toolId === 
+'quiz_save' && !s.trashed)
+                    .filter((s: any) => s.toolId 
+=== 'flashcards' && !s.trashed)
+            !s.trashed &&
+                !s.trashed &&
+                                <Trash2 size={20} 
+color={theme.text} opacity={0.7} />
+                                pinned: s.pinned, 
+trashed: s.trashed, hasAudio: s.hasAudio,
+                // Helper to check duplicates or 
+find existing in trash
+                                        // Check 
+duplicate or existing in trash
+                                    pinned: 
+s.pinned, trashed: s.trashed, hasAudio: s.hasAudio,
+                                    pinned: 
+s.pinned, trashed: s.trashed, hasAudio: s.hasAudio,
+                                    // NEW: Check 
+if the duplicate is trashed, if so, restore it
+                                    if 
+(duplicateSession && duplicateSession.trashed) {
+                                        const 
+restored = { ...duplicateSession, trashed: false, 
+timestamp: new Date().toISOString() };
+                                    // BUMP 
+TIMESTAMP and UNTRASH existing session
+                                    const 
+updatedSession = { ...duplicateSession, trashed: 
+false, timestamp: new Date().toISOString() };
+                const isLibraryTrashSupported = 
+activeTab === 'library' && libraryTab !== 'audio';
+                                                    
+        <Trash2 size={20} color="white" />
+                                                    
+        {/* Hide Pin in Trash Mode */}
+                                                    
+            <Trash2 size={20} color="white" />
+
+

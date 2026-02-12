@@ -2,14 +2,35 @@
   "expo": {
     "name": "ReaderApp",
     "slug": "ReaderApp",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "16.1.6",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "readerapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "buildNumber": "16.1.6",
+      "bundleIdentifier": "com.mkysitapur.ReaderApp",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "The app accesses your photos to let you analyze text and images from your library.",
+        "NSCameraUsageDescription": "The app uses the camera to capture images for visual analysis and note creation.",
+        "NSMicrophoneUsageDescription": "Allow ReaderApp to access your microphone for speech features.",
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Text File",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.plain-text",
+              "public.json",
+              "public.text"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +40,40 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mkysitapur.ReaderApp",
+      "versionCode": 33,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "content"
+            },
+            {
+              "scheme": "file"
+            },
+            {
+              "mimeType": "application/json"
+            },
+            {
+              "mimeType": "text/plain"
+            }
+          ],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -27,6 +81,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-document-picker",
       [
         "expo-splash-screen",
         {
@@ -38,11 +93,32 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you analyze text and images from your library.",
+          "cameraPermission": "The app uses the camera to capture images for visual analysis and note creation."
+        }
+      ],
+      "expo-audio",
+      "expo-video",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "DEFAULT"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "af8b1ec8-cfb1-4d15-8143-6d9e0e053dee"
+      }
     }
   }
 }
