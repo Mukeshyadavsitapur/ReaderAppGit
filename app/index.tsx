@@ -190,6 +190,7 @@ import {
     WRITER_DOCUMENT_QUICK_ACTIONS,
     WRITER_VISION_QUICK_ACTIONS
 } from '../src/constants';
+import { useDictionary } from '../src/hooks/useDictionary';
 import { useStudio } from '../src/hooks/useStudio';
 import DictionaryView from './features/DictionaryView';
 import StudioView from './features/StudioView';
@@ -1806,34 +1807,6 @@ const generateCertificateHtml = (userName: string, title: string, score: number,
 
 
 // HELPER: FileSystem Storage for Recent Searches
-const getRecentSearchesPath = () => {
-    return FileSystem.documentDirectory + 'recentSearches.json';
-};
-
-const saveRecentSearchesToFile = async (searches: any[]) => {
-    try {
-        const path = getRecentSearchesPath();
-        await FileSystem.writeAsStringAsync(path, JSON.stringify(searches));
-    } catch (e) {
-        console.error("Failed to save recent searches to file:", e);
-    }
-};
-
-const loadRecentSearchesFromFile = async () => {
-    try {
-        const path = getRecentSearchesPath();
-        const info = await FileSystem.getInfoAsync(path);
-        if (info.exists) {
-            const content = await FileSystem.readAsStringAsync(path);
-            const parsed = JSON.parse(content);
-            return Array.isArray(parsed) ? parsed : [];
-        }
-        return [];
-    } catch (e) {
-        console.error("Failed to load recent searches from file:", e);
-        return null;
-    }
-};
 
 // REMOVED: AMBIENT_SOUNDS constant
 
@@ -4342,6 +4315,19 @@ export default function App() {
         offlineVoice: "", // NEW: Specific voice identifier
     });
 
+    const [customApiKey, setCustomApiKey] = useState("");
+    const [isInOnboardingPreview, setIsInOnboardingPreview] = useState(false);
+    const [showWordModal, setShowWordModal] = useState(false);
+    const [selectedWord, setSelectedWord] = useState<any>(null);
+    const [wordData, setWordData] = useState<any>(null);
+    const [isDefining, setIsDefining] = useState<any>(false);
+    const [modalLanguage, setModalLanguage] = useState("English");
+    const [appMode, setAppMode] = useState("idle");
+    const [activeTab, setActiveTab] = useState("home");
+
+    const displaySettingsRef = useRef(displaySettings);
+    useEffect(() => { displaySettingsRef.current = displaySettings; }, [displaySettings]);
+
     // NEW: Available Offline Voices (stored as objects)
     const [availableVoices, setAvailableVoices] = useState<{ code: string; label: string; identifier?: string }[]>([]);
 
@@ -4370,7 +4356,7 @@ export default function App() {
                 }).sort((a, b) => a.label.localeCompare(b.label));
 
                 setAvailableVoices(mappedVoices);
-                console.log("Loaded Voices:", mappedVoices.length);
+
             } catch (e) {
                 console.warn("Failed to fetch TTS voices", e);
             }
@@ -4381,9 +4367,36 @@ export default function App() {
     const theme = THEMES[displaySettings.theme];
 
     const recorder = useAudioRecorder(SPEECH_RECORDING_OPTIONS);
-    const [customApiKey, setCustomApiKey] = useState("");
-    const [isInOnboardingPreview, setIsInOnboardingPreview] = useState(false);
-    const [dictionaryViewMode, setDictionaryViewMode] = useState('list'); // 'list' or 'advanced'
+    // --- DICTIONARY & PERSISTENCE HOOK ---
+    const {
+        dictionaryViewMode, setDictionaryViewMode,
+        dictionaryInput, setDictionaryInput,
+        dictionaryResult, setDictionaryResult,
+        dictionaryCurrentWord, setDictionaryCurrentWord,
+        isDictionaryLoading, setIsDictionaryLoading, isBatchProcessing, setIsBatchProcessing,
+        dictionaryCache, setDictionaryCache,
+        savedWords, setSavedWords,
+        wordMap, recentSearches, setRecentSearches,
+        handleDictionaryTabSearch, handleWordLookup, handleRefreshDefinition,
+        toggleSaveWord, deleteSavedWord, deleteRecentSearch, isWordSaved,
+        handleWordQuiz, fetchBatchDefinitions, getDictionaryData, loadWordFromFile,
+        recentSearchesRef, savedWordsRef, updateRecentSearchesOrchestrator
+    } = useDictionary({
+        callLLM,
+        displaySettings,
+        displaySettingsRef,
+        startQuiz: handleStartQuiz,
+        showWordModal,
+        setShowWordModal,
+        selectedWord,
+        setSelectedWord,
+        setIsDefining,
+        setWordData,
+        modalLanguage,
+        setModalLanguage,
+        activeTab
+    });
+
 
     const [flashcardSession, setFlashcardSession] = useState<any>(null);
 
@@ -4392,20 +4405,10 @@ export default function App() {
     // UPDATED: Added isLanguageLearning to schoolConfig state
     const [schoolConfig, setSchoolConfig] = useState<any>({ input: "", length: "Medium", complexity: "Intermediate", subject: "General", isLanguageLearning: false });
     const [chatSessions, setChatSessions] = useState<any>({});
-    const [savedWords, setSavedWords] = useState<any[]>([]);
-    const [wordMap, setWordMap] = useState<Set<string>>(new Set());
+
     // Pagination State
     const [allSessionIds, setAllSessionIds] = useState<string[]>([]);
     const [loadedSessionCount, setLoadedSessionCount] = useState(50);
-
-    useEffect(() => {
-        // Build O(1) lookup set when savedWords changes
-        const m = new Set<string>();
-        savedWords.forEach(w => {
-            if (w.word) m.add(w.word.toLowerCase());
-        });
-        setWordMap(m);
-    }, [savedWords]);
 
     const [availableSubjects, setAvailableSubjects] = useState<any[]>([]);
     const [readingSession, setReadingSession] = useState<any>(null);
@@ -4430,38 +4433,11 @@ export default function App() {
     const [isFlashcardMode, setIsFlashcardMode] = useState<any>(false);
     const [savedQuestions, setSavedQuestions] = useState<any[]>([]);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
-    const [selectedWord, setSelectedWord] = useState<any>(null);
-    const [dictionaryInput, setDictionaryInput] = useState<any>("");
     const [quizPassword, setQuizPassword] = useState<any>(""); // NEW: Password State
     const [quizUnlockInput, setQuizUnlockInput] = useState<any>(""); // NEW: Unlock Input State
     const [isReviewUnlocked, setIsReviewUnlocked] = useState<any>(false); // NEW: Lock State
     const [audioFiles, setAudioFiles] = useState<any[]>([]);
     const [isAudioLoading, setIsAudioLoading] = useState<any>(false);
-    const [wordData, setWordData] = useState<any>(null);
-    const [isDefining, setIsDefining] = useState<any>(false);
-
-
-    const [dictionaryResult, setDictionaryResult] = useState<any>(null);
-    const [isDictionaryLoading, setIsDictionaryLoading] = useState<any>(false);
-    const [isBatchProcessing, setIsBatchProcessing] = useState<any>(false); // NEW: Non-blocking batch indicator
-    const [recentSearches, setRecentSearches] = useState<any[]>([]);
-    const recentSearchesRef = useRef<any[]>([]); // SINGLE SOURCE OF TRUTH for Dictionary
-
-    // HELPER: Orchestrator for safely updating Dictionary List (Fixes Concurrency)
-    const updateRecentSearchesOrchestrator = async (newItems: any[], skipStateUpdate: boolean = false) => {
-        // 1. Update Reference (Master List)
-        recentSearchesRef.current = newItems;
-
-        // 2. Save to File (Always Persist Master List)
-        await saveRecentSearchesToFile(newItems);
-
-        // 3. Update UI State (Optional - can be skipped for batch logic)
-        if (!skipStateUpdate) {
-            setRecentSearches(newItems);
-        }
-    };
-    const [dictionaryCurrentWord, setDictionaryCurrentWord] = useState<any>("");
-    const [dictionaryCache, setDictionaryCache] = useState<any>({});
     const [quizSecondsElapsed, setQuizSecondsElapsed] = useState<any>(0);
     const [apiConnectionStatus, setApiConnectionStatus] = useState<any>("idle");
     const [isLoadingHistory, setIsLoadingHistory] = useState<any>(false);
@@ -4473,8 +4449,6 @@ export default function App() {
     const [isExportingAudioId, setIsExportingAudioId] = useState<any>(null);
 
     // Restored State Variables
-    const [appMode, setAppMode] = useState("idle");
-    const [activeTab, setActiveTab] = useState("home");
     const [navOrigin, setNavOrigin] = useState("idle");
     const [quickSearchQuery, setQuickSearchQuery] = useState("");
     const [generationData, setGenerationData] = useState<any>(null);
@@ -5745,22 +5719,6 @@ export default function App() {
 
     const [activeModelId, setActiveModelId] = useState<any>(null);
 
-    const loadWordFromFile = async (liteWord: any) => {
-        if (!liteWord || !liteWord.id) return liteWord;
-        if (liteWord.simple || liteWord.advanced) return liteWord;
-        try {
-            const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-            const fileName = `word_${liteWord.id}.json`;
-            const fileUri = docDir + fileName;
-            const info = await fs.getInfoAsync(fileUri);
-            if (info.exists) {
-                const content = await fs.readAsStringAsync(fileUri);
-                const fullData = JSON.parse(content);
-                return { ...fullData, id: liteWord.id, timestamp: liteWord.timestamp };
-            }
-        } catch (e) { }
-        return liteWord;
-    };
 
     const [availableSubjectsInitial, setAvailableSubjectsInitial] = useState(['Art', 'Basic Computer', 'Biology', 'Chemistry', 'Computer Science', 'English', 'General', 'Geography', 'History', 'Literature', 'Machine Learning', 'Mathematics', 'Physics', 'Reasoning', 'Science']);
 
@@ -5933,7 +5891,6 @@ export default function App() {
         };
         sanitizeRecentSearches();
     }, []);
-    useEffect(() => { recentSearchesRef.current = recentSearches; }, [recentSearches]);
     useEffect(() => { setChatSessionsRef.current = setChatSessions; }, [chatSessions]);
 
     // NEW: Sync refs for background handling
@@ -6000,7 +5957,6 @@ export default function App() {
     const [showAppearance, setShowAppearance] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [libraryTab, setLibraryTab] = useState("chats");
-    const [showWordModal, setShowWordModal] = useState(false);
     const [showImageSourceModal, setShowImageSourceModal] = useState(false);
     const [showVisionDraft, setShowVisionDraft] = useState(false);
     const [toastMessage, setToastMessage] = useState<any>(null);
@@ -6472,24 +6428,6 @@ export default function App() {
 
     // FIX: Removed duplicate 'const recentSearchesRef' declaration here.
     // It is already declared at the top of the App component.
-    const dictionaryCacheRef = useRef(dictionaryCache);
-    const savedWordsRef = useRef(savedWords);
-    const displaySettingsRef = useRef(displaySettings);
-
-    // Debug: List available models to find a working TTS one
-    // Debug: List available models to find a working TTS one - DISABLED
-    // useEffect(() => {
-    //     const checkModels = async () => {
-    //         console.log("Checking available Gemini models..."); 
-    //     };
-    //     // checkModels();
-    // }, []);
-
-    // Sync refs with state
-    useEffect(() => { recentSearchesRef.current = recentSearches; }, [recentSearches]);
-    useEffect(() => { dictionaryCacheRef.current = dictionaryCache; }, [dictionaryCache]);
-    useEffect(() => { savedWordsRef.current = savedWords; }, [savedWords]);
-    useEffect(() => { displaySettingsRef.current = displaySettings; }, [displaySettings]);
 
     const dictionarySuggestions = useMemo(() => {
         if (!dictionaryInput.trim()) return [];
@@ -6556,7 +6494,6 @@ export default function App() {
     }, [activeTab, chatSessions, savedWords, savedQuestions, recentSearches]);
 
     const [isTableLandscape, setIsTableLandscape] = useState(true);
-    const [modalLanguage, setModalLanguage] = useState("English");
 
     const readerListRef = useRef<any>(null);
     const scrollOffsets = useRef<any>({});
@@ -7609,95 +7546,7 @@ export default function App() {
         }));
     };
 
-    const handleRefreshDefinition = async (wordToRefresh: string) => {
-        if (!wordToRefresh) return;
 
-        const isModal = showWordModal;
-
-        if (isModal) {
-            setIsDefining(true);
-            setWordData(null);
-        } else {
-            setIsDictionaryLoading(true);
-            setDictionaryResult(null);
-        }
-
-        try {
-            // Determine language: if modal, use local state; else use global
-            const targetLang = isModal ? modalLanguage : displaySettings.language;
-
-            // Force Fetch by calling API directly
-            const data = await getDictionaryData(wordToRefresh, targetLang);
-
-            // Prepare complete object ensuring word property exists
-            const cleanData = { ...data, word: data.word || wordToRefresh };
-            const completeData = {
-                ...cleanData,
-                language: targetLang,
-                translations: { [targetLang]: cleanData }
-            };
-
-            if (!data.error) {
-                const lower = wordToRefresh.trim().toLowerCase();
-
-                // Update Runtime Cache
-                setDictionaryCache((prev: any) => ({ ...prev, [lower]: completeData }));
-
-                // Update History (Storage)
-                setRecentSearches(prev => {
-                    const filtered = (prev as any[]).filter(item => {
-                        const w = typeof item === 'string' ? item : item.word;
-                        return w.toLowerCase() !== lower;
-                    });
-                    // UPDATED: Use dynamic dictionaryLimit
-                    const limit = displaySettingsRef.current.dictionaryLimit || 1000;
-                    const updated = [{ word: completeData.word, data: completeData }, ...filtered].slice(0, limit);
-                    AsyncStorage.setItem('recentSearches', JSON.stringify(updated));
-                    return updated;
-                });
-            }
-
-            if (isModal) {
-                setWordData(completeData);
-                setIsDefining(false);
-            } else {
-                setDictionaryResult(completeData);
-                setIsDictionaryLoading(false);
-            }
-        } catch (e) {
-            console.error("Refresh failed", e);
-            const errorData = { error: "Could not refresh definition." };
-            if (isModal) {
-                setWordData(errorData);
-                setIsDefining(false);
-            } else {
-                setDictionaryResult(errorData);
-                setIsDictionaryLoading(false);
-            }
-        }
-    };
-
-    const deleteRecentSearch = (wordToDelete: string) => {
-        Alert.alert(
-            "Delete Word",
-            `Remove "${wordToDelete}" from your personal dictionary?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: 'destructive',
-                    onPress: async () => {
-                        const updated = recentSearches.filter(item => {
-                            const w = typeof item === 'string' ? item : item.word;
-                            return w.toLowerCase() !== wordToDelete.toLowerCase();
-                        });
-                        setRecentSearches(updated);
-                        await saveRecentSearchesToFile(updated); // Update File
-                    }
-                }
-            ]
-        );
-    };
 
     // ... (customVisionPrompts helper functions remain same)
     // NEW: Helper functions for custom vision prompts
@@ -8451,7 +8300,7 @@ export default function App() {
                                     throw new Error("Index Desync");
                                 }
 
-                                console.log("⚡ Instant Load: Loaded library from metadata index.");
+
                                 const ids = metaKeys;
                                 // Sort by recent first (Ids are chronological or timestamps are separate)
                                 // We can use the 'lastOpened' or 'timestamp' from metadata to sort accurately
@@ -9289,7 +9138,7 @@ export default function App() {
                 const fullJson = await AsyncStorage.getItem(`session_${session.id}`);
                 if (fullJson) {
                     fullSession = JSON.parse(fullJson);
-                    console.log(`Deep Loaded session: ${session.id}`);
+
                 }
             } catch (deepLoadErr) {
                 console.error("Deep Load Failed:", deepLoadErr);
@@ -9853,125 +9702,9 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         }
     };
 
-    const deleteSavedWord = async (id: string) => {
-        try {
-            // 1. Remove File
-            const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-            const fileName = `word_${id}.json`;
-            await fs.deleteAsync(docDir + fileName, { idempotent: true });
 
-            // 2. Update Index
-            const newWords = savedWords.filter(w => w.id !== id);
-            setSavedWords(newWords);
-
-            // 3. Save Index to File System
-            await fs.writeAsStringAsync(docDir + 'dictionary_index.json', JSON.stringify(newWords));
-        } catch (e) {
-            console.error("Error deleting word", e);
-            Alert.alert("Error", "Could not delete word.");
-        }
-    };
-
-    const toggleSaveWord = async (word: any, def?: string, examples?: string[]) => {
-        let wordToSave = "";
-        let dataToSave: any = {};
-
-        // 1. Resolve Input
-        if (typeof word === 'object' && word !== null) {
-            // Passed as object (from dictionary render)
-            // Check if the object has a 'word' property that is a valid string
-            if (word.word && typeof word.word === 'string' && word.word.trim()) {
-                wordToSave = word.word;
-            }
-            dataToSave = word;
-
-            // NORMALIZE: Ensure definition and examples are top-level so they are saved correctly
-            if (!dataToSave.definition && dataToSave.advanced?.definition) {
-                dataToSave.definition = dataToSave.advanced.definition;
-            }
-            if ((!dataToSave.examples || dataToSave.examples.length === 0) && dataToSave.advanced?.examples) {
-                dataToSave.examples = dataToSave.advanced.examples;
-            }
-        } else {
-            // Passed as arguments
-            wordToSave = word;
-            dataToSave = { word: word, definition: def, examples: examples || [] };
-        }
-
-        // 2. Strict Validation & Recovery
-        if (!wordToSave || typeof wordToSave !== 'string' || !wordToSave.trim()) {
-            // Attempt to recover word from context state
-            if (showWordModal && selectedWord?.word) {
-                wordToSave = selectedWord.word;
-            } else if (activeTab === 'dictionary' && dictionaryCurrentWord) {
-                wordToSave = dictionaryCurrentWord;
-            }
-
-            // Final Check: If still empty, abort save
-            if (!wordToSave || typeof wordToSave !== 'string' || !wordToSave.trim()) {
-                Alert.alert("Cannot Save", "The word text is missing.");
-                return;
-            }
-        }
-
-        dataToSave = { ...dataToSave, word: wordToSave };
-
-        // Check Existence
-        const existingIndexItem = savedWords.find(w => w.word.toLowerCase() === wordToSave.toLowerCase());
-
-        if (existingIndexItem) {
-            // DELETE logic
-            await deleteSavedWord(existingIndexItem.id);
-        } else {
-            // SAVE logic
-            // Enforce limit
-            let currentWords = savedWords;
-            // UPDATED: Fixed limit of 100 for Saved Words (Starred) as per user request
-            const SAVED_WORDS_LIMIT: number = 100;
-
-            if (currentWords.length >= SAVED_WORDS_LIMIT) {
-                // Remove oldest (index 0) to maintain limit
-                await deleteSavedWord(currentWords[0].id);
-                currentWords = currentWords.slice(1);
-            }
-
-            const id = generateId();
-            const fullData = {
-                id,
-                ...dataToSave,
-                timestamp: new Date().toISOString()
-            };
-
-            const liteData = {
-                id,
-                word: wordToSave,
-                definition: fullData.simple?.definition || fullData.definition || "No definition",
-                partOfSpeech: fullData.partOfSpeech,
-                forms: fullData.forms || [],
-                examples: fullData.examples || [], // ADDED: Include examples in index for Flashcards
-                timestamp: fullData.timestamp
-            };
-
-            try {
-                const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-                // 1. Write Full Data File
-                await fs.writeAsStringAsync(docDir + `word_${id}.json`, JSON.stringify(fullData));
-
-                // 2. Update Index in Memory
-                const newWords = [...currentWords, liteData];
-                setSavedWords(newWords);
-
-                // 3. Save Index to File System
-                await fs.writeAsStringAsync(docDir + 'dictionary_index.json', JSON.stringify(newWords));
-            } catch (e: any) { // Cast e to any as per instruction
-                console.error("Save Word Error", e);
-                Alert.alert("Error", "Could not save word to storage.");
-            }
-        }
-    };
 
     // OPTIMIZED: Use O(1) Set lookup
-    const isWordSaved = (word: string) => wordMap.has(word?.trim().toLowerCase());
 
     const toggleSaveQuestion = async (question: any) => {
         const isSaved = savedQuestions.some((q: any) => q.question === question.question);
@@ -10441,7 +10174,7 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
     };
 
     // UPDATED: Added modelOverride parameter for performance tuning
-    const callLLM = async (contents: any, systemInstruction: any, jsonMode = false, modelOverride: string | null = null) => {
+    async function callLLM(contents: any, systemInstruction: any, jsonMode = false, modelOverride: string | null = null) {
         const key = customApiKey || apiKey;
         if (!key) {
             // CHANGED: Return detailed guide instead of Alert for missing key
@@ -10518,7 +10251,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         for (const modelId of modelsToTry) {
             try {
-                console.log(`Attempting LLM call with: ${modelId}`);
+
 
                 const payload: any = {
                     systemInstruction: { parts: [{ text: fullSystemInstruction }] },
@@ -12647,7 +12380,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
     };
 
-    const handleStartQuiz = async (topic: string, isCustomList = false, subject = "General", isContextBasedInput = false, images: string[] = [], overrideCount: number | null = null, isFlashcardMode = false) => {
+    async function handleStartQuiz(topic: string, isCustomList = false, subject = "General", isContextBasedInput = false, images: string[] = [], overrideCount: number | null = null, isFlashcardMode = false) {
         // Check if API key is configured (using state instead of direct storage check for consistency)
         if (!customApiKey || customApiKey.trim() === '') {
             Alert.alert(
@@ -17536,7 +17269,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             else if (w.word) knownWords.add(w.word.toLowerCase());
         });
         // REF CHANGE: Check against REF (Master List)
-        recentSearchesRef.current.forEach(w => {
+        recentSearchesRef.current.forEach((w: any) => {
             if (typeof w === 'string') knownWords.add(w.toLowerCase());
             else if (w.word) knownWords.add(w.word.toLowerCase());
         });
@@ -17576,7 +17309,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     const newCacheEntries: any = {};
 
                     if (batchDefinitions && batchDefinitions.length > 0) {
-                        for (const data of batchDefinitions) {
+                        for (const data of (batchDefinitions as any[])) {
                             if (data && (data.definition || data.simple)) {
                                 const cleanData = { ...data, word: data.word || "Unknown" };
                                 const currentLang = displaySettings.language;
@@ -19783,302 +19516,13 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     // ... (getDictionaryData and subsequent functions)
     // Updated to support specific target language
     // NEW: Batch Definition Fetching
-    const fetchBatchDefinitions = async (words: string[], targetLang: string | null = null) => {
-        if (!words || words.length === 0) return [];
 
-        const userLanguages = displaySettings.availableLanguages && displaySettings.availableLanguages.length > 0
-            ? displaySettings.availableLanguages
-            : [displaySettings.language || "English"];
 
-        let languageInstruction = "";
-        if (userLanguages.length === 1) {
-            languageInstruction = `Provide definitions and examples strictly in ${userLanguages[0]}.`;
-        } else {
-            const langsToInclude = userLanguages.join(' and ');
-            languageInstruction = `Provide definitions and examples bilingually in ${langsToInclude}. Ensure definitions are SINGLE STRINGS (e.g. "Def 1 / Def 2"). Do NOT return objects for definitions.`;
-        }
-
-        const prompt = `
-        Task: Analyze the following list of words: ${JSON.stringify(words)}.
-        User's Available Languages: ${userLanguages.join(', ')}.
-        ${languageInstruction}
-
-        INSTRUCTION:
-        For EACH word in the list, return a Dictionary Object.
-        
-        STRICT OUTPUT FORMAT:
-        Return a single JSON Array containing an object for each word.
-        [
-          {
-            "word": "Base form",
-            "simple": { "definition": "...", "examples": [...] },
-            "advanced": { "definition": "...", "examples": [...], "collocations": [...], "nuances": "..." },
-            "phonetic": "...",
-            "partOfSpeech": "...",
-            "forms": string[],
-            "synonyms": string[],
-            "antonyms": string[]
-          },
-          ...
-        ]
-        `;
-
-        try {
-            // Use callLLM's built-in model fallback for reliability
-            const raw = await callLLM(prompt, "Dictionary", true);
-
-            if (!raw || raw.startsWith("Error")) {
-                console.error("Dictionary lookup failed.");
-                return [];
-            }
-
-            console.log(`Dictionary lookup successful`);
-            const cleanJson = extractJSON(raw);
-            const parsed = JSON.parse(cleanJson);
-
-            // SANITIZATION: Ensure definitions are strings, not objects (fixes "Objects are not valid as React child" error)
-            const sanitized = Array.isArray(parsed) ? parsed.map((item: any) => {
-                if (item.simple && typeof item.simple.definition === 'object') {
-                    item.simple.definition = Object.values(item.simple.definition).join(' / ');
-                }
-                if (item.advanced && typeof item.advanced.definition === 'object') {
-                    item.advanced.definition = Object.values(item.advanced.definition).join(' / ');
-                }
-                return item;
-            }) : [];
-
-            return sanitized;
-        } catch (e: any) {
-            console.error("Batch Dictionary Error", e);
-            return [];
-        }
-    };
-
-    const getDictionaryData = async (word: string, targetLang: any = null) => {
-        // NEW: Use the same fast model chain as batch processing
-        // This ensures consistency across all dictionary features
-        try {
-            const results = await fetchBatchDefinitions([word]);
-
-            if (results && results.length > 0) {
-                return results[0]; // Return the first (and only) result
-            } else {
-                return { error: "Definition not found" };
-            }
-        } catch (error: any) {
-            console.error("getDictionaryData Error:", error);
-            return { error: error.message || "Could not define. Please try again." };
-        }
-    };
-
-    const handleDictionaryTabSearch = async (word: string) => {
-        if (!word.trim()) return;
-        const lowerWord = word.trim().toLowerCase();
-        Keyboard.dismiss();
-        setDictionaryInput("");
-
-        const checkDataMatch = (data: any) => {
-            if (!data) return false;
-            if (data.word && data.word.toLowerCase() === lowerWord) return true;
-            if (data.forms && Array.isArray(data.forms) && data.forms.some((f: any) => typeof f === 'string' && f.toLowerCase() === lowerWord)) return true;
-            return false;
-        };
-
-        // 1. Check Dictionary Cache
-        let cachedData: any = Object.values(dictionaryCache).find(d => checkDataMatch(d));
-
-        // 2. Check Saved Words if not found
-        if (!cachedData) {
-            const liteMatch = savedWords.find(w => checkDataMatch(w));
-            if (liteMatch) {
-                // NEW: Hydrate from file
-                cachedData = await loadWordFromFile(liteMatch);
-            }
-        }
-
-        // 3. Check Recent Searches if not found
-        if (!cachedData) {
-            const recentItem = recentSearches.find(item => {
-                const d = typeof item === 'object' ? item.data : null;
-                return checkDataMatch(d);
-            });
-            if (recentItem) cachedData = recentItem.data;
-        }
-
-        // Helper to update history list with the latest search at the top
-        const updateHistory = (fullData: any) => {
-            const rootWord = fullData.word || word;
-            // FIX: Read from Ref to ensure we have the absolute latest data (including pending updates)
-            const currentMaster = recentSearchesRef.current;
-
-            const filtered = currentMaster.filter((w: any) => {
-                const existingWord = typeof w === 'string' ? w : w.word;
-                return existingWord.toLowerCase() !== rootWord.toLowerCase();
-            });
-
-            // Use dynamic limit, preferring ref if available for freshness, fallback to state
-            const limit = (displaySettingsRef.current && displaySettingsRef.current.dictionaryLimit)
-                ? displaySettingsRef.current.dictionaryLimit
-                : (displaySettings.dictionaryLimit || 1000);
-
-            const updated = [{ word: rootWord, data: fullData }, ...filtered].slice(0, limit);
-
-            // Use Orchestrator to update Ref, File, and State immediately
-            updateRecentSearchesOrchestrator(updated, false);
-        };
-
-        // Use existing data if available (Offline priority)
-        if (cachedData && !cachedData.error) {
-            setDictionaryResult(cachedData);
-            setDictionaryCurrentWord(cachedData.word); // Switch context to root word (e.g. show "Decide" even if searched "Decided")
-            updateHistory(cachedData);
-            return;
-        }
-
-        // 5. Fetch from API
-        setDictionaryCurrentWord(word); // Set to input word temporarily while loading
-        setIsDictionaryLoading(true);
-        setDictionaryResult(null);
-
-        const data = await getDictionaryData(word);
-
-        if (data && (data.definition || data.simple || data.advanced) && !data.error) {
-            const currentLang = displaySettings.language;
-            // Clean data just in case
-            const cleanData = { ...data, word: data.word || word };
-
-            // Initialize with translation structure
-            const completeData = {
-                ...cleanData,
-                language: currentLang,
-                translations: { [currentLang]: cleanData }
-            };
-
-            // Cache locally using the ROOT word
-            setDictionaryCache((prev: any) => ({ ...prev, [cleanData.word.toLowerCase()]: completeData }));
-
-            updateHistory(completeData);
-            setDictionaryResult(completeData);
-            setDictionaryCurrentWord(cleanData.word); // Update to returned root word
-        } else {
-            setDictionaryResult(data);
-        }
-
-        setIsDictionaryLoading(false);
-    };
 
     // REMOVED: Auto-load last dictionary search useEffect. 
     // This allows the "My Dictionary" list (with Import/Export) to be the default view.
 
-    const handleWordLookup = async (word: string) => {
-        if (!word) return;
-        // Use refined word
-        const cleanWordInput = word.trim();
-        setSelectedWord({ word: cleanWordInput });
-        setShowWordModal(true);
-        setIsDefining(true);
-        setWordData(null);
-        setDictionaryViewMode('advanced');
 
-        setModalLanguage(displaySettingsRef.current.language);
-
-        const lowerWord = cleanWordInput.toLowerCase();
-
-        const checkDataMatch = (data: any) => {
-            if (!data) return false;
-            if (data.word && data.word.toLowerCase() === lowerWord) return true;
-            if (data.forms && Array.isArray(data.forms) && data.forms.some((f: any) => typeof f === 'string' && f.toLowerCase() === lowerWord)) return true;
-            return false;
-        };
-
-        let cachedData = null;
-
-        // 1. Check Saved Words Ref (Use Ref for consistency in callbacks, but here we are in main body so State is fine, 
-        // but ref is safer if called from closure)
-        const liteMatch = savedWordsRef.current.find(w => checkDataMatch(w));
-        if (liteMatch) {
-            // NEW: Hydrate from file
-            cachedData = await loadWordFromFile(liteMatch);
-        }
-
-        // 2. Check Dictionary Cache Ref
-        if (!cachedData) {
-            cachedData = Object.values(dictionaryCacheRef.current).find(d => checkDataMatch(d));
-        }
-
-        // 3. Check Recent Searches Ref
-        if (!cachedData) {
-            const recentItem = recentSearchesRef.current.find(item => {
-                const d = typeof item === 'object' ? item.data : null;
-                return checkDataMatch(d);
-            });
-            if (recentItem) cachedData = recentItem.data;
-        }
-
-        // Helper to update recent searches history
-        const updateHistory = (fullData: any) => {
-            // FIX: Use Orchestrator for concurrency safety
-            const rootWord = fullData.word || cleanWordInput;
-            const currentMaster = recentSearchesRef.current; // Read from Ref
-
-            const filtered = currentMaster.filter((item: any) => {
-                const w = typeof item === 'string' ? item : item.word;
-                return w.toLowerCase() !== rootWord.toLowerCase();
-            });
-
-            // Ensure fullData has the word property
-            const dataToSave = { ...fullData, word: rootWord };
-            // UPDATED: Use dynamic dictionaryLimit from Ref to avoid stale closure
-            const limit = displaySettingsRef.current.dictionaryLimit || 1000;
-
-            const updated = [{ word: dataToSave.word, data: dataToSave }, ...filtered].slice(0, limit);
-
-            // Orchestrator: Update Ref, File, and State (false = do NOT skip state update)
-            updateRecentSearchesOrchestrator(updated, false);
-        };
-
-        if (cachedData && !cachedData.error) {
-            setWordData(cachedData);
-            // If we found a form match (e.g. searched "decided", found "decide"), update the selected word title
-            if (cachedData.word && cachedData.word.toLowerCase() !== lowerWord) {
-                setSelectedWord({ word: cachedData.word });
-            }
-            updateHistory(cachedData);
-            setIsDefining(false);
-            return;
-        }
-
-        // API Call
-        const data = await getDictionaryData(cleanWordInput);
-
-        if (!data.error) {
-            const currentLang = displaySettingsRef.current.language; // Use ref
-            const cleanData = { ...data, word: data.word || cleanWordInput };
-            const completeData = {
-                ...cleanData,
-                language: currentLang,
-                translations: { [currentLang]: cleanData }
-            };
-
-            setWordData(completeData);
-            // If API corrected the word (e.g. decided -> decide), update title
-            if (cleanData.word.toLowerCase() !== lowerWord) {
-                setSelectedWord({ word: cleanData.word });
-            }
-
-            setDictionaryCache((prev: any) => ({ ...prev, [cleanData.word.toLowerCase()]: completeData }));
-            updateHistory(completeData);
-        } else {
-            setWordData(data);
-        }
-        setIsDefining(false);
-    };
-
-    const handleWordQuiz = async () => {
-        setShowWordModal(false);
-        const topic = selectedWord?.word ? `The meaning and usage of the word '${selectedWord.word}'` : "Vocabulary";
-        handleStartQuiz(topic);
-    };
 
     // NEW: Cycle Global Language from Home Screen
     const cycleGlobalLanguage = () => {
@@ -25932,7 +25376,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         dictionaryCurrentWord={dictionaryCurrentWord}
                                         dictionaryResult={dictionaryResult}
                                         isDictionaryLoading={isDictionaryLoading}
-                                        savedWords={[]}
+                                        savedWords={savedWords}
 
                                         setDictionaryInput={setDictionaryInput}
                                         handleDictionaryTabSearch={handleDictionaryTabSearch}

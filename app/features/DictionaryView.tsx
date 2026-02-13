@@ -74,7 +74,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
     displaySettings,
     isLandscape
 }) => {
-    console.log('🔍 DictionaryView render, recentSearches length:', recentSearches?.length);
+
 
     // Styles inferred from usage
     const styles = StyleSheet.create({
@@ -89,7 +89,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
             height: '100%',
         }
     });
-    console.log('🔍 StyleSheet created');
+
 
     const renderDictionarySearchBar = ({ marginBottom = 15 }: { marginBottom?: number } = {}) => (
         <View style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border, marginBottom: marginBottom, height: 50, borderRadius: 12 }]}>
@@ -415,7 +415,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
         );
     };
 
-    console.log('🔍 About to render, isLandscape:', isLandscape);
+
     if (isLandscape) {
         return (
             <View style={{ flex: 1, flexDirection: 'row' }}>
