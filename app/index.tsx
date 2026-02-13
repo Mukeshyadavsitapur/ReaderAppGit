@@ -63,7 +63,6 @@ import {
     Heart,
     HelpCircle,
     Highlighter,
-    History,
     Image as ImageIcon,
     Languages,
     Layers,
@@ -190,18 +189,23 @@ import {
     WORD_HELP_VISION_QUICK_ACTIONS,
     WRITER_DOCUMENT_QUICK_ACTIONS,
     WRITER_VISION_QUICK_ACTIONS
-} from './constants';
+} from './_constants';
+import DictionaryView from './features/DictionaryView';
+import StudioView from './features/StudioView';
+import { useStudio } from './hooks/_useStudio';
+
 import {
     ChatSession,
     InteractiveTextProps,
     ParsedTextProps,
     SimpleTableProps,
     Theme
-} from './types';
+} from './_types';
 
 // TypeScript Components (Consolidated)
 
 // --- TYPE DEFINITIONS ---
+
 
 
 
@@ -6088,10 +6092,26 @@ export default function App() {
 
     const [showResetWarning, setShowResetWarning] = useState(false);
     const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
-    const [bookParams, setBookParams] = useState({ title: "", chapter: "", description: "", genre: "Mythology" }); // UPDATED: Added description
-    const [storyQuery, setStoryQuery] = useState(""); // NEW: Unified story generator input
-    const [storyTabMode, setStoryTabMode] = useState('story'); // 'story' or 'editorial'
-    const [editorialParams, setEditorialParams] = useState({ topic: "", stance: "Balanced", tone: "Professional", length: "Medium" });
+    const studio = useStudio({
+        appMode,
+        setAppMode,
+        displaySettings,
+        setGenerationData,
+        callLLM: async (p, s, j, m) => callLLM(p, s, j, m),
+        generateImage: async (p) => generateImage ? generateImage(p) : null,
+        persistSession: async (s) => persistSession(s),
+        loadHistorySession: async (s: any, m?: string) => loadHistorySession(s, m),
+        chatSessions,
+        setChatSessions,
+        setReadingSession,
+        storyMode,
+        apiKey: apiKey || "",
+        customApiKey,
+        autoPlayRef
+    });
+
+    // Destructure studio properties for use in voice handlers and UI
+    const { storyTabMode, setStoryTabMode, storyQuery, setStoryQuery, bookParams, setBookParams, editorialParams, setEditorialParams } = studio;
 
     // --- MISSING HANDLERS & STATE ---
     const [quizTopics, setQuizTopics] = useState<string[]>([]);
@@ -6108,119 +6128,7 @@ export default function App() {
     // (Consolidated into existing logic below)
 
 
-    // NEW: Handle Editorial Generation
-    // NEW: Random Editorial Topic Generator
 
-
-
-    // Shared Helper for Saving Editorial Session
-    const saveEditorialSession = async (title: string, content: string) => {
-        const newSession = {
-            id: generateId(),
-            title: title,
-            messages: [{ role: 'model', content: content }],
-            timestamp: new Date().toISOString(),
-            lastOpened: new Date().toISOString(),
-            toolId: 'editorial_writer',
-            pinned: false,
-            voice: displaySettings.voice,
-            hasAudio: false
-        };
-
-        setChatSessions((prev: any) => ({ ...prev, [newSession.id]: newSession }));
-
-        if (persistSessionRef.current) {
-            await persistSessionRef.current(newSession);
-        }
-
-        setReadingSession(newSession);
-        setGenerationData(null);
-        setAppMode('reader');
-    };
-
-    const handleGenerateEditorial = async () => {
-        const topic = editorialParams.topic.trim();
-
-        const key = customApiKey || apiKey;
-        if (!key) {
-            Alert.alert("API Key Required", "Please add your Gemini API Key in Settings.");
-            return;
-        }
-
-        setAppMode("generating");
-        setGenerationData(topic ? `Writing Editorial: ${topic}...` : "Brainstorming & Writing Editorial...");
-
-        try {
-            let prompt = "";
-            let systemRole = "Professional Author";
-
-            if (!topic) {
-                // INTEGRATED BRAINSTORMING + GENERATION
-                const existingTopics = Object.values(chatSessions)
-                    .filter((s: any) => s.toolId === 'editorial_writer')
-                    .map((s: any) => s.title)
-                    .slice(0, 30)
-                    .join(", ");
-
-                prompt = `
-                Task: 
-                1. Brainstorm ONE unique, controversial, or thought-provoking editorial topic. (Constraint: Must NOT be similar to: [${existingTopics}]).
-                2. Act as a senior Editor-in-Chief. Write a comprehensive ${editorialParams.length} editorial piece on that topic immediately.
-
-                Key Requirements:
-                - Stance: ${editorialParams.stance}
-                - Tone: ${editorialParams.tone}
-                - Structure: Catchy Headline, Engaging Introduction, 3-4 Clear Arguments, Counter-argument rebuttal (if balanced), and a Strong Conclusion.
-                - Formatting: Use Markdown (## Headers, **Bold** for emphasis).
-                - Vocabulary: Use advanced, sophisticated vocabulary (B1-C2 level).
-                - **IMPORTANT**: Return your response such that the first line is exactly "EDITORIAL_TITLE: [Your Creative Headline]".
-                `;
-            } else {
-                prompt = `
-                Act as a senior Editor-in-Chief. Write a comprehensive ${editorialParams.length} editorial piece on the topic: "${topic}".
-                
-                Key Requirements:
-                - Stance: ${editorialParams.stance}
-                - Tone: ${editorialParams.tone}
-                - Structure: Catchy Headline, Engaging Introduction, 3-4 Clear Arguments, Counter-argument rebuttal (if balanced), and a Strong Conclusion.
-                - Formatting: Use Markdown (## Headers, **Bold** for emphasis).
-                - Style: Professional, articulate, and thought-provoking.
-                - Vocabulary: Use advanced, sophisticated vocabulary (B1-C2 level). Demonstrate complex sentence structures and precise language.
-                - **IMPORTANT**: Do NOT use Concept Cards or special widget formats. Write in a continuous, flowing newspaper editorial style.
-                `;
-            }
-
-            const response = await callLLM(prompt, "You are a professional editor.", false, null);
-
-            if (!response || response.startsWith("Error")) {
-                throw new Error("Generation failed: " + response);
-            }
-
-            let finalTopic = topic;
-            let finalContent = response;
-
-            // Robust title extraction handling various model output formats
-            // Handles: EDITORIAL_TITLE, EDITORIAL-TITLE, EDITORIAL TITLE, TITLE, HEADLINE
-            const titleRegex = /(?:EDITORIAL[_\s-]?TITLE|TITLE|HEADLINE):\s*(.*)/i;
-            const titleMatch = response.match(titleRegex);
-
-            if (titleMatch) {
-                finalTopic = titleMatch[1].trim();
-                // Remove the matched title line from the content
-                finalContent = response.replace(titleMatch[0], '').trim();
-            }
-
-            if (!finalTopic) finalTopic = "Untitled Editorial";
-
-            await saveEditorialSession(finalTopic, finalContent);
-
-        } catch (error) {
-            setGenerationData(null);
-            setAppMode('idle');
-            Alert.alert("Error", "Failed to generate editorial. Please try again.");
-            console.error(error);
-        }
-    };
     // NEW: Sync Audio Status (Checks if files exist and updates hasAudio flag)
     const syncAudioAvailability = useCallback(async () => {
         // Optimization: Check if sessions are loaded
@@ -9573,6 +9481,71 @@ export default function App() {
         }
     };
 
+    // Helper function to render definition content (used in word modal)
+    const renderDefinitionContent = (data: any, word: string, isSaved: any, toggleSave: any, hideHeader: boolean, onStartQuiz: any, onRefresh: any) => {
+        const onDefWordClick = (w: string) => {
+            if (activeTab === 'dictionary' && appMode === 'idle') {
+                handleDictionaryTabSearch(w);
+            } else {
+                handleWordLookup(w);
+            }
+        };
+
+        if (data?.error) {
+            return (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                    <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: 20 }} />
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center', marginBottom: 10 }}>Connection Issue</Text>
+                    <Text style={{ fontSize: 14, color: theme.secondary, textAlign: 'center' }}>{data.error}</Text>
+                    {onRefresh && (
+                        <TouchableOpacity onPress={onRefresh} style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.buttonBg, padding: 12, borderRadius: 12 }}>
+                            <RefreshCcw size={18} color={theme.text} style={{ marginRight: 8 }} />
+                            <Text style={{ color: theme.text, fontWeight: 'bold' }}>Try Again</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            );
+        }
+
+        const definition = data?.advanced?.definition || data?.definition;
+
+        return (
+            <View style={{ flex: 1 }}>
+                {!hideHeader && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 24, fontWeight: 'bold', color: theme.text }}>{word}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                                {data?.phonetic && <Text style={{ color: theme.secondary, fontSize: 16 }}>{data.phonetic}</Text>}
+                                {data?.partOfSpeech && <Text style={{ color: primaryColor, fontSize: 14, fontWeight: '700', fontStyle: 'italic', backgroundColor: theme.highlight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>{data.partOfSpeech}</Text>}
+                            </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            {onRefresh && <TouchableOpacity onPress={onRefresh} style={{ padding: 5 }}><RefreshCcw size={24} color={theme.text} /></TouchableOpacity>}
+                            <TouchableOpacity onPress={() => { speak(word, 0, false, false, "Word Pronunciation"); setPlayingMeta(null); }} style={{ padding: 5 }}><Volume2 size={24} color={theme.text} /></TouchableOpacity>
+                            {toggleSave && <TouchableOpacity onPress={() => toggleSave({ ...data, word })} style={{ padding: 5 }}><Star size={24} color={theme.text} fill={isSaved(word) ? theme.text : "transparent"} /></TouchableOpacity>}
+                        </View>
+                    </View>
+                )}
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100, flexGrow: 1 }}>
+                    <View style={{ marginBottom: 20 }}>
+                        <View style={{ padding: 15, backgroundColor: theme.uiBg, borderRadius: 12, borderWidth: 1, borderColor: theme.border }}>
+                            <InteractiveText rawText={definition || "No definition found."} onWordPress={onDefWordClick} theme={theme} activeSentence={null} style={{ fontSize: 18, color: theme.text, lineHeight: 28, fontWeight: '500', textAlign: 'justify' }} />
+                        </View>
+                        {onStartQuiz && (
+                            <View style={{ marginTop: 30, marginBottom: 20 }}>
+                                <TouchableOpacity onPress={onStartQuiz} style={{ backgroundColor: primaryColor, padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+                                    <BrainCircuit size={20} color="white" />
+                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Practice This Word</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    };
+
     const generateSmartBio = async (providedSettings?: any, manual = false) => {
         const settings = providedSettings || displaySettings;
         if (!settings.userName && !settings.userProfession && !settings.userGoal && !settings.userBio) return;
@@ -10021,154 +9994,7 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         await AsyncStorage.setItem('savedQuestions', JSON.stringify(newQuestions));
     };
 
-    const handleGenerateBookChapter = async () => {
-        let title = "";
-        let description = "";
-        const query = storyQuery.trim();
 
-        if (!query) {
-            // PROFILE-BASED GENERATION
-            const { userName, userProfession, userGoal, userBio } = displaySettings as any;
-            description = `Create a story tailored to the user profile:
-            - Name: ${userName || "User"}
-            - Profession: ${userProfession || "Learner"}
-            - Goal: ${userGoal || "Self-improvement"}
-            - Bio: ${userBio || "No bio provided."}
-            Write a story that resonates with this person's background and aspirations. Use the ${bookParams.genre} genre.`;
-        } else {
-            // Parsing logic: look for separator, otherwise check length
-            const separatorIdx = query.indexOf(':') !== -1 ? query.indexOf(':') : query.indexOf('-');
-            if (separatorIdx !== -1) {
-                title = query.substring(0, separatorIdx).trim();
-                description = query.substring(separatorIdx + 1).trim();
-            } else if (query.length < 60) {
-                title = query;
-            } else {
-                description = query;
-            }
-        }
-
-        const effectiveChapter = "Chapter 1: The Beginning";
-
-        setAppMode("generating");
-        setGenerationData(`Writing ${effectiveChapter}...`);
-
-        let prompt = "";
-        let systemRole = "Professional Author";
-
-        const titleContext = title
-            ? `titled "${title}"`
-            : `and invent a creative, fitting title for this book based on the description provided. Start your response with "BOOK_TITLE: [Your Creative Title]" on the first line.`;
-
-        const descriptionContext = description
-            ? `\n\nPLOT/SCENE DESCRIPTION: The user has provided the following details:\n"${description}"\nEnsure these events or details are incorporated naturally into the narrative.`
-            : "";
-
-        if (storyMode === 'narrator') {
-            systemRole = "Master Narrator";
-            prompt = `Act as a master storyteller. 
-        Write "${effectiveChapter}" for a ${bookParams.genre} book ${titleContext}.
-        ${descriptionContext}
-        
-        MODE: NARRATOR
-        - Style: Classic storytelling.
-        - Perspective: Third-Person Omniscient (or appropriate for genre).
-        - Focus: Descriptive prose, world-building, internal monologues, and narrative arc.
-        - Tone: The narrator guides the reader through the events.
-        
-        Guidelines:
-        - Genre Style: ${bookParams.genre}.
-        - Length: Comprehensive and detailed.
-        - Vocabulary: Use strict A1/A2 beginner vocabulary. Short sentences, simple words, and clear grammar. Focus on clarity and emotion over complex vocabulary.
-        - Format: Use Markdown with a clear chapter title header.
-        `;
-        } else {
-            systemRole = "Scriptwriter";
-            prompt = `Act as a professional Scriptwriter.
-        Write "${effectiveChapter}" for a ${bookParams.genre} book ${titleContext}.
-        ${descriptionContext}
-        
-        MODE: AUDIO DRAMA SCRIPT
-        
-        STRICT RULES:
-        1. **DIALOGUE DRIVEN**: The story must be told primarily through what characters SAY.
-        2. **SEPARATE NARRATION**: Use "**Narrator:**" for all scene settings, actions, and non-spoken descriptions.
-        3. **REALISTIC SPEECH**: Characters must speak naturally. Do NOT write internal thoughts as dialogue.
-        4. **FORMAT**: 
-           - **[Character Name]:** "Dialogue..."
-           - **Narrator:** [Description of scene or action].
-        5. **NO GENERIC LABELS**: Do NOT use "Scene:" or "Action:" as speaker names. Use "Narrator:" instead.
-        
-        Guidelines:
-        - Genre Style: ${bookParams.genre}.
-        - Length: Comprehensive script.
-        - Vocabulary: Use strict A1/A2 beginner vocabulary.
-        `;
-        }
-
-        // Add Visual Requirement to prompt
-        prompt += `\n\nVISUAL REQUIREMENT:
-    At the very end of your response, strictly on a new line, provide a detailed image generation prompt to create a cover or scene for this chapter. Format: IMAGE_PROMPT: <prompt>`;
-
-        const rawContent = await callLLM(prompt, systemRole);
-
-        // NEW: Check for error before saving
-        if (rawContent.startsWith("Error")) {
-            setGenerationData(null);
-            setAppMode("idle"); // Return to story tab
-            Alert.alert("Generation Failed", rawContent);
-            return;
-        }
-
-        let content = rawContent;
-        let finalTitle = title;
-
-        // NEW: Extract BOOK_TITLE if inferred by AI
-        const titleMatch = content.match(/BOOK_TITLE:\s*(.*)/);
-        if (titleMatch) {
-            finalTitle = titleMatch[1].trim();
-            content = content.replace(/BOOK_TITLE:.*$/, '').trim();
-        }
-
-        if (!finalTitle) finalTitle = "Untitled Story";
-
-        let image = null;
-        const imgMatch = content.match(/IMAGE_PROMPT:\s*(.*)/);
-        if (imgMatch) {
-            const imgPrompt = imgMatch[1].trim();
-            content = content.replace(/IMAGE_PROMPT:.*$/, '').trim();
-            setGenerationData("Illustrating...");
-            image = await generateImage(imgPrompt);
-        }
-
-        // NEW: Calculate Sequence Number (Footer)
-        const bookPrefix = `${finalTitle}:`;
-        const existingChaptersCount = Object.values(chatSessions).filter((s: any) =>
-            s.toolId === 'story_generator' &&
-            s.title.startsWith(bookPrefix)
-        ).length;
-
-        // Append Footer
-        content += `\n\n---\n*Sequence: ${existingChaptersCount} previous chapters*`;
-
-        const newSession = {
-            id: generateId(),
-            timestamp: new Date().toISOString(),
-            messages: [{ role: "ai", content }],
-            title: `${finalTitle}: ${effectiveChapter}`,
-            toolId: 'story_generator',
-            image: image,
-            translations: { [displaySettings.language]: content },
-            language: displaySettings.language,
-            storyMode: storyMode,
-        };
-        await persistSession(newSession);
-
-        autoPlayRef.current = true;
-        loadHistorySession(newSession);
-        setGenerationData(null);
-        setStoryQuery(""); // NEW: Clear query after generation
-    };
 
     // ... (playLibraryItem function) ...
 
@@ -21185,7 +21011,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             if (activeTab === 'dictionary') displayTitle = "Dictionary";
             if (activeTab === 'studio') displayTitle = "All Apps";
             if (activeTab === 'story') {
-                displayTitle = storyTabMode === 'editorial' ? "Editorial Writer" : "Story Generator";
+                displayTitle = studio.storyTabMode === 'editorial' ? "Editorial Writer" : "Story Generator";
             }
             if (activeTab === 'settings') displayTitle = "Settings";
 
@@ -21404,270 +21230,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         );
     };
 
-    const renderDefinitionContent = (data: any, word: string, isSaved: any, toggleSave: any, hideHeader = false, onStartQuiz: any = null, onRefresh: any = null) => {
-        if (data?.error) {
-            return (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-                    <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: 20 }} />
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center', marginBottom: 10 }}>Connection Issue</Text>
-                    <Text style={{ fontSize: 14, color: theme.secondary, textAlign: 'center' }}>{data.error}</Text>
-                    {onRefresh && (
-                        <TouchableOpacity
-                            onPress={onRefresh}
-                            style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.buttonBg, padding: 12, borderRadius: 12 }}
-                        >
-                            <RefreshCcw size={18} color={theme.text} style={{ marginRight: 8 }} />
-                            <Text style={{ color: theme.text, fontWeight: 'bold' }}>Try Again</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            );
-        }
 
-        const onDefWordClick = (w: string) => {
-            if (activeTab === 'dictionary' && appMode === 'idle') {
-                handleDictionaryTabSearch(w);
-            } else {
-                handleWordLookup(w);
-            }
-        };
-
-        const handleToggleSave = () => {
-            if (toggleSave) {
-                // FIX: Spread data first, then overwrite 'word' with the explicit argument.
-                // This prevents the 'word' property in 'data' (which might be undefined, English transliteration, or null)
-                // from overwriting the correct 'word' (e.g. Hindi input) passed to this function.
-                toggleSave({
-                    ...data,
-                    word: word
-                });
-            }
-        };
-
-        // REMOVED: isBeginner check. Always use 'advanced' data (which now has simple definitions).
-        const definition = data?.advanced?.definition || data?.definition;
-
-        // Use advanced examples if available, fallback to root examples
-        const examples = data?.advanced?.examples || data?.examples || [];
-
-        const advancedData = data?.advanced || {};
-
-        return (
-            <View style={{ flex: 1 }}>
-                {!hideHeader && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 24, fontWeight: 'bold', color: theme.text }}>{word}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                                {data?.phonetic && (
-                                    <Text style={{ color: theme.secondary, fontSize: 16, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>{data.phonetic}</Text>
-                                )}
-                                {data?.partOfSpeech && (
-                                    <Text style={{ color: primaryColor, fontSize: 14, fontWeight: '700', fontStyle: 'italic', backgroundColor: theme.highlight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' }}>
-                                        {data.partOfSpeech}
-                                    </Text>
-                                )}
-                            </View>
-                        </View>
-
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            {onRefresh && (
-                                <TouchableOpacity onPress={onRefresh} style={{ padding: 5 }}>
-                                    <RefreshCcw size={24} color={theme.text} />
-                                </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                                onPress={() => {
-                                    speak(word, 0, false, false, "Word Pronunciation");
-                                    // NEW: Clear playingMeta so this short audio doesn't trigger chapter highlighting
-                                    setPlayingMeta(null);
-                                }}
-                                style={{ padding: 5 }}
-                            >
-                                <Volume2 size={24} color={theme.text} />
-                            </TouchableOpacity>
-                            {toggleSave && (
-                                <TouchableOpacity onPress={handleToggleSave} style={{ padding: 5 }}>
-                                    <Star size={24} color={theme.text} fill={isSaved(word) ? theme.text : "transparent"} />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </View>
-                )}
-
-                {/* REMOVED: Beginner/Advanced Toggle */}
-                {/* <View style={{ flexDirection: 'row', marginBottom: 20... }}> ... </View> */}
-
-                <ScrollView
-                    style={{ flex: 1 }}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 100, flexGrow: 1 }}
-                >
-                    <View style={{ marginBottom: 20 }}>
-
-                        <View style={{ padding: 15, backgroundColor: theme.uiBg, borderRadius: 12, borderWidth: 1, borderColor: theme.border }}>
-                            <InteractiveText
-                                rawText={definition || "No definition found."}
-                                onWordPress={onDefWordClick}
-                                theme={theme}
-                                activeSentence={null}
-                                style={{ fontSize: 18, color: theme.text, lineHeight: 28, fontWeight: '500', textAlign: 'justify', ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}
-                            />
-                        </View>
-
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-                            {/* Part of Speech removed from here as it is now in header, keeping forms */}
-                            {data?.forms && data.forms.map((form: any, idx: number) => (
-                                <View key={idx} style={{ backgroundColor: theme.uiBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme.border }}>
-                                    <Text style={{ fontSize: 14, color: theme.secondary, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{form}</Text>
-                                </View>
-                            ))}
-                        </View>
-
-                        {examples && examples.length > 0 && (
-                            <View style={{ marginTop: 20 }}>
-                                <Text style={{ fontSize: 12, color: theme.secondary, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 10 }}>Examples</Text>
-                                {examples.map((ex: any, i: number) => (
-                                    <View key={i} style={{ flexDirection: 'row', marginBottom: 10, paddingLeft: 10 }}>
-                                        <View style={{ width: 3, height: '100%', backgroundColor: theme.highlight, marginRight: 12, borderRadius: 2 }} />
-                                        <InteractiveText
-                                            rawText={`"${ex}"`}
-                                            onWordPress={onDefWordClick}
-                                            theme={theme}
-                                            activeSentence={null}
-                                            style={{ fontStyle: 'italic', color: theme.secondary, fontSize: 16, lineHeight: 24, flex: 1, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}
-                                        />
-                                    </View>
-                                ))}
-                            </View>
-                        )}
-
-                        {/* Always show Collocations if available */}
-                        {advancedData.collocations && advancedData.collocations.length > 0 && (
-                            <View style={{ marginTop: 20 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                                    <Layers size={14} color={theme.secondary} style={{ marginRight: 6 }} />
-                                    <Text style={{ fontSize: 12, color: theme.secondary, fontWeight: 'bold', textTransform: 'uppercase' }}>Collocations</Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                                    {advancedData.collocations.map((col: any, idx: number) => (
-                                        <View key={idx} style={{ backgroundColor: theme.buttonBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: theme.border }}>
-                                            <Text style={{ color: theme.text, fontSize: 14, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{col}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            </View>
-                        )}
-
-                        {/* Always show Nuances if available */}
-                        {advancedData.nuances && (
-                            <View style={{ marginTop: 20, backgroundColor: theme.highlight, padding: 12, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: primaryColor }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                                    <Quote size={14} color={primaryColor} style={{ marginRight: 6 }} />
-                                    <Text style={{ fontSize: 12, color: primaryColor, fontWeight: 'bold', textTransform: 'uppercase' }}>Nuance</Text>
-                                </View>
-                                <Text style={{ color: theme.text, fontSize: 15, fontStyle: 'italic', ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{advancedData.nuances}</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    {/* Always show Etymology/Origins */}
-                    {(
-                        <View style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 20 }}>
-                            {(data?.synonyms?.length > 0 || data?.antonyms?.length > 0) && (
-                                <View style={{ marginBottom: 25 }}>
-                                    {data?.synonyms?.length > 0 && (
-                                        <View style={{ marginBottom: 15 }}>
-                                            <Text style={{ fontSize: 12, color: theme.secondary, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 8 }}>Synonyms</Text>
-                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                                                {data.synonyms.map((syn: any, i: number) => (
-                                                    <TouchableOpacity
-                                                        key={i}
-                                                        onPress={() => onDefWordClick(syn)}
-                                                        style={{ backgroundColor: theme.highlight, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: theme.border }}
-                                                    >
-                                                        <Text style={{ color: theme.text, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{syn}</Text>
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    )}
-
-                                    {data?.antonyms?.length > 0 && (
-                                        <View>
-                                            <Text style={{ fontSize: 12, color: theme.secondary, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 8 }}>Antonyms</Text>
-                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                                                {data.antonyms.map((ant: any, i: number) => (
-                                                    <TouchableOpacity
-                                                        key={i}
-                                                        onPress={() => onDefWordClick(ant)}
-                                                        style={{ backgroundColor: theme.uiBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: theme.border, opacity: 0.8 }}
-                                                    >
-                                                        <Text style={{ color: theme.secondary, textDecorationLine: 'line-through', ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{ant}</Text>
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
-                            )}
-
-                            {(data?.usageNote || data?.etymology) && (
-                                <View style={{ gap: 20 }}>
-                                    {data?.usageNote && (
-                                        <View>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                                                <ScrollText size={14} color={theme.secondary} style={{ marginRight: 6 }} />
-                                                <Text style={{ fontSize: 12, color: theme.secondary, fontWeight: 'bold', textTransform: 'uppercase' }}>Usage Note</Text>
-                                            </View>
-                                            <Text style={{ color: theme.text, fontSize: 15, lineHeight: 22, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{data.usageNote}</Text>
-                                        </View>
-                                    )}
-
-                                    {data?.etymology && (
-                                        <View>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                                                <Globe size={14} color={theme.secondary} style={{ marginRight: 6 }} />
-                                                <Text style={{ fontSize: 12, color: theme.secondary, fontWeight: 'bold', textTransform: 'uppercase' }}>Origin & Etymology</Text>
-                                            </View>
-                                            <Text style={{ color: theme.secondary, fontSize: 14, lineHeight: 20, fontStyle: 'italic', ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }}>{data.etymology}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            )}
-                        </View>
-                    )}
-
-                    {/* Always show Quiz Button if not loading */}
-                    {onStartQuiz && (
-                        <View style={{ marginTop: 30, marginBottom: 20 }}>
-                            <TouchableOpacity
-                                onPress={onStartQuiz}
-                                style={{
-                                    backgroundColor: primaryColor,
-                                    padding: 16,
-                                    borderRadius: 12,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 10,
-                                    shadowColor: primaryColor,
-                                    shadowOffset: { width: 0, height: 4 },
-                                    shadowOpacity: 0.3,
-                                    shadowRadius: 8,
-                                    elevation: 5
-                                }}
-                            >
-                                <BrainCircuit size={20} color="white" />
-                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Start Quiz on this Word</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                </ScrollView>
-            </View>
-        )
-    };
 
     // NEW: Delete Custom Tool Function
     const handleDeleteCustomTool = async (toolId: string) => {
@@ -24685,76 +24248,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         </View >
     );
 
-    const renderDictionarySearchBar = ({ marginBottom = 15 }: { marginBottom?: number } = {}) => (
-        <View style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border, marginBottom: marginBottom, height: 50, borderRadius: 12 }]}>
-            <TextInput
-                style={[styles.searchInput, { color: theme.text, fontSize: 16, marginLeft: 10 }]}
-                placeholder="Type a word..."
-                placeholderTextColor={theme.secondary}
-                value={dictionaryInput}
-                onChangeText={setDictionaryInput}
-                onSubmitEditing={() => {
-                    if (dictionaryInput.trim()) handleDictionaryTabSearch(dictionaryInput.trim());
-                }}
-                autoCapitalize="none"
-                returnKeyType="search"
-            />
 
-            <TouchableOpacity
-                onPress={() => handleVoiceToggle('dictionary')}
-                style={{
-                    width: 38,
-                    height: 38,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 4
-                }}
-            >
-                {isTranscribing && voiceTarget === 'dictionary' ? (
-                    <ActivityIndicator size="small" color={theme.text} />
-                ) : (
-                    <Animated.View style={{ opacity: voiceTarget === 'dictionary' ? recordingOpacity : 1 }}>
-                        <Mic size={20} color={(isRecording && voiceTarget === 'dictionary') ? '#ef4444' : theme.text} />
-                    </Animated.View>
-                )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                onPress={() => {
-                    setImagePickerMode('dictionary_vision');
-                    setVisionDraft({ uris: [], prompt: "" });
-                    setShowImageSourceModal(true);
-                }}
-                style={{
-                    width: 38,
-                    height: 38,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 4
-                }}
-            >
-                <Camera size={20} color={theme.text} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                onPress={() => {
-                    if (dictionaryInput.trim()) handleDictionaryTabSearch(dictionaryInput.trim());
-                }}
-                style={{
-                    width: 38,
-                    height: 38,
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}
-            >
-                {dictionaryInput.trim().length > 0 ? (
-                    <ArrowRight size={20} color={primaryColor} />
-                ) : (
-                    <Search size={20} color={theme.text} />
-                )}
-            </TouchableOpacity>
-        </View>
-    );
 
     // Define headerBg for the main return scope to ensure SafeAreaView picks it up correctly
     let headerBg = isDay ? theme.primary : theme.uiBg;
@@ -26428,671 +25922,54 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         </View>
                                     </View>
                                 ) : activeTab === 'dictionary' ? (
-                                    isLandscape ? (
-                                        /* LANDSCAPE DICTIONARY LAYOUT (SPLIT VIEW) */
-                                        <View style={{ flex: 1, flexDirection: 'row' }}>
-                                            {/* LEFT: Search & History List */}
-                                            <View style={{ flex: 1, borderRightWidth: 1, borderRightColor: theme.border, backgroundColor: theme.uiBg }}>
-                                                <View style={{ padding: 15, paddingBottom: 5, zIndex: 50 }}>
-                                                    {/* Batch Processing Indicator (Non-blocking) */}
-                                                    {isBatchProcessing && (
-                                                        <View style={{ backgroundColor: theme.highlight, padding: 10, borderRadius: 8, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                                            <ActivityIndicator size="small" color={primaryColor} />
-                                                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600' }}>Processing batch words...</Text>
-                                                        </View>
-                                                    )}
-                                                    {renderDictionarySearchBar({ marginBottom: 10 })}
+                                    <DictionaryView
+                                        theme={theme}
+                                        isLandscape={isLandscape}
+                                        primaryColor={primaryColor}
+                                        dictionaryInput={dictionaryInput}
 
-                                                    {/* Autocomplete Suggestions Dropdown */}
-                                                    {dictionarySuggestions.length > 0 && (
-                                                        <View style={{
-                                                            position: 'absolute',
-                                                            top: 60,
-                                                            left: 15,
-                                                            right: 15,
-                                                            backgroundColor: theme.uiBg,
-                                                            borderRadius: 12,
-                                                            borderWidth: 1,
-                                                            borderColor: theme.border,
-                                                            zIndex: 100,
-                                                            shadowColor: "#000",
-                                                            shadowOffset: { width: 0, height: 4 },
-                                                            shadowOpacity: 0.1,
-                                                            shadowRadius: 5,
-                                                            elevation: 5
-                                                        }}>
-                                                            {dictionarySuggestions.map((word: string, idx: number) => (
-                                                                <TouchableOpacity
-                                                                    key={idx}
-                                                                    onPress={() => handleDictionaryTabSearch(word)}
-                                                                    style={{
-                                                                        padding: 12,
-                                                                        borderBottomWidth: idx === dictionarySuggestions.length - 1 ? 0 : 1,
-                                                                        borderBottomColor: theme.border,
-                                                                        flexDirection: 'row',
-                                                                        alignItems: 'center'
-                                                                    }}
-                                                                >
-                                                                    <History size={12} color={theme.secondary} style={{ marginRight: 10 }} />
-                                                                    <Text style={{ color: theme.text, fontSize: 14 }}>{word}</Text>
-                                                                </TouchableOpacity>
-                                                            ))}
-                                                        </View>
-                                                    )}
-                                                </View>
+                                        recentSearches={recentSearches}
+                                        dictionaryCurrentWord={dictionaryCurrentWord}
+                                        dictionaryResult={dictionaryResult}
+                                        isDictionaryLoading={isDictionaryLoading}
+                                        savedWords={[]}
 
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 8, alignItems: 'center' }}>
-                                                    <Text style={{ color: theme.secondary, fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }}>HISTORY ({recentSearches.length})</Text>
-
-                                                    <View style={{ flexDirection: 'row', gap: 10 }}>
-                                                        <TouchableOpacity onPress={handleImportDictionary}>
-                                                            <FileDown size={16} color={theme.text} />
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity onPress={handleExportDictionary}>
-                                                            <Upload size={16} color={theme.text} />
-                                                        </TouchableOpacity>
-                                                    </View>
-                                                </View>
-
-                                                <FlatList
-                                                    data={recentSearches.slice(0, visibleWordCount)}
-                                                    keyExtractor={(item: any, index: number) => (typeof item === 'string' ? item : item.word) + index}
-                                                    contentContainerStyle={{ paddingBottom: 100 }}
-                                                    showsVerticalScrollIndicator={false}
-                                                    onEndReached={() => setVisibleWordCount((prev: number) => prev + 25)}
-                                                    onEndReachedThreshold={0.5}
-                                                    renderItem={({ item }: { item: any }) => {
-                                                        const displayWord = typeof item === 'string' ? item : item.word;
-                                                        const data = typeof item === 'object' ? item.data : null;
-                                                        const def = data?.simple?.definition || data?.definition || "Tap to define";
-                                                        const isSelected = dictionaryCurrentWord.toLowerCase() === displayWord.toLowerCase();
-
-                                                        return (
-                                                            <TouchableOpacity
-                                                                onPress={() => {
-                                                                    // In landscape, searching updates the right panel
-                                                                    handleDictionaryTabSearch(displayWord);
-                                                                }}
-                                                                onLongPress={() => deleteRecentSearch(displayWord)}
-                                                                style={{
-                                                                    flexDirection: 'row',
-                                                                    justifyContent: 'space-between',
-                                                                    alignItems: 'center',
-                                                                    paddingVertical: 12,
-                                                                    paddingHorizontal: 15,
-                                                                    backgroundColor: isSelected ? (theme.id === 'day' ? '#eff6ff' : theme.highlight) : 'transparent',
-                                                                    borderBottomWidth: 1,
-                                                                    borderBottomColor: theme.border
-                                                                }}
-                                                            >
-                                                                <View style={{ flex: 1 }}>
-                                                                    <Text style={{ fontSize: 14, fontWeight: isSelected ? 'bold' : '600', color: isSelected ? primaryColor : theme.text }}>{displayWord}</Text>
-                                                                    <Text style={{ fontSize: 11, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>{def}</Text>
-                                                                </View>
-                                                                {isSelected && <ChevronDown size={14} color={primaryColor} style={{ transform: [{ rotate: '-90deg' }] }} />}
-                                                            </TouchableOpacity>
-                                                        );
-                                                    }}
-                                                    ListEmptyComponent={
-                                                        <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
-                                                            <BookOpen size={32} color={theme.secondary} />
-                                                            <Text style={{ color: theme.secondary, marginTop: 10, fontSize: 12, textAlign: 'center' }}>Empty History</Text>
-                                                        </View>
-                                                    }
-                                                />
-                                            </View>
-
-                                            {/* RIGHT: Content Area */}
-                                            <View style={{ flex: 1.5, backgroundColor: theme.bg, padding: 25 }}>
-                                                {isDictionaryLoading ? (
-                                                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                                                        <ActivityIndicator size="large" color={primaryColor} />
-                                                        <Text style={{ color: theme.secondary, marginTop: 15, fontWeight: '600' }}>Defining...</Text>
-                                                    </View>
-                                                ) : dictionaryResult ? (
-                                                    renderDefinitionContent(
-                                                        dictionaryResult,
-                                                        dictionaryCurrentWord,
-                                                        isWordSaved,
-                                                        toggleSaveWord,
-                                                        false,
-                                                        () => handleStartQuiz(`The meaning and usage of the word '${dictionaryCurrentWord}'`),
-                                                        () => handleRefreshDefinition(dictionaryCurrentWord)
-                                                    )
-                                                ) : (
-                                                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', opacity: 0.6 }}>
-                                                        <BookA size={64} color={theme.secondary} style={{ marginBottom: 20 }} />
-                                                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text }}>Select a word</Text>
-                                                        <Text style={{ color: theme.secondary, textAlign: 'center', marginTop: 10, maxWidth: 300 }}>
-                                                            Search for a word on the left or select one from your history to view its definition here.
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        </View>
-                                    ) : (
-                                        /* PORTRAIT DICTIONARY LAYOUT (EXISTING) */
-                                        <View style={{ flex: 1, padding: 20 }}>
-                                            {/* Batch Processing Indicator (Non-blocking) */}
-                                            {isBatchProcessing && (
-                                                <View style={{ backgroundColor: theme.highlight, padding: 10, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                                    <ActivityIndicator size="small" color={primaryColor} />
-                                                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }}>Processing batch words in background...</Text>
-                                                </View>
-                                            )}
-                                            <View style={{ zIndex: 10 }}>
-                                                {renderDictionarySearchBar({ marginBottom: 15 })}
-
-                                                {/* Autocomplete Suggestions Dropdown */}
-                                                {dictionarySuggestions.length > 0 && (
-                                                    <View style={{
-                                                        position: 'absolute',
-                                                        top: 65, // Just below search bar
-                                                        left: 0,
-                                                        right: 0,
-                                                        backgroundColor: theme.uiBg,
-                                                        borderRadius: 12,
-                                                        borderWidth: 1,
-                                                        borderColor: theme.border,
-                                                        zIndex: 100,
-                                                        shadowColor: "#000",
-                                                        shadowOffset: { width: 0, height: 4 },
-                                                        shadowOpacity: 0.1,
-                                                        shadowRadius: 5,
-                                                        elevation: 5
-                                                    }}>
-                                                        {dictionarySuggestions.map((word: string, idx: number) => (
-                                                            <TouchableOpacity
-                                                                key={idx}
-                                                                onPress={() => handleDictionaryTabSearch(word)}
-                                                                style={{
-                                                                    padding: 15,
-                                                                    borderBottomWidth: idx === dictionarySuggestions.length - 1 ? 0 : 1,
-                                                                    borderBottomColor: theme.border,
-                                                                    flexDirection: 'row',
-                                                                    alignItems: 'center'
-                                                                }}
-                                                            >
-                                                                <History size={14} color={theme.secondary} style={{ marginRight: 10 }} />
-                                                                <Text style={{ color: theme.text, fontSize: 16 }}>{word}</Text>
-                                                            </TouchableOpacity>
-                                                        ))}
-                                                    </View>
-                                                )}
-                                            </View>
-
-                                            {recentSearches.length > 0 && !isDictionaryLoading && !isBatchProcessing && (
-                                                <View style={{ marginBottom: 20, zIndex: 1 }}>
-                                                    <Text style={{ color: theme.secondary, fontSize: 12, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' }}>Recently Searched</Text>
-                                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                                                        {recentSearches.slice(0, 15).map((item: any, index: number) => (
-                                                            <TouchableOpacity
-                                                                key={index}
-                                                                onPress={() => handleDictionaryTabSearch(item.word)}
-                                                                onLongPress={() => deleteRecentSearch(item.word)}
-                                                                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: theme.highlight, borderWidth: 1, borderColor: theme.border }}
-                                                            >
-                                                                <History size={12} color={theme.secondary} style={{ marginRight: 4 }} />
-                                                                <Text style={{ color: theme.text, fontSize: 14 }}>{item.word}</Text>
-                                                            </TouchableOpacity>
-                                                        ))}
-                                                    </ScrollView>
-                                                </View>
-                                            )}
-
-                                            <View style={{ flex: 1 }}>
-                                                {isDictionaryLoading ? (
-                                                    <View style={{ alignItems: 'center', marginTop: 50 }}>
-                                                        <ActivityIndicator size="large" color={primaryColor} />
-                                                        <Text style={{ color: theme.secondary, marginTop: 10 }}>Looking up definition...</Text>
-                                                    </View>
-                                                ) : dictionaryResult ? (
-                                                    <View style={{ flex: 1 }}>
-                                                        {renderDefinitionContent(
-                                                            dictionaryResult,
-                                                            dictionaryCurrentWord,
-                                                            isWordSaved,
-                                                            toggleSaveWord,
-                                                            false,
-                                                            () => handleStartQuiz(`The meaning and usage of the word '${dictionaryCurrentWord}'`),
-                                                            () => handleRefreshDefinition(dictionaryCurrentWord)
-                                                        )}
-                                                    </View>
-                                                ) : (
-                                                    // Dictionary List View (Default)
-                                                    <View style={{ flex: 1 }}>
-                                                        <View style={{ marginBottom: 20 }}>
-                                                            <View style={{ marginBottom: 12 }}>
-                                                                <Text style={{ fontSize: 22, fontWeight: 'bold', color: theme.text }}>Recent Words Flashcards</Text>
-                                                                <Text style={{ fontSize: 13, color: theme.secondary }}>{recentSearches.length} words in history</Text>
-                                                            </View>
-
-                                                            <View style={{ flexDirection: 'row', gap: 10 }}>
-                                                                <TouchableOpacity
-                                                                    onPress={handleShareDictionary}
-                                                                    disabled={isSharing}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        paddingVertical: 10,
-                                                                        backgroundColor: theme.buttonBg,
-                                                                        borderRadius: 12,
-                                                                        borderWidth: 1,
-                                                                        borderColor: theme.border,
-                                                                        flexDirection: 'row',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: 6,
-                                                                        opacity: isSharing ? 0.6 : 1
-                                                                    }}
-                                                                >
-                                                                    {isSharing ? (
-                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                    ) : (
-                                                                        <Share2 size={16} color={theme.text} />
-                                                                    )}
-                                                                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>Share</Text>
-                                                                </TouchableOpacity>
-
-                                                                <TouchableOpacity
-                                                                    onPress={handleImportDictionary}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        paddingVertical: 10,
-                                                                        backgroundColor: theme.buttonBg,
-                                                                        borderRadius: 12,
-                                                                        borderWidth: 1,
-                                                                        borderColor: theme.border,
-                                                                        flexDirection: 'row',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: 6
-                                                                    }}
-                                                                >
-                                                                    <FileDown size={16} color={theme.text} />
-                                                                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>Import</Text>
-                                                                </TouchableOpacity>
-
-                                                                <TouchableOpacity
-                                                                    onPress={handleExportDictionary}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        paddingVertical: 10,
-                                                                        backgroundColor: theme.buttonBg,
-                                                                        borderRadius: 12,
-                                                                        borderWidth: 1,
-                                                                        borderColor: theme.border,
-                                                                        flexDirection: 'row',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: 6
-                                                                    }}
-                                                                >
-                                                                    <Upload size={16} color={theme.text} />
-                                                                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>Export</Text>
-                                                                </TouchableOpacity>
-
-                                                                <TouchableOpacity
-                                                                    onPress={handleDownloadDictionary}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        paddingVertical: 10,
-                                                                        backgroundColor: theme.buttonBg,
-                                                                        borderRadius: 12,
-                                                                        borderWidth: 1,
-                                                                        borderColor: theme.border,
-                                                                        flexDirection: 'row',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: 6
-                                                                    }}
-                                                                >
-                                                                    <DownloadCloud size={16} color={theme.text} />
-                                                                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>Download</Text>
-                                                                </TouchableOpacity>
-                                                            </View>
-                                                        </View>
-
-                                                        <FlatList
-                                                            data={recentSearches.slice(0, visibleWordCount)}
-                                                            keyExtractor={(item: any, index: number) => (typeof item === 'string' ? item : item.word) + index}
-                                                            contentContainerStyle={{ paddingBottom: 100 }}
-                                                            showsVerticalScrollIndicator={false}
-                                                            onEndReached={() => setVisibleWordCount((prev: number) => prev + 25)}
-                                                            onEndReachedThreshold={0.5}
-                                                            renderItem={({ item }: { item: any }) => {
-                                                                const displayWord = typeof item === 'string' ? item : item.word;
-                                                                const data = typeof item === 'object' ? item.data : null;
-                                                                const def = data?.simple?.definition || data?.definition || "Tap to define";
-                                                                const pos = data?.partOfSpeech;
-
-                                                                return (
-                                                                    <TouchableOpacity
-                                                                        onPress={() => handleWordLookup(displayWord)}
-                                                                        onLongPress={() => deleteRecentSearch(displayWord)}
-                                                                        style={{
-                                                                            flexDirection: 'row',
-                                                                            justifyContent: 'space-between',
-                                                                            alignItems: 'center',
-                                                                            paddingVertical: 12,
-                                                                            borderBottomWidth: 1,
-                                                                            borderBottomColor: theme.border
-                                                                        }}
-                                                                    >
-                                                                        <View style={{ flex: 1, marginRight: 10 }}>
-                                                                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                                                                                <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text }}>{displayWord}</Text>
-                                                                                {pos ? (
-                                                                                    <Text style={{ fontSize: 11, color: primaryColor, fontStyle: 'italic' }}>{pos}</Text>
-                                                                                ) : null}
-                                                                            </View>
-                                                                            <Text style={{ fontSize: 12, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
-                                                                                {def}
-                                                                            </Text>
-                                                                        </View>
-                                                                    </TouchableOpacity>
-                                                                );
-                                                            }}
-                                                            ListEmptyComponent={
-                                                                <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
-                                                                    <BookOpen size={48} color={theme.secondary} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 15, textAlign: 'center' }}>
-                                                                        Your history is empty.
-                                                                    </Text>
-                                                                </View>
-                                                            }
-                                                        />
-                                                    </View>
-                                                )}
-                                            </View>
-                                        </View>
-                                    )
+                                        setDictionaryInput={setDictionaryInput}
+                                        handleDictionaryTabSearch={handleDictionaryTabSearch}
+                                        handleWordLookup={handleWordLookup}
+                                        deleteRecentSearch={deleteRecentSearch}
+                                        toggleSaveWord={toggleSaveWord}
+                                        isWordSaved={isWordSaved}
+                                        startQuiz={handleStartQuiz}
+                                        refreshDefinition={handleRefreshDefinition}
+                                        speak={speak}
+                                        setPlayingMeta={setPlayingMeta}
+                                        handleVoiceToggle={handleVoiceToggle}
+                                        isTranscribing={isTranscribing}
+                                        voiceTarget={voiceTarget}
+                                        isRecording={isRecording}
+                                        recordingOpacity={recordingOpacity}
+                                        setImagePickerMode={setImagePickerMode}
+                                        setVisionDraft={setVisionDraft}
+                                        setShowImageSourceModal={setShowImageSourceModal}
+                                        appMode={appMode}
+                                        activeTab={activeTab}
+                                        displaySettings={displaySettings}
+                                    />
                                 ) : activeTab === 'story' ? (
-                                    <KeyboardAvoidingView
-                                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                                        style={{ flex: 1 }}
-                                        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} // Adjusted offset
-                                    >
-                                        <View style={{ flex: 1, backgroundColor: theme.bg }}>
-                                            {/* NEW: Top Bar Toggle for Story vs Editorial */}
-                                            <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10 }}>
-                                                <View style={{ flexDirection: 'row', backgroundColor: theme.buttonBg, padding: 4, borderRadius: 12 }}>
-                                                    <TouchableOpacity
-                                                        onPress={() => setStoryTabMode('story')}
-                                                        style={{
-                                                            flex: 1,
-                                                            paddingVertical: 8,
-                                                            alignItems: 'center',
-                                                            borderRadius: 10,
-                                                            backgroundColor: storyTabMode === 'story' ? theme.bg : 'transparent',
-                                                            shadowColor: "#000",
-                                                            shadowOffset: { width: 0, height: 1 },
-                                                            shadowOpacity: storyTabMode === 'story' ? 0.1 : 0,
-                                                            shadowRadius: 2,
-                                                            elevation: storyTabMode === 'story' ? 2 : 0,
-                                                            flexDirection: 'row',
-                                                            justifyContent: 'center',
-                                                            gap: 6
-                                                        }}
-                                                    >
-                                                        <BookOpenText size={16} color={storyTabMode === 'story' ? primaryColor : theme.secondary} />
-                                                        <Text style={{ fontWeight: 'bold', color: storyTabMode === 'story' ? theme.text : theme.secondary, fontSize: 13 }}>Story Generator</Text>
-                                                    </TouchableOpacity>
-
-                                                    <TouchableOpacity
-                                                        onPress={() => setStoryTabMode('editorial')}
-                                                        style={{
-                                                            flex: 1,
-                                                            paddingVertical: 8,
-                                                            alignItems: 'center',
-                                                            borderRadius: 10,
-                                                            backgroundColor: storyTabMode === 'editorial' ? theme.bg : 'transparent',
-                                                            shadowColor: "#000",
-                                                            shadowOffset: { width: 0, height: 1 },
-                                                            shadowOpacity: storyTabMode === 'editorial' ? 0.1 : 0,
-                                                            shadowRadius: 2,
-                                                            elevation: storyTabMode === 'editorial' ? 2 : 0,
-                                                            flexDirection: 'row',
-                                                            justifyContent: 'center',
-                                                            gap: 6
-                                                        }}
-                                                    >
-                                                        <ScrollText size={16} color={storyTabMode === 'editorial' ? primaryColor : theme.secondary} />
-                                                        <Text style={{ fontWeight: 'bold', color: storyTabMode === 'editorial' ? theme.text : theme.secondary, fontSize: 13 }}>Editorial</Text>
-                                                    </TouchableOpacity>
-                                                </View>
-                                            </View>
-
-                                            {storyTabMode === 'story' ? (
-                                                /* --- STORY GENERATOR UI --- */
-                                                <>
-                                                    <ScrollView
-                                                        contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 0 }}
-                                                        keyboardShouldPersistTaps="handled"
-                                                    >
-                                                        {/* ... content omitted for brevity, logic remains same, just wrapper changes ... */}
-                                                        {/* RE-INSERTING START OF CONTENT TO MATCH CONTEXT CORRECTLY IF NEEDED, BUT HERE I AM JUST WRAPPING THE WHOLE BLOCK APPROXIMATELY */}
-
-                                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 15, marginTop: 10 }}>
-                                                            <View style={{ width: 50, height: 50, backgroundColor: theme.highlight, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
-                                                                <Feather size={24} color={primaryColor} />
-                                                            </View>
-                                                            <View style={{ flex: 1 }}>
-                                                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text }}>Story Generator</Text>
-                                                                <Text style={{ fontSize: 12, color: theme.secondary }}>Write Novels, Epics, & Biographies</Text>
-                                                            </View>
-                                                        </View>
-
-                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 8, textTransform: 'uppercase' }}>Story Details</Text>
-                                                        <View style={{ marginBottom: 20 }}>
-                                                            <View style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, flexDirection: 'row', alignItems: 'center', paddingRight: 5, minHeight: 60, paddingVertical: 5 }]}>
-                                                                <TextInput
-                                                                    style={{ flex: 1, color: theme.text, fontSize: 16, paddingLeft: 10, paddingRight: 5 }}
-                                                                    placeholder="Enter Title: Description..."
-                                                                    placeholderTextColor={theme.secondary}
-                                                                    value={storyQuery}
-                                                                    onChangeText={setStoryQuery}
-                                                                    multiline={true}
-                                                                />
-
-                                                                <TouchableOpacity
-                                                                    onPress={() => handleVoiceToggle('story_query')}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                                                                >
-                                                                    {isTranscribing && voiceTarget === 'story_query' ? (
-                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                    ) : (
-                                                                        <Animated.View style={{ opacity: voiceTarget === 'story_query' ? recordingOpacity : 1 }}>
-                                                                            <Mic size={20} color={(isRecording && voiceTarget === 'story_query') ? primaryColor : theme.text} />
-                                                                        </Animated.View>
-                                                                    )}
-                                                                </TouchableOpacity>
-
-                                                                {/* Vision Button inside Search Bar */}
-                                                                <TouchableOpacity
-                                                                    onPress={() => {
-                                                                        setImagePickerMode('story');
-                                                                        setShowImageSourceModal(true);
-                                                                    }}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center', marginRight: 4 }}
-                                                                >
-                                                                    <Camera size={20} color={theme.text} />
-                                                                </TouchableOpacity>
-
-                                                                {/* Generate Action Button inside Search Bar */}
-                                                                <TouchableOpacity
-                                                                    onPress={handleGenerateBookChapter}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                                                                >
-                                                                    {storyQuery.trim().length > 0 ? (<ArrowRight size={20} color={primaryColor} />) : (<BookOpenText size={20} color={primaryColor} />)}
-                                                                </TouchableOpacity>
-                                                            </View>
-                                                            <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 5, fontStyle: 'italic' }}>
-                                                                Tip: Enter "Title: Description" or just click the book icon for a story based on your profile.
-                                                            </Text>
-                                                        </View>
-
-                                                        {/* Scrollable Genre Section */}
-                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 10, textTransform: 'uppercase' }}>Genre / Style</Text>
-                                                        <ScrollView
-                                                            showsVerticalScrollIndicator={false}
-                                                            contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 }}
-                                                        >
-
-                                                            {/* Genre List */}
-                                                            {['Adventure', 'Autobiography', 'Biography', 'Comedy', 'Fantasy', 'Fiction/Novel', 'History', 'Horror', 'Mystery/Thriller', 'Mythology/Epic', 'Philosophy', 'Poetry', 'Sci-Fi'].map((genre: string) => (
-                                                                <TouchableOpacity
-                                                                    key={genre}
-                                                                    onPress={() => setBookParams(prev => ({ ...prev, genre }))}
-                                                                    style={{
-                                                                        width: '48%',
-                                                                        paddingVertical: 12,
-                                                                        borderRadius: 16,
-                                                                        backgroundColor: bookParams.genre === genre ? primaryColor : theme.buttonBg,
-                                                                        borderWidth: 1,
-                                                                        borderColor: bookParams.genre === genre ? primaryColor : theme.border,
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center'
-                                                                    }}
-                                                                >
-                                                                    <Text
-                                                                        style={{ color: bookParams.genre === genre ? 'white' : theme.text, fontWeight: '600', fontSize: 14, textAlign: 'center' }}
-                                                                        numberOfLines={2}
-                                                                    >
-                                                                        {genre}
-                                                                    </Text>
-                                                                </TouchableOpacity>
-                                                            ))}
-                                                        </ScrollView>
-                                                    </ScrollView>
-
-                                                    {/* Removed separate bottom generate button as it's now in the search bar */}
-                                                </>
-                                            ) : (
-                                                /* --- EDITORIAL GENERATOR UI --- */
-                                                <>
-                                                    <ScrollView
-                                                        contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 0 }}
-                                                        keyboardShouldPersistTaps="handled"
-                                                    >
-                                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 15, marginTop: 10 }}>
-                                                            <View style={{ width: 50, height: 50, backgroundColor: theme.highlight, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
-                                                                <ScrollText size={24} color={primaryColor} />
-                                                            </View>
-                                                            <View style={{ flex: 1 }}>
-                                                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text }}>Editorial Writer</Text>
-                                                                <Text style={{ fontSize: 12, color: theme.secondary }}>Opinions, Articles & News Analysis</Text>
-                                                            </View>
-                                                        </View>
-
-                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 8, textTransform: 'uppercase' }}>Topic / Headline</Text>
-                                                        <View style={{ marginBottom: 20 }}>
-                                                            <View style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, flexDirection: 'row', alignItems: 'center', paddingRight: 5, minHeight: 60, paddingVertical: 5 }]}>
-                                                                <TextInput
-                                                                    style={{ flex: 1, color: theme.text, fontSize: 16, paddingLeft: 10, paddingRight: 5 }}
-                                                                    placeholder="e.g. The Future of AI in Schools"
-                                                                    placeholderTextColor={theme.secondary}
-                                                                    value={editorialParams.topic}
-                                                                    onChangeText={(t: string) => setEditorialParams(prev => ({ ...prev, topic: t }))}
-                                                                    multiline={true}
-                                                                />
-
-                                                                <TouchableOpacity
-                                                                    onPress={() => handleVoiceToggle('editorial_topic')}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                                                                >
-                                                                    {isTranscribing && voiceTarget === 'editorial_topic' ? (
-                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                    ) : (
-                                                                        <Animated.View style={{ opacity: voiceTarget === 'editorial_topic' ? recordingOpacity : 1 }}>
-                                                                            <Mic size={20} color={(isRecording && voiceTarget === 'editorial_topic') ? primaryColor : theme.text} />
-                                                                        </Animated.View>
-                                                                    )}
-                                                                </TouchableOpacity>
-
-                                                                {/* Vision Button */}
-                                                                <TouchableOpacity
-                                                                    onPress={() => {
-                                                                        setImagePickerMode('editorial');
-                                                                        setShowImageSourceModal(true);
-                                                                    }}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center', marginRight: 4 }}
-                                                                >
-                                                                    <Camera size={20} color={theme.text} />
-                                                                </TouchableOpacity>
-
-                                                                {/* Write/Brainstorm Action Button */}
-                                                                <TouchableOpacity
-                                                                    onPress={handleGenerateEditorial}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                                                                >
-                                                                    {editorialParams.topic.trim().length > 0 ? (
-                                                                        <ArrowRight size={20} color={primaryColor} />
-                                                                    ) : (
-                                                                        <Sparkles size={20} color={primaryColor} />
-                                                                    )}
-                                                                </TouchableOpacity>
-                                                            </View>
-                                                            <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 5, fontStyle: 'italic' }}>
-                                                                Tip: Enter a topic or just click the sparkles icon to brainstorm and write automatically.
-                                                            </Text>
-                                                        </View>
-
-                                                        {/* Stance Selection */}
-                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 10, textTransform: 'uppercase' }}>Stance / Perspective</Text>
-                                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 }}>
-
-                                                            {['Balanced', 'Opinionated', 'Critical', 'Supportive', 'Satirical', 'Analytical', 'Persuasive'].map((stance: string) => (
-                                                                <TouchableOpacity
-                                                                    key={stance}
-                                                                    onPress={() => setEditorialParams(prev => ({ ...prev, stance }))}
-                                                                    style={{
-                                                                        width: '48%',
-                                                                        paddingVertical: 12,
-                                                                        borderRadius: 16,
-                                                                        backgroundColor: editorialParams.stance === stance ? primaryColor : theme.buttonBg,
-                                                                        borderWidth: 1,
-                                                                        borderColor: editorialParams.stance === stance ? primaryColor : theme.border,
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center'
-                                                                    }}
-                                                                >
-                                                                    <Text style={{ color: editorialParams.stance === stance ? 'white' : theme.text, fontWeight: '600', fontSize: 13, textAlign: 'center' }} numberOfLines={1}>{stance}</Text>
-                                                                </TouchableOpacity>
-                                                            ))}
-                                                        </View>
-
-                                                        {/* Tone Selection */}
-                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 10, textTransform: 'uppercase' }}>Tone of Voice</Text>
-                                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 }}>
-                                                            {['Professional', 'Casual', 'Academic', 'Urgent', 'Inspirational', 'Witty', 'Direct'].map((tone: string) => (
-                                                                <TouchableOpacity
-                                                                    key={tone}
-                                                                    onPress={() => setEditorialParams(prev => ({ ...prev, tone }))}
-                                                                    style={{
-                                                                        width: '48%',
-                                                                        paddingVertical: 12,
-                                                                        borderRadius: 16,
-                                                                        backgroundColor: editorialParams.tone === tone ? primaryColor : theme.buttonBg,
-                                                                        borderWidth: 1,
-                                                                        borderColor: editorialParams.tone === tone ? primaryColor : theme.border,
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center'
-                                                                    }}
-                                                                >
-                                                                    <Text style={{ color: editorialParams.tone === tone ? 'white' : theme.text, fontWeight: '600', fontSize: 13, textAlign: 'center' }} numberOfLines={1}>{tone}</Text>
-                                                                </TouchableOpacity>
-                                                            ))}
-                                                        </View>
-
-
-
-                                                    </ScrollView>
-
-                                                    {/* Removed separate bottom write button as it's now in the search bar */}
-                                                </>
-                                            )}
-                                        </View>
-                                    </KeyboardAvoidingView>
+                                    <StudioView
+                                        theme={theme}
+                                        {...studio}
+                                        primaryColor={primaryColor}
+                                        handleVoiceToggle={handleVoiceToggle}
+                                        isTranscribing={isTranscribing}
+                                        voiceTarget={voiceTarget}
+                                        isRecording={isRecording}
+                                        recordingOpacity={recordingOpacity}
+                                        setImagePickerMode={setImagePickerMode}
+                                        setVisionDraft={setVisionDraft}
+                                        setShowImageSourceModal={setShowImageSourceModal}
+                                    />
                                 ) : activeTab === 'settings' ? (
                                     <KeyboardAvoidingView
                                         key="settings-keyboard-wrapper"
