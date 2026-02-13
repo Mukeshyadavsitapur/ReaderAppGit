@@ -1,7 +1,7 @@
 import { ArrowLeftRight, Eye, LayoutGrid, List, Maximize2, Minus, Plus } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
-import { SimpleTableProps } from '../_types';
+import { SimpleTableProps } from '../../src/types';
 import ColumnResizeSlider from './ColumnResizeSlider';
 
 const SimpleTable: React.FC<SimpleTableProps> = ({

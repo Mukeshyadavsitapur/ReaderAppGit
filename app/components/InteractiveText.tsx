@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { Alert, Linking, Platform, StyleSheet, Text } from 'react-native';
-import { InteractiveTextProps } from '../_types';
+import { InteractiveTextProps } from '../../src/types';
 
 // Constants for Highlight Colors
 const HIGHLIGHT_COLORS = {

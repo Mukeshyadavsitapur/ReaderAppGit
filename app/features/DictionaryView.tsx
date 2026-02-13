@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, BookA, BrainCircuit, Camera, Globe, History, Layers, Mic, Quote, RefreshCcw, ScrollText, Search, Star, Volume2, X } from 'lucide-react-native';
 import React from 'react';
 import { ActivityIndicator, Animated, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { DisplaySettings, Theme } from '../_types';
+import { DisplaySettings, Theme } from '../../src/types';
 import InteractiveText from '../components/InteractiveText';
 
 // Mock helper if not found - ensuring basic font family support
@@ -74,6 +74,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
     displaySettings,
     isLandscape
 }) => {
+    console.log('🔍 DictionaryView render, recentSearches length:', recentSearches?.length);
 
     // Styles inferred from usage
     const styles = StyleSheet.create({
@@ -88,6 +89,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
             height: '100%',
         }
     });
+    console.log('🔍 StyleSheet created');
 
     const renderDictionarySearchBar = ({ marginBottom = 15 }: { marginBottom?: number } = {}) => (
         <View style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border, marginBottom: marginBottom, height: 50, borderRadius: 12 }]}>
@@ -413,6 +415,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
         );
     };
 
+    console.log('🔍 About to render, isLandscape:', isLandscape);
     if (isLandscape) {
         return (
             <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -423,7 +426,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
                     <View style={{ marginVertical: 10 }}>
                         <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.secondary, marginBottom: 10 }}>RECENT</Text>
                         <ScrollView style={{ height: '100%' }}>
-                            {recentSearches.map((item: any, index: number) => {
+                            {recentSearches.slice(0, 50).map((item: any, index: number) => {
                                 const w = typeof item === 'string' ? item : item.word;
                                 return (
                                     <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, justifyContent: 'space-between' }}>
@@ -481,7 +484,7 @@ const DictionaryView: React.FC<DictionaryViewProps> = ({
                         keyboardShouldPersistTaps="handled"
                         style={{ flex: 1 }}
                     >
-                        {recentSearches.map((item: any, index: number) => {
+                        {recentSearches.slice(0, 50).map((item: any, index: number) => {
                             const w = typeof item === 'string' ? item : item.word;
                             return (
                                 <TouchableOpacity

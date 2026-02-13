@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Platform, Text, View } from 'react-native';
-import { ParsedTextProps } from '../_types';
+import { ParsedTextProps } from '../../src/types';
 import SimpleTable from './SimpleTable';
 
 interface ParsedPart {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder, View } from 'react-native';
-import { Theme } from '../_types';
+import { Theme } from '../../src/types';
 
 interface SeekSliderProps {
     value: number;

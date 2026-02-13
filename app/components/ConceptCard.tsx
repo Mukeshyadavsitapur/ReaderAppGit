@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
 import { Alert, DeviceEventEmitter, Pressable, Text, View } from 'react-native';
-import { Theme } from '../_types';
-import { cleanTextForDisplay } from '../utils/_textUtils';
+import { Theme } from '../../src/types';
+import { cleanTextForDisplay } from '../../src/utils/textUtils';
 import InteractiveText from './InteractiveText';
 
 interface ConceptCardProps {

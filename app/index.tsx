@@ -189,10 +189,10 @@ import {
     WORD_HELP_VISION_QUICK_ACTIONS,
     WRITER_DOCUMENT_QUICK_ACTIONS,
     WRITER_VISION_QUICK_ACTIONS
-} from './_constants';
+} from '../src/constants';
+import { useStudio } from '../src/hooks/useStudio';
 import DictionaryView from './features/DictionaryView';
 import StudioView from './features/StudioView';
-import { useStudio } from './hooks/_useStudio';
 
 import {
     ChatSession,
@@ -200,7 +200,7 @@ import {
     ParsedTextProps,
     SimpleTableProps,
     Theme
-} from './_types';
+} from '../src/types';
 
 // TypeScript Components (Consolidated)
 

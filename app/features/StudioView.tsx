@@ -1,7 +1,7 @@
 import { ArrowRight, BookOpenText, Camera, Feather, Mic, ScrollText, Sparkles } from 'lucide-react-native';
 import React from 'react';
 import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Theme } from '../_types';
+import { Theme } from '../../src/types';
 
 export interface StudioViewProps {
     theme: Theme;

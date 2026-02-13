@@ -1,7 +1,7 @@
 import { Sparkles } from 'lucide-react-native';
 import React, { useEffect, useRef } from 'react';
 import { Animated, PanResponder, Text, TouchableOpacity } from 'react-native';
-import { Theme } from '../_types';
+import { Theme } from '../../src/types';
 
 interface DraggableFABProps {
     onPress: () => void;

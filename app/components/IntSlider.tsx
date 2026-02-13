@@ -1,7 +1,7 @@
 import { Minus, Plus } from 'lucide-react-native';
 import React from 'react';
 import { GestureResponderEvent, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Theme } from '../_types';
+import { Theme } from '../../src/types';
 
 interface IntSliderProps {
     value: number;
