@@ -190,9 +190,8 @@ import {
     WRITER_DOCUMENT_QUICK_ACTIONS,
     WRITER_VISION_QUICK_ACTIONS
 } from '../src/constants';
-import { useDictionary } from '../src/hooks/useDictionary';
 import { useStudio } from '../src/hooks/useStudio';
-import DictionaryView from './features/DictionaryView';
+import Dictionary, { useDictionary } from './features/Dictionary';
 import StudioView from './features/StudioView';
 
 import {
@@ -25366,7 +25365,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         </View>
                                     </View>
                                 ) : activeTab === 'dictionary' ? (
-                                    <DictionaryView
+                                    <Dictionary
                                         theme={theme}
                                         isLandscape={isLandscape}
                                         primaryColor={primaryColor}
