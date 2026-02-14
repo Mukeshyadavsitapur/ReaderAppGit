@@ -3222,7 +3222,8 @@ const parseSessionLite = (jsonString: string) => {
             contentPath: full.contentPath,
             hasAudio: full.hasAudio,
             // Create a preview if messages exist (First 100 chars, no newlines)
-            preview: full.messages?.[0]?.content?.substring(0, 100).replace(/\n/g, ' ') || "",
+            // BUG FIX: Check for explicit preview field first (for items stored in files)
+            preview: full.preview || full.messages?.[0]?.content?.substring(0, 100).replace(/\n/g, ' ') || "",
             // FLAGGED: Indicates this is a lite object
             isLite: true
         };
@@ -5658,6 +5659,7 @@ export default function App() {
                         timestamp: new Date().toISOString(), // Keep chronological
                         toolId: sessionToSave.toolId,
                         contentPath: archiveFilename, // Pointer to file
+                        preview: archiveContent.substring(0, 100).replace(/\n/g, ' '), // Save preview since content cleared
                         pinned: false,
                         partNumber: partNumber
                     };
@@ -5689,6 +5691,9 @@ export default function App() {
                     const filename = `content_${sessionToSave.id}.txt`;
                     const path = `${docDir}${filename}`;
                     await fs.writeAsStringAsync(path, currentContent, { encoding: fs.EncodingType.UTF8 });
+
+                    // BUG FIX: Store preview before clearing content
+                    sessionToSave.preview = currentContent.substring(0, 100).replace(/\n/g, ' ');
                     sessionToSave.contentPath = filename;
                     if (sessionToSave.messages && sessionToSave.messages[0]) {
                         sessionToSave.messages[0].content = ""; // Clear from JSON to save space
@@ -5814,9 +5819,15 @@ export default function App() {
             // 1. Resolve Text Content from File
             if (processed.contentPath) {
                 try {
-                    const info = await fs.getInfoAsync(processed.contentPath);
+                    // BUG FIX: Ensure we have a full URI. If it's just a filename, prepend documentDirectory.
+                    const docDir = fs.documentDirectory || FileSystem.documentDirectory;
+                    const fullPath = processed.contentPath.startsWith('file://')
+                        ? processed.contentPath
+                        : (docDir + processed.contentPath);
+
+                    const info = await fs.getInfoAsync(fullPath);
                     if (info.exists) {
-                        const text = await fs.readAsStringAsync(processed.contentPath, { encoding: fs.EncodingType.UTF8 });
+                        const text = await fs.readAsStringAsync(fullPath, { encoding: fs.EncodingType.UTF8 });
                         processed.content = text;
                         if (processed.messages && processed.messages[0]) {
                             processed.messages[0].content = text;
@@ -10482,10 +10493,16 @@ export default function App() {
 
             if (loadedSession.contentPath) {
                 try {
+                    // BUG FIX: Ensure we have a full URI. If it's just a filename, prepend documentDirectory.
+                    const docDir = fs.documentDirectory || FileSystem.documentDirectory;
+                    const fullPath = loadedSession.contentPath.startsWith('file://')
+                        ? loadedSession.contentPath
+                        : (docDir + loadedSession.contentPath);
+
                     // Check if file exists
-                    const info = await fs.getInfoAsync(loadedSession.contentPath);
+                    const info = await fs.getInfoAsync(fullPath);
                     if (info.exists) {
-                        const fullContent = await fs.readAsStringAsync(loadedSession.contentPath, { encoding: fs.EncodingType.UTF8 });
+                        const fullContent = await fs.readAsStringAsync(fullPath, { encoding: fs.EncodingType.UTF8 });
                         // Restore content into the first message
                         if (!loadedSession.messages || loadedSession.messages.length === 0) {
                             loadedSession.messages = [{ role: 'user', content: '' }];
@@ -16698,7 +16715,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             const filePath = `${docDir}${filename}`;
                             try {
                                 await fs.writeAsStringAsync(filePath, msgContent, { encoding: fs.EncodingType.UTF8 });
-                                sessionToSave.contentPath = filePath;
+                                sessionToSave.contentPath = filename; // Store relative for consistency
+
+                                // BUG FIX: Generate and store preview before clearing content
+                                sessionToSave.preview = msgContent.substring(0, 100).replace(/\n/g, ' ');
+
                                 sessionToSave.messages[0].content = msgContent.substring(0, 200) + "... (Content saved to file)";
                                 // Clear translations for storage to save space
                                 if (sessionToSave.translations) sessionToSave.translations = {};
