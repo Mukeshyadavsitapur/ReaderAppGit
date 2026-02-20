@@ -9241,14 +9241,22 @@ export default function App() {
 
                     // ... (migration logic) ...
                     let family = parsed.fontFamily || "Modern";
-                    let styles = parsed.textStyles || [];
-                    // ...
+                    let loadedCustomModel = parsed.customTextModel || "";
+                    if (loadedCustomModel === "meta-llama/Meta-Llama-3-8B-Instruct") loadedCustomModel = "Qwen/Qwen2.5-72B-Instruct";
+                    if (loadedCustomModel === "meta-llama/Llama-3.2-3B-Instruct") loadedCustomModel = "Qwen/Qwen2.5-72B-Instruct";
+                    if (loadedCustomModel === "llama3-8b-8192") loadedCustomModel = "llama-3.1-8b-instant";
+
+                    let loadedSavedModels = parsed.savedCustomModels || [];
+                    loadedSavedModels = loadedSavedModels.map((m: string) =>
+                        (m === "meta-llama/Meta-Llama-3-8B-Instruct" || m === "meta-llama/Llama-3.2-3B-Instruct") ? "Qwen/Qwen2.5-72B-Instruct" :
+                            (m === "llama3-8b-8192" ? "llama-3.1-8b-instant" : m)
+                    );
 
                     setDisplaySettings((prev: any) => ({
                         ...prev,
                         ...parsed,
-                        customTextModel: parsed.customTextModel || "",
-                        savedCustomModels: parsed.savedCustomModels || [],
+                        customTextModel: loadedCustomModel,
+                        savedCustomModels: loadedSavedModels,
                         preventSleep: parsed.preventSleep || false,
                         dictionaryLimit: parsed.dictionaryLimit || 10000,
                         libraryLimit: parsed.libraryLimit || 2000,
@@ -11700,7 +11708,7 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         let key = customApiKey || apiKey;
 
         if (provider === 'groq') key = displaySettings.groqApiKey;
-        if (provider === 'hf') key = displaySettings.hfApiKey;
+
 
         if (!key) {
             if (jsonMode) {
@@ -11760,16 +11768,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             }
 
             try {
-                let apiUrl = '';
-                let dModel = '';
-
-                if (provider === 'groq') {
-                    apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
-                    dModel = modelOverride || 'llama-3.1-8b-instant';
-                } else {
-                    apiUrl = `https://router.huggingface.co/models/${modelOverride || 'meta-llama/Meta-Llama-3-8B-Instruct'}/v1/chat/completions`;
-                    dModel = modelOverride || 'meta-llama/Meta-Llama-3-8B-Instruct';
-                }
+                const apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+                const dModel = modelOverride || 'llama-3.1-8b-instant';
 
                 console.log(`Attempting LLM call with: ${provider} (${dModel})`);
 
@@ -11778,12 +11778,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     messages: openAiMessages
                 };
 
-                if (provider === 'groq' && jsonMode) {
+                if (jsonMode) {
                     payload.response_format = { type: "json_object" };
-                }
-
-                if (provider === 'hf') {
-                    payload.max_tokens = 4096;
                 }
 
                 const response = await fetch(apiUrl, {
@@ -11794,7 +11790,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (!response.ok) {
                     const err = await response.text();
-                    throw new Error(`${provider === 'groq' ? 'Groq' : 'Hugging Face'} API Error: ${response.status} - ${err}`);
+                    throw new Error(`Groq API Error: ${response.status} - ${err}`);
                 }
 
                 const data = await response.json();
@@ -11803,8 +11799,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 }
                 throw new Error("Invalid response format");
             } catch (e: any) {
-                console.error(`Connection error with ${provider}:`, e);
-                return `Error: Unable to get a response from ${provider === 'groq' ? 'Groq' : 'Hugging Face'}. Details: ${e.message || e.toString()}`;
+                console.error(`Connection error with groq:`, e);
+                return `Error: Unable to get a response from Groq. Details: ${e.message || e.toString()}`;
             }
         }
 
@@ -11935,11 +11931,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         let key = customApiKey || apiKey;
 
         if (provider === 'groq') key = displaySettings.groqApiKey;
-        if (provider === 'hf') key = displaySettings.hfApiKey;
+
 
         if (!key) {
             setApiConnectionStatus("failed");
-            Alert.alert("Failed", `Please enter your ${provider === 'groq' ? 'Groq' : (provider === 'hf' ? 'Hugging Face' : 'Gemini')} API Key first.`);
+            Alert.alert("Failed", `Please enter your ${provider === 'groq' ? 'Groq' : 'Gemini'} API Key first.`);
             return;
         }
 
@@ -11968,31 +11964,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             return;
         }
 
-        if (provider === 'hf') {
-            try {
-                const response = await fetch(`https://router.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                    body: JSON.stringify({
-                        model: 'meta-llama/Meta-Llama-3-8B-Instruct',
-                        messages: [{ role: "user", content: "Hello" }],
-                        max_tokens: 10
-                    })
-                });
-                if (response.ok) {
-                    setApiConnectionStatus("success");
-                    setActiveModelId('meta-llama/Meta-Llama-3-8B-Instruct');
-                    Alert.alert("Success", "Connection established! (Active: Hugging Face)");
-                    if (!displaySettings.smartBio) generateSmartBio();
-                    return;
-                }
-            } catch (e) {
-                console.log("HF connection test failed", e);
-            }
-            setApiConnectionStatus("failed");
-            Alert.alert("Failed", "Invalid Hugging Face Token or Network Issue.");
-            return;
-        }
 
         // UPDATED: Check against models in correct priority order (Custom -> Priority -> Fallbacks)
         // This ensures the test validates the same model that callLLM would select first.
@@ -12176,14 +12147,14 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         let key = customApiKey || apiKey;
 
         if (provider === 'groq') key = displaySettings.groqApiKey;
-        if (provider === 'hf') key = displaySettings.hfApiKey;
+
 
         if (!modelToCheck) {
             Alert.alert("Input Required", "Please enter a Custom Model ID first.");
             return;
         }
         if (!key) {
-            Alert.alert("API Key Required", `Please enter your ${provider === 'groq' ? 'Groq' : (provider === 'hf' ? 'Hugging Face' : 'Gemini')} API Key first.`);
+            Alert.alert("API Key Required", `Please enter your ${provider === 'groq' ? 'Groq' : 'Gemini'} API Key first.`);
             return;
         }
 
@@ -12197,11 +12168,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
                     method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
                     body: JSON.stringify({ model: modelToCheck, messages: [{ role: "user", content: "Hello" }] })
-                });
-            } else if (provider === 'hf') {
-                response = await fetch(`https://router.huggingface.co/models/${modelToCheck}/v1/chat/completions`, {
-                    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                    body: JSON.stringify({ model: modelToCheck, messages: [{ role: "user", content: "Hello" }], max_tokens: 10 })
                 });
             } else {
                 response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToCheck}:generateContent?key=${key}`, {
@@ -24785,12 +24751,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <View style={{ marginBottom: 15 }}>
                         <DropdownInput
                             label="Select AI Provider"
-                            value={displaySettings.llmProvider === 'groq' ? 'Groq' : (displaySettings.llmProvider === 'hf' ? 'Hugging Face' : 'Google Gemini')}
-                            options={['Google Gemini', 'Groq', 'Hugging Face']}
+                            value={displaySettings.llmProvider === 'groq' ? 'Groq' : 'Google Gemini'}
+                            options={['Google Gemini', 'Groq']}
                             onSelect={(val: string) => {
-                                let newProv = 'gemini';
-                                if (val === 'Groq') newProv = 'groq';
-                                if (val === 'Hugging Face') newProv = 'hf';
+                                const newProv = val === 'Groq' ? 'groq' : 'gemini';
                                 saveSettings({ llmProvider: newProv });
                                 setApiConnectionStatus('idle');
                             }}
@@ -24801,7 +24765,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <TouchableOpacity
                         onPress={() => {
                             if (displaySettings.llmProvider === 'groq') Linking.openURL('https://console.groq.com/keys');
-                            else if (displaySettings.llmProvider === 'hf') Linking.openURL('https://huggingface.co/settings/tokens');
                             else Linking.openURL('https://aistudio.google.com/app/apikey');
                         }}
                         style={{
@@ -24817,13 +24780,13 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         }}
                     >
                         <Text style={{ color: primaryColor, fontWeight: 'bold', fontSize: 15 }}>
-                            {displaySettings.llmProvider === 'groq' ? 'Get Free Groq API Key' : (displaySettings.llmProvider === 'hf' ? 'Get Free Hugging Face Token' : 'Get Free Gemini API Key')}
+                            {displaySettings.llmProvider === 'groq' ? 'Get Free Groq API Key' : 'Get Free Gemini API Key'}
                         </Text>
                         <ExternalLink size={16} color={primaryColor} />
                     </TouchableOpacity>
 
                     <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>
-                        Your {displaySettings.llmProvider === 'groq' ? 'Groq' : (displaySettings.llmProvider === 'hf' ? 'Hugging Face' : 'Gemini')} API Key
+                        Your {displaySettings.llmProvider === 'groq' ? 'Groq' : 'Gemini'} API Key
                     </Text>
 
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
@@ -24833,19 +24796,17 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 padding: 12,
                                 borderRadius: 8,
                                 borderWidth: 1,
-                                borderColor: apiConnectionStatus === 'success' ? '#22c55e' : (apiConnectionStatus === 'failed' ? '#ef4444' : ((displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (displaySettings.llmProvider === 'hf' ? displaySettings.hfApiKey : customApiKey)) ? theme.border : '#ef4444')),
+                                borderColor: apiConnectionStatus === 'success' ? '#22c55e' : (apiConnectionStatus === 'failed' ? '#ef4444' : ((displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : customApiKey) ? theme.border : '#ef4444')),
                                 backgroundColor: theme.inputBg,
                                 color: theme.text,
                                 fontSize: 16,
                             }}
                             placeholder="Paste API Key..."
                             placeholderTextColor={theme.secondary}
-                            value={displaySettings.llmProvider === 'groq' ? (displaySettings.groqApiKey || "") : (displaySettings.llmProvider === 'hf' ? (displaySettings.hfApiKey || "") : customApiKey)}
+                            value={displaySettings.llmProvider === 'groq' ? (displaySettings.groqApiKey || "") : customApiKey}
                             onChangeText={async (txt) => {
                                 if (displaySettings.llmProvider === 'groq') {
                                     saveSettings({ groqApiKey: txt });
-                                } else if (displaySettings.llmProvider === 'hf') {
-                                    saveSettings({ hfApiKey: txt });
                                 } else {
                                     setCustomApiKey(txt);
                                     await AsyncStorage.setItem('apiKey', txt);
@@ -24872,7 +24833,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             ) : (
                                 <Save
                                     size={22}
-                                    color={(displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (displaySettings.llmProvider === 'hf' ? displaySettings.hfApiKey : (customApiKey || apiKey))) ? (isRateLimited ? '#ef4444' : '#22c55e') : '#b0bec5'}
+                                    color={(displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey)) ? (isRateLimited ? '#ef4444' : '#22c55e') : '#b0bec5'}
                                     strokeWidth={2.5}
                                 />
                             )}
