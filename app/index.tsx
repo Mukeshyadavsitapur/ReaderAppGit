@@ -1567,13 +1567,10 @@ const TEXT_MODELS = [
     "gemini-2.5-flash-preview-09-2025"
 ];
 
-// Groq free-tier models, newest → oldest
+// Groq confirmed free-tier models (other models return 400)
 const GROQ_MODELS = [
     "llama-3.3-70b-versatile",    // Quality preset: best free-tier model
-    "llama-3.1-70b-versatile",    // Quality fallback
-    "gemma2-9b-it",               // Mid fallback
     "llama-3.1-8b-instant",       // Speed preset: fastest free-tier model
-    "gemma-7b-it",                // Speed fallback
 ];
 
 // Cleaned Image Models List - Removed deprecated 404 models
@@ -24913,72 +24910,74 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         AI Capabilities
                     </Text>
 
-                    {/* Model Priority */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <View style={{ flex: 1, marginRight: 10 }}>
-                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Model Priority</Text>
-                            <Text style={{ fontSize: 12, color: theme.secondary }}>
-                                {displaySettings.modelPriority === 'quality' ? 'Best responses (Slower)' : 'Fastest responses (Lower quality)'}
-                            </Text>
-                        </View>
+                    {/* Model Priority — only for Gemini; Groq has its own below */}
+                    {displaySettings.llmProvider !== 'groq' && (
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <View style={{ flex: 1, marginRight: 10 }}>
+                                <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Model Priority</Text>
+                                <Text style={{ fontSize: 12, color: theme.secondary }}>
+                                    {displaySettings.modelPriority === 'quality' ? 'Best responses (Slower)' : 'Fastest responses (Lower quality)'}
+                                </Text>
+                            </View>
 
-                        <View style={{
-                            flexDirection: 'row',
-                            backgroundColor: theme.buttonBg,
-                            borderRadius: 14,
-                            padding: 4,
-                            borderWidth: 1,
-                            borderColor: theme.border
-                        }}>
-                            <TouchableOpacity
-                                onPress={() => saveSettings({ modelPriority: 'quality' })}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 8,
-                                    borderRadius: 10,
-                                    backgroundColor: displaySettings.modelPriority === 'quality' ? '#8b5cf6' : 'transparent', // Purple for Quality
-                                    shadowColor: "#000",
-                                    shadowOffset: { width: 0, height: 1 },
-                                    shadowOpacity: displaySettings.modelPriority === 'quality' ? 0.2 : 0,
-                                    shadowRadius: 2,
-                                    elevation: displaySettings.modelPriority === 'quality' ? 2 : 0
-                                }}
-                            >
-                                <Sparkles size={14} color={displaySettings.modelPriority === 'quality' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
-                                <Text style={{
-                                    fontSize: 12,
-                                    fontWeight: 'bold',
-                                    color: displaySettings.modelPriority === 'quality' ? 'white' : theme.secondary
-                                }}>Quality</Text>
-                            </TouchableOpacity>
+                            <View style={{
+                                flexDirection: 'row',
+                                backgroundColor: theme.buttonBg,
+                                borderRadius: 14,
+                                padding: 4,
+                                borderWidth: 1,
+                                borderColor: theme.border
+                            }}>
+                                <TouchableOpacity
+                                    onPress={() => saveSettings({ modelPriority: 'quality' })}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderRadius: 10,
+                                        backgroundColor: displaySettings.modelPriority === 'quality' ? '#8b5cf6' : 'transparent',
+                                        shadowColor: "#000",
+                                        shadowOffset: { width: 0, height: 1 },
+                                        shadowOpacity: displaySettings.modelPriority === 'quality' ? 0.2 : 0,
+                                        shadowRadius: 2,
+                                        elevation: displaySettings.modelPriority === 'quality' ? 2 : 0
+                                    }}
+                                >
+                                    <Sparkles size={14} color={displaySettings.modelPriority === 'quality' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
+                                    <Text style={{
+                                        fontSize: 12,
+                                        fontWeight: 'bold',
+                                        color: displaySettings.modelPriority === 'quality' ? 'white' : theme.secondary
+                                    }}>Quality</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity
-                                onPress={() => saveSettings({ modelPriority: 'speed' })}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 8,
-                                    borderRadius: 10,
-                                    backgroundColor: displaySettings.modelPriority === 'speed' ? '#22c55e' : 'transparent', // Green for Speed
-                                    shadowColor: "#000",
-                                    shadowOffset: { width: 0, height: 1 },
-                                    shadowOpacity: displaySettings.modelPriority === 'speed' ? 0.2 : 0,
-                                    shadowRadius: 2,
-                                    elevation: displaySettings.modelPriority === 'speed' ? 2 : 0
-                                }}
-                            >
-                                <Zap size={14} color={displaySettings.modelPriority === 'speed' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
-                                <Text style={{
-                                    fontSize: 12,
-                                    fontWeight: 'bold',
-                                    color: displaySettings.modelPriority === 'speed' ? 'white' : theme.secondary
-                                }}>Speed</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => saveSettings({ modelPriority: 'speed' })}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderRadius: 10,
+                                        backgroundColor: displaySettings.modelPriority === 'speed' ? '#22c55e' : 'transparent',
+                                        shadowColor: "#000",
+                                        shadowOffset: { width: 0, height: 1 },
+                                        shadowOpacity: displaySettings.modelPriority === 'speed' ? 0.2 : 0,
+                                        shadowRadius: 2,
+                                        elevation: displaySettings.modelPriority === 'speed' ? 2 : 0
+                                    }}
+                                >
+                                    <Zap size={14} color={displaySettings.modelPriority === 'speed' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
+                                    <Text style={{
+                                        fontSize: 12,
+                                        fontWeight: 'bold',
+                                        color: displaySettings.modelPriority === 'speed' ? 'white' : theme.secondary
+                                    }}>Speed</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                    </View>
+                    )}
 
                     {/* Groq-specific: Model Priority + Model Selector */}
                     {displaySettings.llmProvider === 'groq' && (
@@ -25188,146 +25187,146 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         </TouchableOpacity>
                     </View>
 
-                    {/* NEW: Custom Text Model Input with Active Model Display */}
-                    <View style={{ marginTop: 20 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text }}>Custom Text Model</Text>
-                            <View style={{ maxWidth: '50%', alignItems: 'flex-end' }}>
-                                <Text style={{ fontSize: 9, color: theme.secondary, marginBottom: 1, fontWeight: '600' }}>CURRENTLY ACTIVE</Text>
-                                <Text style={{ fontSize: 10, color: displaySettings.modelPriority === 'speed' ? '#22c55e' : '#8b5cf6', fontWeight: 'bold' }} numberOfLines={1}>
-                                    {activeModelId || (displaySettings.customTextModel ? displaySettings.customTextModel : (displaySettings.modelPriority === 'speed' ? "gemini-2.5-flash-lite" : "gemini-2.5-flash-preview-09-2025"))}
-                                </Text>
-                            </View>
-                        </View>
-                        <Text style={{ fontSize: 12, color: theme.secondary, marginBottom: 10 }}>
-                            Optional: Enter a specific model ID (e.g. gemini-2.5-pro). This will override the default priority.
-                        </Text>
-
-                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                            <TextInput
-                                style={{
-                                    flex: 1,
-                                    padding: 12,
-                                    borderRadius: 12,
-                                    borderWidth: 1,
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.inputBg,
-                                    color: theme.text,
-                                    fontSize: 14,
-                                    height: 50
-                                }}
-                                placeholder="e.g. gemini-2.5-flash-preview-09-2025"
-                                placeholderTextColor={theme.secondary}
-                                value={displaySettings.customTextModel}
-                                onChangeText={(txt) => saveSettings({ customTextModel: txt })}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                            />
-
-                            <TouchableOpacity
-                                onPress={() => setShowModelSelector(true)}
-                                style={{
-                                    width: 50,
-                                    height: 50,
-                                    backgroundColor: theme.buttonBg,
-                                    borderRadius: 12,
-                                    borderWidth: 1,
-                                    borderColor: theme.border,
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}
-                            >
-                                <ChevronDown size={24} color={theme.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <Modal visible={showModelSelector} transparent animationType="fade" onRequestClose={() => setShowModelSelector(false)}>
-                            <TouchableOpacity
-                                style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}
-                                activeOpacity={1}
-                                onPress={() => setShowModelSelector(false)}
-                            >
-                                <View style={{ backgroundColor: theme.bg, borderRadius: 16, padding: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, maxHeight: 400 }}>
-                                    <Text style={{ textAlign: 'center', fontWeight: 'bold', color: theme.secondary, marginBottom: 10, marginTop: 5, textTransform: 'uppercase', fontSize: 12 }}>Quick Select Model</Text>
-                                    <ScrollView>
-                                        {[...TEXT_MODELS, ...(displaySettings.savedCustomModels || [])].map((model: string, i: number, arr: string[]) => (
-                                            <TouchableOpacity
-                                                key={model}
-                                                onPress={() => { saveSettings({ customTextModel: model }); setShowModelSelector(false); }}
-                                                onLongPress={() => {
-                                                    if (!TEXT_MODELS.includes(model)) {
-                                                        Alert.alert(
-                                                            "Delete Model",
-                                                            `Remove "${model}" from your list?`,
-                                                            [
-                                                                { text: "Cancel", style: "cancel" },
-                                                                {
-                                                                    text: "Delete",
-                                                                    style: "destructive",
-                                                                    onPress: () => {
-                                                                        const newSaved = (displaySettings.savedCustomModels || []).filter((m: string) => m !== model);
-                                                                        // If currently selected, clear selection
-                                                                        const newCurrent = displaySettings.customTextModel === model ? "" : displaySettings.customTextModel;
-                                                                        saveSettings({ savedCustomModels: newSaved, customTextModel: newCurrent });
-                                                                    }
-                                                                }
-                                                            ]
-                                                        );
-                                                    }
-                                                }}
-                                                delayLongPress={500}
-                                                style={{
-                                                    padding: 15,
-                                                    borderBottomWidth: i === arr.length - 1 ? 0 : 1,
-                                                    borderBottomColor: theme.border,
-                                                    flexDirection: 'row',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center'
-                                                }}
-                                            >
-                                                <View>
-                                                    <Text style={{ color: theme.text, fontSize: 14, fontWeight: displaySettings.customTextModel === model ? 'bold' : '400' }}>{model}</Text>
-                                                    {/* Visual indicator for custom vs default models */}
-                                                    {!TEXT_MODELS.includes(model) && (
-                                                        <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 2 }}>Custom Added (Long press to delete)</Text>
-                                                    )}
-                                                </View>
-                                                {displaySettings.customTextModel === model && <Check size={16} color="#2563eb" />}
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
+                    {/* Custom Text Model — only for Gemini */}
+                    {displaySettings.llmProvider !== 'groq' && (
+                        <View style={{ marginTop: 20 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
+                                <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text }}>Custom Text Model</Text>
+                                <View style={{ maxWidth: '50%', alignItems: 'flex-end' }}>
+                                    <Text style={{ fontSize: 9, color: theme.secondary, marginBottom: 1, fontWeight: '600' }}>CURRENTLY ACTIVE</Text>
+                                    <Text style={{ fontSize: 10, color: displaySettings.modelPriority === 'speed' ? '#22c55e' : '#8b5cf6', fontWeight: 'bold' }} numberOfLines={1}>
+                                        {activeModelId || (displaySettings.customTextModel ? displaySettings.customTextModel : (displaySettings.modelPriority === 'speed' ? "gemini-2.5-flash-lite" : "gemini-2.5-flash-preview-09-2025"))}
+                                    </Text>
                                 </View>
-                            </TouchableOpacity>
-                        </Modal>
-
-                        {/* NEW: Check Availability Button */}
-                        <TouchableOpacity
-                            onPress={handleCheckModelAvailability}
-                            disabled={isCheckingModel}
-                            style={{
-                                marginTop: 10,
-                                backgroundColor: theme.buttonBg,
-                                paddingVertical: 12,
-                                borderRadius: 12,
-                                alignItems: 'center',
-                                borderWidth: 1,
-                                borderColor: theme.border,
-                                flexDirection: 'row',
-                                justifyContent: 'center',
-                                gap: 8,
-                                opacity: isCheckingModel ? 0.7 : 1
-                            }}
-                        >
-                            {isCheckingModel ? (
-                                <ActivityIndicator size="small" color={theme.text} />
-                            ) : (
-                                <CheckCircle size={16} color={theme.text} />
-                            )}
-                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
-                                {isCheckingModel ? "Verifying..." : "Check Availability"}
+                            </View>
+                            <Text style={{ fontSize: 12, color: theme.secondary, marginBottom: 10 }}>
+                                Optional: Enter a specific model ID (e.g. gemini-2.5-pro). This will override the default priority.
                             </Text>
-                        </TouchableOpacity>
-                    </View>
+
+                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                                <TextInput
+                                    style={{
+                                        flex: 1,
+                                        padding: 12,
+                                        borderRadius: 12,
+                                        borderWidth: 1,
+                                        borderColor: theme.border,
+                                        backgroundColor: theme.inputBg,
+                                        color: theme.text,
+                                        fontSize: 14,
+                                        height: 50
+                                    }}
+                                    placeholder="e.g. gemini-2.5-flash-preview-09-2025"
+                                    placeholderTextColor={theme.secondary}
+                                    value={displaySettings.customTextModel}
+                                    onChangeText={(txt) => saveSettings({ customTextModel: txt })}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
+
+                                <TouchableOpacity
+                                    onPress={() => setShowModelSelector(true)}
+                                    style={{
+                                        width: 50,
+                                        height: 50,
+                                        backgroundColor: theme.buttonBg,
+                                        borderRadius: 12,
+                                        borderWidth: 1,
+                                        borderColor: theme.border,
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    <ChevronDown size={24} color={theme.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <Modal visible={showModelSelector} transparent animationType="fade" onRequestClose={() => setShowModelSelector(false)}>
+                                <TouchableOpacity
+                                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}
+                                    activeOpacity={1}
+                                    onPress={() => setShowModelSelector(false)}
+                                >
+                                    <View style={{ backgroundColor: theme.bg, borderRadius: 16, padding: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, maxHeight: 400 }}>
+                                        <Text style={{ textAlign: 'center', fontWeight: 'bold', color: theme.secondary, marginBottom: 10, marginTop: 5, textTransform: 'uppercase', fontSize: 12 }}>Quick Select Model</Text>
+                                        <ScrollView>
+                                            {[...TEXT_MODELS, ...(displaySettings.savedCustomModels || [])].map((model: string, i: number, arr: string[]) => (
+                                                <TouchableOpacity
+                                                    key={model}
+                                                    onPress={() => { saveSettings({ customTextModel: model }); setShowModelSelector(false); }}
+                                                    onLongPress={() => {
+                                                        if (!TEXT_MODELS.includes(model)) {
+                                                            Alert.alert(
+                                                                "Delete Model",
+                                                                `Remove "${model}" from your list?`,
+                                                                [
+                                                                    { text: "Cancel", style: "cancel" },
+                                                                    {
+                                                                        text: "Delete",
+                                                                        style: "destructive",
+                                                                        onPress: () => {
+                                                                            const newSaved = (displaySettings.savedCustomModels || []).filter((m: string) => m !== model);
+                                                                            const newCurrent = displaySettings.customTextModel === model ? "" : displaySettings.customTextModel;
+                                                                            saveSettings({ savedCustomModels: newSaved, customTextModel: newCurrent });
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            );
+                                                        }
+                                                    }}
+                                                    delayLongPress={500}
+                                                    style={{
+                                                        padding: 15,
+                                                        borderBottomWidth: i === arr.length - 1 ? 0 : 1,
+                                                        borderBottomColor: theme.border,
+                                                        flexDirection: 'row',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center'
+                                                    }}
+                                                >
+                                                    <View>
+                                                        <Text style={{ color: theme.text, fontSize: 14, fontWeight: displaySettings.customTextModel === model ? 'bold' : '400' }}>{model}</Text>
+                                                        {!TEXT_MODELS.includes(model) && (
+                                                            <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 2 }}>Custom Added (Long press to delete)</Text>
+                                                        )}
+                                                    </View>
+                                                    {displaySettings.customTextModel === model && <Check size={16} color="#2563eb" />}
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                </TouchableOpacity>
+                            </Modal>
+
+                            {/* Check Availability Button */}
+                            <TouchableOpacity
+                                onPress={handleCheckModelAvailability}
+                                disabled={isCheckingModel}
+                                style={{
+                                    marginTop: 10,
+                                    backgroundColor: theme.buttonBg,
+                                    paddingVertical: 12,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    borderWidth: 1,
+                                    borderColor: theme.border,
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    opacity: isCheckingModel ? 0.7 : 1
+                                }}
+                            >
+                                {isCheckingModel ? (
+                                    <ActivityIndicator size="small" color={theme.text} />
+                                ) : (
+                                    <CheckCircle size={16} color={theme.text} />
+                                )}
+                                <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
+                                    {isCheckingModel ? "Verifying..." : "Check Availability"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
 
                     <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 20 }} />
 
