@@ -21319,7 +21319,20 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
             console.log(`Dictionary lookup successful`);
             const cleanJson = extractJSON(raw);
-            const parsed = JSON.parse(cleanJson);
+            let parsed = JSON.parse(cleanJson);
+
+            // Groq's json_object mode wraps arrays in an object (e.g. {"definitions": [...]})
+            // Unwrap: if parsed is an object (not array), find the first array-valued property
+            if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+                const arrayProp = Object.values(parsed).find(v => Array.isArray(v));
+                if (Array.isArray(arrayProp)) {
+                    parsed = arrayProp;
+                    console.log(`Dictionary: unwrapped Groq object response → array of ${parsed.length}`);
+                } else {
+                    // Single object result (single-word lookup) — wrap in array
+                    parsed = [parsed];
+                }
+            }
 
             // SANITIZATION: Ensure definitions are strings, not objects (fixes "Objects are not valid as React child" error)
             const sanitized = Array.isArray(parsed) ? parsed.map((item: any) => {
