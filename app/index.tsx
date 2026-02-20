@@ -273,6 +273,9 @@ export interface DisplaySettings {
     primaryLanguage?: string;
     onlineTtsEnabled?: boolean;
     imageGenerationEnabled?: boolean;
+    llmProvider?: string;
+    groqApiKey?: string;
+    hfApiKey?: string;
     modelPriority?: string;
     showPersonalDictionary?: boolean;
     customTextModel?: string;
@@ -11614,6 +11617,9 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
                 libraryLimit: 2000,
                 onlineTtsEnabled: true,
                 imageGenerationEnabled: true,
+                llmProvider: 'gemini',
+                groqApiKey: '',
+                hfApiKey: '',
                 isOnboarded: false
             };
             setDisplaySettings(defaultSettings);
@@ -11690,12 +11696,18 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
 
     // UPDATED: Added modelOverride parameter for performance tuning
     const callLLM = async (contents: any, systemInstruction: any, jsonMode = false, modelOverride: string | null = null) => {
-        const key = customApiKey || apiKey;
+        const provider = displaySettings.llmProvider || 'gemini';
+        let key = customApiKey || apiKey;
+
+        if (provider === 'groq') key = displaySettings.groqApiKey;
+        if (provider === 'hf') key = displaySettings.hfApiKey;
+
         if (!key) {
-            // CHANGED: Return detailed guide instead of Alert for missing key
             if (jsonMode) {
                 return JSON.stringify({ error: "API Key Required", isMissingKey: true });
             }
+            if (provider === 'groq') return "Error: Please add your Groq API Key in Settings to use online features.";
+            if (provider === 'hf') return "Error: Please add your Hugging Face Token in Settings to use online features.";
             return API_KEY_HELP_MARKDOWN.trim();
         }
 
@@ -11734,7 +11746,69 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     `;
         const fullSystemInstruction = systemInstruction + userProfile + languageInstruction + formattingInstruction;
 
-        // Determine model order based on priority
+        // NEW: Handle Groq and Hugging Face requests directly
+        if (provider === 'groq' || provider === 'hf') {
+            let openAiMessages = [{ role: "system", content: fullSystemInstruction }];
+            if (Array.isArray(contents)) {
+                contents.forEach((c: any) => {
+                    const r = c.role === 'model' ? 'assistant' : 'user';
+                    const t = c.parts?.[0]?.text || "";
+                    openAiMessages.push({ role: r, content: t });
+                });
+            } else {
+                openAiMessages.push({ role: "user", content: contents });
+            }
+
+            try {
+                let apiUrl = '';
+                let dModel = '';
+
+                if (provider === 'groq') {
+                    apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+                    dModel = modelOverride || 'llama-3.1-8b-instant';
+                } else {
+                    apiUrl = `https://router.huggingface.co/models/${modelOverride || 'meta-llama/Meta-Llama-3-8B-Instruct'}/v1/chat/completions`;
+                    dModel = modelOverride || 'meta-llama/Meta-Llama-3-8B-Instruct';
+                }
+
+                console.log(`Attempting LLM call with: ${provider} (${dModel})`);
+
+                const payload: any = {
+                    model: dModel,
+                    messages: openAiMessages
+                };
+
+                if (provider === 'groq' && jsonMode) {
+                    payload.response_format = { type: "json_object" };
+                }
+
+                if (provider === 'hf') {
+                    payload.max_tokens = 4096;
+                }
+
+                const response = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(`${provider === 'groq' ? 'Groq' : 'Hugging Face'} API Error: ${response.status} - ${err}`);
+                }
+
+                const data = await response.json();
+                if (data.choices && data.choices[0]?.message?.content) {
+                    return data.choices[0].message.content;
+                }
+                throw new Error("Invalid response format");
+            } catch (e: any) {
+                console.error(`Connection error with ${provider}:`, e);
+                return `Error: Unable to get a response from ${provider === 'groq' ? 'Groq' : 'Hugging Face'}. Details: ${e.message || e.toString()}`;
+            }
+        }
+
+        // Determine model order based on priority (Gemini Fallback)
         let modelsToTry = [...TEXT_MODELS];
 
         // NEW: Handle Model Override (High Priority)
@@ -11857,10 +11931,66 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     const handleTestConnection = async () => {
         setApiConnectionStatus("testing");
-        const key = customApiKey || apiKey;
+        const provider = displaySettings.llmProvider || 'gemini';
+        let key = customApiKey || apiKey;
+
+        if (provider === 'groq') key = displaySettings.groqApiKey;
+        if (provider === 'hf') key = displaySettings.hfApiKey;
+
         if (!key) {
             setApiConnectionStatus("failed");
-            Alert.alert("Failed", "Please enter an API Key first.");
+            Alert.alert("Failed", `Please enter your ${provider === 'groq' ? 'Groq' : (provider === 'hf' ? 'Hugging Face' : 'Gemini')} API Key first.`);
+            return;
+        }
+
+        if (provider === 'groq') {
+            try {
+                const response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                    body: JSON.stringify({
+                        model: 'llama-3.1-8b-instant',
+                        messages: [{ role: "user", content: "Hello" }]
+                    })
+                });
+                if (response.ok) {
+                    setApiConnectionStatus("success");
+                    setActiveModelId('llama-3.1-8b-instant');
+                    Alert.alert("Success", "Connection established! (Active: Groq)");
+                    if (!displaySettings.smartBio) generateSmartBio();
+                    return;
+                }
+            } catch (e) {
+                console.log("Groq connection test failed", e);
+            }
+            setApiConnectionStatus("failed");
+            Alert.alert("Failed", "Invalid Groq API Key or Network Issue.");
+            return;
+        }
+
+        if (provider === 'hf') {
+            try {
+                const response = await fetch(`https://router.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                    body: JSON.stringify({
+                        model: 'meta-llama/Meta-Llama-3-8B-Instruct',
+                        messages: [{ role: "user", content: "Hello" }],
+                        max_tokens: 10
+                    })
+                });
+                if (response.ok) {
+                    setApiConnectionStatus("success");
+                    setActiveModelId('meta-llama/Meta-Llama-3-8B-Instruct');
+                    Alert.alert("Success", "Connection established! (Active: Hugging Face)");
+                    if (!displaySettings.smartBio) generateSmartBio();
+                    return;
+                }
+            } catch (e) {
+                console.log("HF connection test failed", e);
+            }
+            setApiConnectionStatus("failed");
+            Alert.alert("Failed", "Invalid Hugging Face Token or Network Issue.");
             return;
         }
 
@@ -12041,15 +12171,19 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     // NEW: Function to check availability of custom model
     const handleCheckModelAvailability = async () => {
-        const modelToCheck = displaySettings.customTextModel.trim();
-        const key = customApiKey || apiKey;
+        const modelToCheck = displaySettings.customTextModel?.trim();
+        const provider = displaySettings.llmProvider || 'gemini';
+        let key = customApiKey || apiKey;
+
+        if (provider === 'groq') key = displaySettings.groqApiKey;
+        if (provider === 'hf') key = displaySettings.hfApiKey;
 
         if (!modelToCheck) {
             Alert.alert("Input Required", "Please enter a Custom Model ID first.");
             return;
         }
         if (!key) {
-            Alert.alert("API Key Required", "Please enter your API Key first.");
+            Alert.alert("API Key Required", `Please enter your ${provider === 'groq' ? 'Groq' : (provider === 'hf' ? 'Hugging Face' : 'Gemini')} API Key first.`);
             return;
         }
 
@@ -12057,12 +12191,24 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         try {
             // 1. Check User's Custom Model
-            console.log(`Verifying custom model: ${modelToCheck}`);
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToCheck}:generateContent?key=${key}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ contents: [{ parts: [{ text: "Hello" }] }] })
-            });
+            console.log(`Verifying custom model: ${modelToCheck} on ${provider}`);
+            let response;
+            if (provider === 'groq') {
+                response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+                    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                    body: JSON.stringify({ model: modelToCheck, messages: [{ role: "user", content: "Hello" }] })
+                });
+            } else if (provider === 'hf') {
+                response = await fetch(`https://router.huggingface.co/models/${modelToCheck}/v1/chat/completions`, {
+                    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                    body: JSON.stringify({ model: modelToCheck, messages: [{ role: "user", content: "Hello" }], max_tokens: 10 })
+                });
+            } else {
+                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToCheck}:generateContent?key=${key}`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "Hello" }] }] })
+                });
+            }
 
             if (response.ok) {
                 setIsCheckingModel(false);
@@ -24635,8 +24781,29 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     </View>
                     <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 20 }} />
 
+                    {/* Provider Dropdown */}
+                    <View style={{ marginBottom: 15 }}>
+                        <DropdownInput
+                            label="Select AI Provider"
+                            value={displaySettings.llmProvider === 'groq' ? 'Groq' : (displaySettings.llmProvider === 'hf' ? 'Hugging Face' : 'Google Gemini')}
+                            options={['Google Gemini', 'Groq', 'Hugging Face']}
+                            onSelect={(val: string) => {
+                                let newProv = 'gemini';
+                                if (val === 'Groq') newProv = 'groq';
+                                if (val === 'Hugging Face') newProv = 'hf';
+                                saveSettings({ llmProvider: newProv });
+                                setApiConnectionStatus('idle');
+                            }}
+                            theme={theme}
+                        />
+                    </View>
+
                     <TouchableOpacity
-                        onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}
+                        onPress={() => {
+                            if (displaySettings.llmProvider === 'groq') Linking.openURL('https://console.groq.com/keys');
+                            else if (displaySettings.llmProvider === 'hf') Linking.openURL('https://huggingface.co/settings/tokens');
+                            else Linking.openURL('https://aistudio.google.com/app/apikey');
+                        }}
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
@@ -24649,12 +24816,14 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             backgroundColor: theme.bg
                         }}
                     >
-                        <Text style={{ color: primaryColor, fontWeight: 'bold', fontSize: 15 }}>Get Free Gemini API Key</Text>
+                        <Text style={{ color: primaryColor, fontWeight: 'bold', fontSize: 15 }}>
+                            {displaySettings.llmProvider === 'groq' ? 'Get Free Groq API Key' : (displaySettings.llmProvider === 'hf' ? 'Get Free Hugging Face Token' : 'Get Free Gemini API Key')}
+                        </Text>
                         <ExternalLink size={16} color={primaryColor} />
                     </TouchableOpacity>
 
                     <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>
-                        Your API Key (Mandatory to use online services)
+                        Your {displaySettings.llmProvider === 'groq' ? 'Groq' : (displaySettings.llmProvider === 'hf' ? 'Hugging Face' : 'Gemini')} API Key
                     </Text>
 
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
@@ -24664,15 +24833,25 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 padding: 12,
                                 borderRadius: 8,
                                 borderWidth: 1,
-                                borderColor: apiConnectionStatus === 'success' ? '#22c55e' : (apiConnectionStatus === 'failed' ? '#ef4444' : (customApiKey ? theme.border : '#ef4444')),
+                                borderColor: apiConnectionStatus === 'success' ? '#22c55e' : (apiConnectionStatus === 'failed' ? '#ef4444' : ((displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (displaySettings.llmProvider === 'hf' ? displaySettings.hfApiKey : customApiKey)) ? theme.border : '#ef4444')),
                                 backgroundColor: theme.inputBg,
                                 color: theme.text,
                                 fontSize: 16,
                             }}
                             placeholder="Paste API Key..."
                             placeholderTextColor={theme.secondary}
-                            value={customApiKey}
-                            onChangeText={async (txt) => { setCustomApiKey(txt); await AsyncStorage.setItem('apiKey', txt); setApiConnectionStatus('idle'); }}
+                            value={displaySettings.llmProvider === 'groq' ? (displaySettings.groqApiKey || "") : (displaySettings.llmProvider === 'hf' ? (displaySettings.hfApiKey || "") : customApiKey)}
+                            onChangeText={async (txt) => {
+                                if (displaySettings.llmProvider === 'groq') {
+                                    saveSettings({ groqApiKey: txt });
+                                } else if (displaySettings.llmProvider === 'hf') {
+                                    saveSettings({ hfApiKey: txt });
+                                } else {
+                                    setCustomApiKey(txt);
+                                    await AsyncStorage.setItem('apiKey', txt);
+                                }
+                                setApiConnectionStatus('idle');
+                            }}
                             secureTextEntry
                         />
 
@@ -24693,7 +24872,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             ) : (
                                 <Save
                                     size={22}
-                                    color={(customApiKey || apiKey) ? (isRateLimited ? '#ef4444' : '#22c55e') : '#b0bec5'}
+                                    color={(displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (displaySettings.llmProvider === 'hf' ? displaySettings.hfApiKey : (customApiKey || apiKey))) ? (isRateLimited ? '#ef4444' : '#22c55e') : '#b0bec5'}
                                     strokeWidth={2.5}
                                 />
                             )}
