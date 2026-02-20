@@ -21409,10 +21409,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         let languageInstruction = "";
         if (userLanguages.length === 1) {
-            languageInstruction = `Provide definitions and examples strictly in ${userLanguages[0]}.`;
+            languageInstruction = `Provide definitions and examples strictly in ${userLanguages[0]}. If the word is from another language, include its ${userLanguages[0]} translation in the definition.`;
         } else {
             const langsToInclude = userLanguages.join(' and ');
-            languageInstruction = `For definitions, provide the native dictionary definition in each of the requested languages (${langsToInclude}) rather than directly translating the English definition. Format definitions as SINGLE STRINGS combining them (e.g. "English Def / Hindi Def"). Do NOT translate examples, provide them only in the queried word's original language. Do NOT return objects for definitions.`;
+            languageInstruction = `For definitions, you MUST provide the native dictionary definition in each of the requested languages (${langsToInclude}). Do NOT just translate the English definition. For each language, you must include the local translation of the word itself, followed by its natural definition in that language. Format definitions as SINGLE STRINGS combining them (e.g. "English: [English Def] / Hindi (Translation: आलू): [Native Hindi Def]"). Do NOT translate examples, provide them only in the queried word's original language. Do NOT return objects for definitions.`;
         }
 
         const prompt = `
