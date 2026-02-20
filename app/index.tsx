@@ -6568,7 +6568,7 @@ export default function App() {
         const translateUi = async () => {
             const targetLang = displaySettings.language;
             const isEnglish = targetLang === 'English';
-            const key = customApiKey || apiKey;
+            const key = displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey);
             const keepLabels = displaySettings.keepLabelsEnglish;
 
             // Unique cache key based on language AND label preference
@@ -7225,9 +7225,9 @@ export default function App() {
     const handleGenerateEditorial = async () => {
         const topic = editorialParams.topic.trim();
 
-        const key = customApiKey || apiKey;
+        const key = displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey);
         if (!key) {
-            Alert.alert("API Key Required", "Please add your Gemini API Key in Settings.");
+            Alert.alert("API Key Required", "Please add your API Key in Settings.");
             return;
         }
 
@@ -8088,18 +8088,29 @@ export default function App() {
         let interval: any;
         if (isRateLimited) {
             const checkRecovery = async () => {
-                const key = customApiKey || apiKey;
-                if (!key) return;
+                const provider = displaySettings.llmProvider || 'gemini';
+                const recoverKey = provider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey);
+                if (!recoverKey) return;
                 try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODELS[0]}:generateContent?key=${key}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: "hi" }] }] })
-                    });
-
-                    if (response.ok) {
+                    let recoveryOk = false;
+                    if (provider === 'groq') {
+                        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${recoverKey}` },
+                            body: JSON.stringify({ model: GROQ_MODELS[0], messages: [{ role: 'user', content: 'hi' }] })
+                        });
+                        recoveryOk = res.ok;
+                    } else {
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODELS[0]}:generateContent?key=${recoverKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
+                        });
+                        recoveryOk = res.ok;
+                    }
+                    if (recoveryOk) {
                         setIsRateLimited(false);
-                        console.log("API Limit recovered: System is back online.");
+                        console.log('API Limit recovered: System is back online.');
                     }
                 } catch (e: any) {
                 }
@@ -8119,7 +8130,7 @@ export default function App() {
             // Update ref immediately so future runs know current state
             prevLanguageRef.current = targetLang;
 
-            const key = customApiKey || apiKey;
+            const key = displaySettings.llmProvider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey);
 
             if (!key) return;
 
@@ -10675,11 +10686,11 @@ export default function App() {
         const settings = providedSettings || displaySettings;
         if (!settings.userName && !settings.userProfession && !settings.userGoal && !settings.userBio) return;
 
-        // NEW: Abort if no API key is available (Avoids "No Key" error text as bio)
-        const key = customApiKey || apiKey;
+        // Abort if no API key is available (works for both Gemini and Groq)
+        const key = displaySettings.llmProvider === 'groq' ? settings.groqApiKey : (customApiKey || apiKey);
         if (!key) {
             if (manual) {
-                Alert.alert("API Key Required", "Please add a Gemini API Key in Settings to generate your Smart Bio.");
+                Alert.alert("API Key Required", "Please add your API Key in Settings to generate your Smart Bio.");
             }
             console.log("Skipping Smart Bio generation: No API Key.");
             return;
