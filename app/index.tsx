@@ -5529,6 +5529,56 @@ export default function App() {
             setRecentSearches(newItems);
         }
     };
+
+    // ── Storage-full safety net ──────────────────────────────────────────────
+    // Deletes the oldest N non-pinned sessions to free AsyncStorage space,
+    // then retries the save operation supplied via `retrySave`.
+    const storageFull_shown = useRef(false); // show the toast only once per session
+    const autoFreeStorage = async (retrySave?: () => Promise<void>) => {
+        try {
+            console.warn('SQLITE_FULL detected – auto-pruning old sessions...');
+            if (!storageFull_shown.current) {
+                storageFull_shown.current = true;
+                showToast('⚠️ Storage almost full – clearing old items to free space');
+            }
+
+            const indexJson = await AsyncStorage.getItem('session_index');
+            let index: string[] = indexJson ? JSON.parse(indexJson) : [];
+
+            // Collect session metadata to find oldest non-pinned items
+            const toDelete: string[] = [];
+            const PRUNE_COUNT = 20;
+            for (const id of index) {
+                if (toDelete.length >= PRUNE_COUNT) break;
+                try {
+                    const raw = await AsyncStorage.getItem(`session_${id}`);
+                    if (!raw) { toDelete.push(id); continue; }
+                    const s = JSON.parse(raw);
+                    if (!s.pinned) toDelete.push(id);
+                } catch { toDelete.push(id); }
+            }
+
+            if (toDelete.length > 0) {
+                const keysToRemove = toDelete.map(id => `session_${id}`);
+                await AsyncStorage.multiRemove(keysToRemove);
+                const newIndex = index.filter(id => !toDelete.includes(id));
+                await AsyncStorage.setItem('session_index', JSON.stringify(newIndex));
+                setChatSessions((prev: any) => {
+                    const next = { ...prev };
+                    toDelete.forEach(id => delete next[id]);
+                    return next;
+                });
+                console.log(`Auto-pruned ${toDelete.length} old sessions to free storage.`);
+            }
+
+            // Retry the original save after freeing space
+            if (retrySave) await retrySave();
+        } catch (pruneErr) {
+            console.error('autoFreeStorage failed:', pruneErr);
+        }
+    };
+    // ────────────────────────────────────────────────────────────────────────
+
     const [dictionaryCurrentWord, setDictionaryCurrentWord] = useState<any>("");
     const [dictionaryCache, setDictionaryCache] = useState<any>({});
     const [quizSecondsElapsed, setQuizSecondsElapsed] = useState<any>(0);
@@ -5716,7 +5766,19 @@ export default function App() {
                     }
                 }
 
-                await AsyncStorage.setItem(`session_${newSession.id}`, JSON.stringify(sessionToSave));
+                const sessionKey = `session_${newSession.id}`;
+                const sessionJson = JSON.stringify(sessionToSave);
+                try {
+                    await AsyncStorage.setItem(sessionKey, sessionJson);
+                } catch (saveErr: any) {
+                    const msg = String(saveErr?.message ?? '');
+                    const isFull = msg.includes('SQLITE_FULL') || msg.includes('database or disk is full') || String(saveErr?.code ?? '').includes('13');
+                    if (isFull) {
+                        await autoFreeStorage(() => AsyncStorage.setItem(sessionKey, sessionJson));
+                    } else {
+                        console.error('persistSession setItem error:', saveErr);
+                    }
+                }
 
                 // Update Index
                 const indexJson = await AsyncStorage.getItem('session_index');
@@ -10737,8 +10799,15 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         // Critical: Use functional update to avoid stale closure issues
         setDisplaySettings((prev: any) => {
             const updated = { ...prev, ...newSettings };
-            // Save to storage immediately inside the update to ensure consistency
-            AsyncStorage.setItem('settings', JSON.stringify(updated));
+            // Save to storage — handle SQLITE_FULL gracefully
+            AsyncStorage.setItem('settings', JSON.stringify(updated)).catch((e: any) => {
+                const code = e?.code ?? e?.cause?.code ?? '';
+                if (String(code).includes('13') || String(e?.message).includes('SQLITE_FULL') || String(e?.message).includes('database or disk is full')) {
+                    autoFreeStorage(() => AsyncStorage.setItem('settings', JSON.stringify(updated)));
+                } else {
+                    console.warn('saveSettings AsyncStorage error:', e);
+                }
+            });
             return updated;
         });
     };
