@@ -277,6 +277,9 @@ export interface DisplaySettings {
     groqApiKey?: string;
     hfApiKey?: string;
     modelPriority?: string;
+    groqModelPriority?: string;
+    groqCustomModel?: string;
+    savedGroqCustomModels?: string[];
     showPersonalDictionary?: boolean;
     customTextModel?: string;
     savedCustomModels?: any[];
@@ -1562,6 +1565,15 @@ const TEXT_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash-preview-09-2025"
+];
+
+// Groq free-tier models, newest → oldest
+const GROQ_MODELS = [
+    "llama-3.3-70b-versatile",    // Quality preset: best free-tier model
+    "llama-3.1-70b-versatile",    // Quality fallback
+    "gemma2-9b-it",               // Mid fallback
+    "llama-3.1-8b-instant",       // Speed preset: fastest free-tier model
+    "gemma-7b-it",                // Speed fallback
 ];
 
 // Cleaned Image Models List - Removed deprecated 404 models
@@ -5377,6 +5389,9 @@ export default function App() {
         onlineTtsEnabled: true,
         imageGenerationEnabled: true,
         modelPriority: "speed",
+        groqModelPriority: "quality",
+        groqCustomModel: "",
+        savedGroqCustomModels: [],
         showPersonalDictionary: true,
         customTextModel: "",
         savedCustomModels: [],
@@ -5539,6 +5554,7 @@ export default function App() {
     const [isRateLimited, setIsRateLimited] = useState(false);
     const [isCheckingModel, setIsCheckingModel] = useState(false);
     const [showModelSelector, setShowModelSelector] = useState(false);
+    const [showGroqModelSelector, setShowGroqModelSelector] = useState(false);
     const [isReaderQuerying, setIsReaderQuerying] = useState(false);
     const [greetingsMode, setGreetingsMode] = useState('greeting');
     const [minimizedSession, setMinimizedSession] = useState<any>(null);
@@ -11754,8 +11770,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     `;
         const fullSystemInstruction = systemInstruction + userProfile + languageInstruction + formattingInstruction;
 
-        // NEW: Handle Groq and Hugging Face requests directly
-        if (provider === 'groq' || provider === 'hf') {
+        // Groq fallback loop: try models from priority list, newest → oldest
+        if (provider === 'groq') {
             let openAiMessages = [{ role: "system", content: fullSystemInstruction }];
             if (Array.isArray(contents)) {
                 contents.forEach((c: any) => {
@@ -11767,41 +11783,70 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 openAiMessages.push({ role: "user", content: contents });
             }
 
-            try {
-                const apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
-                const dModel = modelOverride || 'llama-3.1-8b-instant';
+            let groqModelsToTry = [...GROQ_MODELS];
 
-                console.log(`Attempting LLM call with: ${provider} (${dModel})`);
-
-                const payload: any = {
-                    model: dModel,
-                    messages: openAiMessages
-                };
-
-                if (jsonMode) {
-                    payload.response_format = { type: "json_object" };
+            if (modelOverride) {
+                // Direct override — use only that model
+                groqModelsToTry = [modelOverride];
+            } else {
+                // Apply speed/quality priority
+                const groqPriority = displaySettings.groqModelPriority || 'quality';
+                if (groqPriority === 'speed') {
+                    groqModelsToTry = groqModelsToTry.filter(m => m !== 'llama-3.1-8b-instant');
+                    groqModelsToTry.unshift('llama-3.1-8b-instant');
+                } else {
+                    groqModelsToTry = groqModelsToTry.filter(m => m !== 'llama-3.3-70b-versatile');
+                    groqModelsToTry.unshift('llama-3.3-70b-versatile');
                 }
-
-                const response = await fetch(apiUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const err = await response.text();
-                    throw new Error(`Groq API Error: ${response.status} - ${err}`);
+                // Custom model takes highest priority
+                if (displaySettings.groqCustomModel?.trim()) {
+                    const custom = displaySettings.groqCustomModel.trim();
+                    groqModelsToTry = groqModelsToTry.filter(m => m !== custom);
+                    groqModelsToTry.unshift(custom);
                 }
-
-                const data = await response.json();
-                if (data.choices && data.choices[0]?.message?.content) {
-                    return data.choices[0].message.content;
-                }
-                throw new Error("Invalid response format");
-            } catch (e: any) {
-                console.error(`Connection error with groq:`, e);
-                return `Error: Unable to get a response from Groq. Details: ${e.message || e.toString()}`;
             }
+
+            let lastGroqError: any = null;
+            for (const groqModel of groqModelsToTry) {
+                try {
+                    console.log(`Attempting LLM call with groq: ${groqModel}`);
+                    const payload: any = {
+                        model: groqModel,
+                        messages: openAiMessages
+                    };
+                    if (jsonMode) {
+                        payload.response_format = { type: "json_object" };
+                    }
+                    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.choices?.[0]?.message?.content) {
+                            return data.choices[0].message.content;
+                        }
+                        throw new Error("Invalid response format");
+                    }
+                    const errText = await response.text();
+                    // Only retry on rate-limit (429) or server errors; fail on auth (401/403)
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error(`Groq Auth Error: ${response.status} - ${errText}`);
+                    }
+                    console.log(`Groq model ${groqModel} failed (${response.status}), trying next...`);
+                    lastGroqError = new Error(`Groq API Error: ${response.status} - ${errText}`);
+                } catch (e: any) {
+                    if (e.message?.includes('Auth Error')) {
+                        console.error('Groq auth error — stopping fallback:', e);
+                        return `Error: Groq authentication failed. Please check your API key in Settings.`;
+                    }
+                    lastGroqError = e;
+                    console.log(`Groq model ${groqModel} threw error, trying next...`);
+                }
+            }
+            console.error('All Groq models failed:', lastGroqError);
+            return `Error: Unable to get a response from Groq. Details: ${lastGroqError?.message || lastGroqError}`;
         }
 
         // Determine model order based on priority (Gemini Fallback)
@@ -11940,27 +11985,48 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
 
         if (provider === 'groq') {
-            try {
-                const response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                    body: JSON.stringify({
-                        model: 'llama-3.1-8b-instant',
-                        messages: [{ role: "user", content: "Hello" }]
-                    })
-                });
-                if (response.ok) {
-                    setApiConnectionStatus("success");
-                    setActiveModelId('llama-3.1-8b-instant');
-                    Alert.alert("Success", "Connection established! (Active: Groq)");
-                    if (!displaySettings.smartBio) generateSmartBio();
-                    return;
+            let groqTestModels = [...GROQ_MODELS];
+            const groqPriority = displaySettings.groqModelPriority || 'quality';
+            if (groqPriority === 'speed') {
+                groqTestModels = groqTestModels.filter(m => m !== 'llama-3.1-8b-instant');
+                groqTestModels.unshift('llama-3.1-8b-instant');
+            } else {
+                groqTestModels = groqTestModels.filter(m => m !== 'llama-3.3-70b-versatile');
+                groqTestModels.unshift('llama-3.3-70b-versatile');
+            }
+            if (displaySettings.groqCustomModel?.trim()) {
+                const custom = displaySettings.groqCustomModel.trim();
+                groqTestModels = groqTestModels.filter(m => m !== custom);
+                groqTestModels.unshift(custom);
+            }
+
+            for (const groqModel of groqTestModels) {
+                try {
+                    const response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                        body: JSON.stringify({ model: groqModel, messages: [{ role: "user", content: "Hello" }] })
+                    });
+                    if (response.ok) {
+                        setApiConnectionStatus("success");
+                        setActiveModelId(groqModel);
+                        Alert.alert("Success", `Connection established! (Groq: ${groqModel})`);
+                        if (!displaySettings.smartBio) generateSmartBio();
+                        return;
+                    }
+                    const errText = await response.text();
+                    if (response.status === 401 || response.status === 403) {
+                        setApiConnectionStatus("failed");
+                        Alert.alert("Failed", "Invalid Groq API Key.");
+                        return;
+                    }
+                    console.log(`Groq test: model ${groqModel} failed (${response.status}), trying next...`);
+                } catch (e) {
+                    console.log(`Groq test: ${groqModel} threw error, trying next...`);
                 }
-            } catch (e) {
-                console.log("Groq connection test failed", e);
             }
             setApiConnectionStatus("failed");
-            Alert.alert("Failed", "Invalid Groq API Key or Network Issue.");
+            Alert.alert("Failed", "All Groq models failed. Check your API Key or network.");
             return;
         }
 
@@ -24913,6 +24979,130 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             </TouchableOpacity>
                         </View>
                     </View>
+
+                    {/* Groq-specific: Model Priority + Model Selector */}
+                    {displaySettings.llmProvider === 'groq' && (
+                        <>
+                            {/* Groq Model Priority */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                                <View style={{ flex: 1, marginRight: 10 }}>
+                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Groq Model Priority</Text>
+                                    <Text style={{ fontSize: 12, color: theme.secondary }}>
+                                        {(displaySettings.groqModelPriority || 'quality') === 'quality' ? 'llama-3.3-70b (Best quality)' : 'llama-3.1-8b (Fastest)'}
+                                    </Text>
+                                </View>
+                                <View style={{
+                                    flexDirection: 'row',
+                                    backgroundColor: theme.buttonBg,
+                                    borderRadius: 14,
+                                    padding: 4,
+                                    borderWidth: 1,
+                                    borderColor: theme.border
+                                }}>
+                                    <TouchableOpacity
+                                        onPress={() => saveSettings({ groqModelPriority: 'quality' })}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderRadius: 10,
+                                            backgroundColor: (displaySettings.groqModelPriority || 'quality') === 'quality' ? '#8b5cf6' : 'transparent',
+                                            elevation: (displaySettings.groqModelPriority || 'quality') === 'quality' ? 2 : 0
+                                        }}
+                                    >
+                                        <Sparkles size={14} color={(displaySettings.groqModelPriority || 'quality') === 'quality' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
+                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: (displaySettings.groqModelPriority || 'quality') === 'quality' ? 'white' : theme.secondary }}>Quality</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => saveSettings({ groqModelPriority: 'speed' })}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderRadius: 10,
+                                            backgroundColor: displaySettings.groqModelPriority === 'speed' ? '#22c55e' : 'transparent',
+                                            elevation: displaySettings.groqModelPriority === 'speed' ? 2 : 0
+                                        }}
+                                    >
+                                        <Zap size={14} color={displaySettings.groqModelPriority === 'speed' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
+                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: displaySettings.groqModelPriority === 'speed' ? 'white' : theme.secondary }}>Speed</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Groq Model Selector */}
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>Groq Model</Text>
+                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                                <TouchableOpacity
+                                    onPress={() => setShowGroqModelSelector(true)}
+                                    style={{
+                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: 12, borderRadius: 8, borderWidth: 1,
+                                        borderColor: theme.border, backgroundColor: theme.inputBg
+                                    }}
+                                >
+                                    <Text style={{ color: displaySettings.groqCustomModel ? theme.text : theme.secondary, fontSize: 14 }} numberOfLines={1}>
+                                        {displaySettings.groqCustomModel || 'Auto (use priority preset)'}
+                                    </Text>
+                                    <ChevronDown size={18} color={theme.secondary} />
+                                </TouchableOpacity>
+                                {displaySettings.groqCustomModel ? (
+                                    <TouchableOpacity
+                                        onPress={() => saveSettings({ groqCustomModel: '' })}
+                                        style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.buttonBg, justifyContent: 'center' }}
+                                    >
+                                        <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: 'bold' }}>Clear</Text>
+                                    </TouchableOpacity>
+                                ) : null}
+                            </View>
+
+                            <Modal visible={showGroqModelSelector} transparent animationType="fade" onRequestClose={() => setShowGroqModelSelector(false)}>
+                                <TouchableOpacity
+                                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}
+                                    activeOpacity={1}
+                                    onPress={() => setShowGroqModelSelector(false)}
+                                >
+                                    <View style={{ backgroundColor: theme.bg, borderRadius: 16, padding: 10, elevation: 5, maxHeight: 400 }}>
+                                        <Text style={{ textAlign: 'center', fontWeight: 'bold', color: theme.secondary, marginBottom: 10, marginTop: 5, textTransform: 'uppercase', fontSize: 12 }}>Select Groq Model</Text>
+                                        <ScrollView>
+                                            {[...GROQ_MODELS, ...(displaySettings.savedGroqCustomModels || [])].map((model: string, i: number, arr: string[]) => (
+                                                <TouchableOpacity
+                                                    key={model}
+                                                    onPress={() => { saveSettings({ groqCustomModel: model }); setShowGroqModelSelector(false); }}
+                                                    onLongPress={() => {
+                                                        if (!GROQ_MODELS.includes(model)) {
+                                                            Alert.alert("Delete Model", `Remove "${model}"?`, [
+                                                                { text: "Cancel", style: "cancel" },
+                                                                {
+                                                                    text: "Delete", style: "destructive", onPress: () => {
+                                                                        const newSaved = (displaySettings.savedGroqCustomModels || []).filter((m: string) => m !== model);
+                                                                        const newCurrent = displaySettings.groqCustomModel === model ? '' : displaySettings.groqCustomModel;
+                                                                        saveSettings({ savedGroqCustomModels: newSaved, groqCustomModel: newCurrent });
+                                                                    }
+                                                                }
+                                                            ]);
+                                                        }
+                                                    }}
+                                                    delayLongPress={500}
+                                                    style={{ padding: 15, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: theme.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                                                >
+                                                    <View>
+                                                        <Text style={{ color: theme.text, fontSize: 14, fontWeight: displaySettings.groqCustomModel === model ? 'bold' : '400' }}>{model}</Text>
+                                                        {model === 'llama-3.3-70b-versatile' && <Text style={{ fontSize: 10, color: '#8b5cf6', marginTop: 2 }}>⭐ Quality preset</Text>}
+                                                        {model === 'llama-3.1-8b-instant' && <Text style={{ fontSize: 10, color: '#22c55e', marginTop: 2 }}>⚡ Speed preset</Text>}
+                                                        {!GROQ_MODELS.includes(model) && <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 2 }}>Custom (Long press to delete)</Text>}
+                                                    </View>
+                                                    {displaySettings.groqCustomModel === model && <Check size={16} color="#2563eb" />}
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                </TouchableOpacity>
+                            </Modal>
+                        </>
+                    )}
 
                     {/* Online TTS */}
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
