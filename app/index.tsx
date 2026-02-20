@@ -21412,7 +21412,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             languageInstruction = `Provide definitions and examples strictly in ${userLanguages[0]}.`;
         } else {
             const langsToInclude = userLanguages.join(' and ');
-            languageInstruction = `Provide definitions and examples bilingually in ${langsToInclude}. Ensure definitions are SINGLE STRINGS (e.g. "Def 1 / Def 2"). Do NOT return objects for definitions.`;
+            languageInstruction = `For definitions, provide the native dictionary definition in each of the requested languages (${langsToInclude}) rather than directly translating the English definition. Format definitions as SINGLE STRINGS combining them (e.g. "English Def / Hindi Def"). Do NOT translate examples, provide them only in the queried word's original language. Do NOT return objects for definitions.`;
         }
 
         const prompt = `
