@@ -13450,10 +13450,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     // NEW: Voice Input Handler
     const handleVoiceToggle = async (target: string = 'search') => {
-        Keyboard.dismiss(); // Automatically hide keyboard when mic is clicked
-        const key = customApiKey || apiKey;
+        Keyboard.dismiss();
+        const provider = displaySettings.llmProvider || 'gemini';
+        const key = provider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey);
         if (!key) {
-            Alert.alert("Offline", "Voice input requires an API Key. Please add one in Settings.");
+            Alert.alert("Offline", `Voice input requires ${provider === 'groq' ? 'a Groq' : 'an'} API Key. Please add one in Settings.`);
             return;
         }
 
@@ -13516,17 +13517,63 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                         let text = null;
 
-                        try {
-                            // 1. Try Primary Model (Flash Lite - Fast)
-                            text = await transcribeWithModel("gemini-2.5-flash-lite");
-                        } catch (error: any) {
-                            console.warn("Primary voice model failed, attempting fallback:", error.message);
+                        if (provider === 'groq') {
+                            // --- Groq Whisper STT ---
+                            // Send audio file directly via multipart/form-data
+                            const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3'];
+                            let groqTranscribed = false;
+                            for (const whisperModel of whisperModels) {
+                                try {
+                                    console.log(`Groq STT: trying ${whisperModel}`);
+                                    const formData = new FormData();
+                                    // React Native FormData accepts { uri, name, type } for files
+                                    formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
+                                    formData.append('model', whisperModel);
+                                    formData.append('response_format', 'json');
+                                    // Optionally hint the language for faster + more accurate results
+                                    if (displaySettings.language && displaySettings.language !== 'English') {
+                                        formData.append('language', displaySettings.language.toLowerCase().slice(0, 2));
+                                    }
+
+                                    const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                                        method: 'POST',
+                                        headers: { 'Authorization': `Bearer ${key}` },
+                                        body: formData
+                                    });
+
+                                    if (groqRes.ok) {
+                                        const groqData = await groqRes.json();
+                                        text = groqData.text?.trim() || null;
+                                        if (text) {
+                                            console.log(`Groq STT success with ${whisperModel}:`, text);
+                                            groqTranscribed = true;
+                                            break;
+                                        }
+                                    } else {
+                                        const errText = await groqRes.text();
+                                        console.warn(`Groq STT ${whisperModel} failed (${groqRes.status}): ${errText}`);
+                                        if (groqRes.status === 401 || groqRes.status === 403) break; // auth error — stop
+                                    }
+                                } catch (groqErr) {
+                                    console.warn(`Groq STT ${whisperModel} error:`, groqErr);
+                                }
+                            }
+                            if (!groqTranscribed && !text) {
+                                throw new Error('Groq Whisper: all models failed to transcribe audio.');
+                            }
+                        } else {
+                            // --- Gemini Vision STT (original path) ---
                             try {
-                                // 2. Try Fallback Model (Robotics - Preview)
-                                text = await transcribeWithModel("gemini-robotics-er-1.5-preview");
-                            } catch (fallbackError) {
-                                // If both fail, throw the original error to alert the user
-                                throw new Error(error.message || "API Error");
+                                // 1. Try Primary Model (Flash Lite - Fast)
+                                text = await transcribeWithModel("gemini-2.5-flash-lite");
+                            } catch (error: any) {
+                                console.warn("Primary voice model failed, attempting fallback:", error.message);
+                                try {
+                                    // 2. Try Fallback Model
+                                    text = await transcribeWithModel("gemini-robotics-er-1.5-preview");
+                                } catch (fallbackError) {
+                                    throw new Error(error.message || "API Error");
+                                }
                             }
                         }
 
@@ -25107,7 +25154,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <View style={{ flex: 1, marginRight: 10 }}>
                             <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Online TTS</Text>
-                            <Text style={{ fontSize: 12, color: theme.secondary }}>High quality AI narrator</Text>
+                            <Text style={{ fontSize: 12, color: theme.secondary }}>
+                                {displaySettings.llmProvider === 'groq' ? 'High quality AI narrator (via Gemini)' : 'High quality AI narrator'}
+                            </Text>
                         </View>
                         <TouchableOpacity
                             activeOpacity={0.8}
@@ -25149,7 +25198,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                         <View style={{ flex: 1, marginRight: 10 }}>
                             <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>AI Images</Text>
-                            <Text style={{ fontSize: 12, color: theme.secondary }}>Generate visual diagrams</Text>
+                            <Text style={{ fontSize: 12, color: theme.secondary }}>
+                                {displaySettings.llmProvider === 'groq' ? 'Generate visual diagrams (via Gemini)' : 'Generate visual diagrams'}
+                            </Text>
                         </View>
                         <TouchableOpacity
                             activeOpacity={0.8}
