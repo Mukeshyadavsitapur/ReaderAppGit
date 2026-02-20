@@ -6,19 +6,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // and write methods to swallow the error and return null/void, preventing uncaught promise crash loops.
 
 export let globalAutoFreeStorage: (() => Promise<void>) | null = null;
+export let isCurrentlyPruning = false; // Lock to prevent explosive recursive pruning
 
-const _originalGetItem = AsyncStorage.getItem.bind(AsyncStorage);
-const _originalMultiGet = AsyncStorage.multiGet.bind(AsyncStorage);
-const _originalSetItem = AsyncStorage.setItem.bind(AsyncStorage);
-const _originalMultiSet = AsyncStorage.multiSet.bind(AsyncStorage);
+export const _originalGetItem = AsyncStorage.getItem.bind(AsyncStorage);
+export const _originalMultiGet = AsyncStorage.multiGet.bind(AsyncStorage);
+export const _originalSetItem = AsyncStorage.setItem.bind(AsyncStorage);
+export const _originalMultiSet = AsyncStorage.multiSet.bind(AsyncStorage);
+export const _originalMultiRemove = AsyncStorage.multiRemove.bind(AsyncStorage);
 
 const handleStorageError = (e: any, action: string) => {
+    if (isCurrentlyPruning) return; // Silent abort if already handling a crash
     const msg = String(e?.message ?? '');
     const code = String(e?.code ?? e?.cause?.code ?? '');
     if (msg.includes('SQLITE_FULL') || msg.includes('database or disk is full') || code.includes('13')) {
         console.warn(`[SafeStorage] ${action} intercepted SQLITE_FULL. Triggering auto-prune...`);
         if (globalAutoFreeStorage) {
-            globalAutoFreeStorage().catch(pruneErr => console.warn("Global prune failed", pruneErr));
+            isCurrentlyPruning = true;
+            globalAutoFreeStorage().finally(() => {
+                isCurrentlyPruning = false;
+            }).catch(pruneErr => console.warn("Global prune failed", pruneErr));
         }
     } else {
         console.warn(`[SafeStorage] ${action} error:`, e);
@@ -30,7 +36,7 @@ AsyncStorage.getItem = async (key: string, callback?: any) => {
         return await _originalGetItem(key, callback);
     } catch (e: any) {
         handleStorageError(e, `getItem(${key})`);
-        return null;
+        return null; // Safe fallback
     }
 };
 
@@ -57,6 +63,14 @@ AsyncStorage.multiSet = async (keyValuePairs: readonly (readonly [string, string
         await _originalMultiSet(keyValuePairs as any, callback);
     } catch (e: any) {
         handleStorageError(e, `multiSet`);
+    }
+};
+
+AsyncStorage.multiRemove = async (keys: readonly string[], callback?: any) => {
+    try {
+        await _originalMultiRemove(keys, callback);
+    } catch (e: any) {
+        handleStorageError(e, `multiRemove`);
     }
 };
 // ------------------------------------------
@@ -5597,49 +5611,20 @@ export default function App() {
     const storageFull_shown = useRef(false); // show the toast only once per session
     const autoFreeStorage = async (retrySave?: () => Promise<void>) => {
         try {
-            console.warn('SQLITE_FULL detected – auto-pruning old sessions...');
+            console.warn('SQLITE_FULL detected – but auto-pruning is disabled by user request.');
             if (!storageFull_shown.current) {
                 storageFull_shown.current = true;
-                showToast('⚠️ Storage almost full – clearing old items to free space');
+                showToast('⚠️ Storage is full. Please go to settings and clear some data.');
             }
 
-            const indexJson = await AsyncStorage.getItem('session_index');
-            let index: string[] = indexJson ? JSON.parse(indexJson) : [];
-
-            // Collect session metadata to find oldest non-pinned items
-            const toDelete: string[] = [];
-            const PRUNE_COUNT = 20;
-            for (const id of index) {
-                if (toDelete.length >= PRUNE_COUNT) break;
-                try {
-                    const raw = await AsyncStorage.getItem(`session_${id}`);
-                    if (!raw) { toDelete.push(id); continue; }
-                    const s = JSON.parse(raw);
-                    if (!s.pinned) toDelete.push(id);
-                } catch { toDelete.push(id); }
-            }
-
-            if (toDelete.length > 0) {
-                const keysToRemove = toDelete.map(id => `session_${id}`);
-                await AsyncStorage.multiRemove(keysToRemove);
-                const newIndex = index.filter(id => !toDelete.includes(id));
-                await AsyncStorage.setItem('session_index', JSON.stringify(newIndex));
-                setChatSessions((prev: any) => {
-                    const next = { ...prev };
-                    toDelete.forEach(id => delete next[id]);
-                    return next;
-                });
-                console.log(`Auto-pruned ${toDelete.length} old sessions to free storage.`);
-            }
-
-            // Retry the original save after freeing space
+            // Retry the original save after freeing space (if provided)
             if (retrySave) await retrySave();
         } catch (pruneErr) {
             console.error('autoFreeStorage failed:', pruneErr);
         }
     };
 
-    // Bind to the global hook so unawaited setters can trigger it
+    // Bind to the global hook so unawaited setters can trigger it without imports
     useEffect(() => {
         globalAutoFreeStorage = autoFreeStorage;
         return () => {
@@ -5649,13 +5634,10 @@ export default function App() {
 
     // Wrapper for multiSet to catch SQLITE_FULL globally
     const safeMultiSet = async (keyValuePairs: string[][]) => {
-        // Now safely uses Native AsyncStorage directly since the global proxy handles the crash
-        // but we still wrap it for explicit local retries inside awaited functions!
         try {
             await AsyncStorage.multiSet(keyValuePairs as any);
         } catch (e: any) {
-            // Already caught and suppressed by global proxy, so this may not hit often
-            console.warn("safeMultiSet error", e);
+            // Suppressed natively by index proxy
         }
     };
     // ────────────────────────────────────────────────────────────────────────
@@ -6325,7 +6307,7 @@ export default function App() {
 
                                             if (wordsRestored > 0) {
                                                 setRecentSearchesRef.current(newItems);
-                                                await AsyncStorage.setItem('recentSearches', JSON.stringify(newItems));
+                                                await saveRecentSearchesToFile(newItems);
                                             }
                                         }
 
@@ -6386,7 +6368,7 @@ export default function App() {
 
                                             if (addedCount > 0) {
                                                 setRecentSearchesRef.current(newItems);
-                                                await AsyncStorage.setItem('recentSearches', JSON.stringify(newItems));
+                                                await saveRecentSearchesToFile(newItems);
                                             }
 
                                             if (setActiveTabRef.current) setActiveTabRef.current('dictionary');
@@ -8982,7 +8964,7 @@ export default function App() {
                     // UPDATED: Use dynamic dictionaryLimit
                     const limit = displaySettingsRef.current.dictionaryLimit || 1000;
                     const updated = [{ word: completeData.word, data: completeData }, ...filtered].slice(0, limit);
-                    AsyncStorage.setItem('recentSearches', JSON.stringify(updated));
+                    saveRecentSearchesToFile(updated).catch(e => console.error("History save failed:", e));
                     return updated;
                 });
             }
@@ -15396,7 +15378,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                                         if (updatedRecents.length !== recentSearches.length) {
                                             setRecentSearches(updatedRecents);
-                                            AsyncStorage.setItem('recentSearches', JSON.stringify(updatedRecents));
+                                            saveRecentSearchesToFile(updatedRecents).catch(e => console.error(e));
                                         }
                                     }
                                     // 2. Check if it's a Saved Question (has 'question')
