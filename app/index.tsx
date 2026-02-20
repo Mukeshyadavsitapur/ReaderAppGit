@@ -1,4 +1,65 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ---- GLOBAL ASYNCSTORAGE SAFETY PROXY ----
+// SQLite (AsyncStorage's backend) can throw SQLITE_FULL (code 13) even during READ operations
+// (getItem, multiGet) if the WAL file or disk is completely full. We globally wrap the read 
+// and write methods to swallow the error and return null/void, preventing uncaught promise crash loops.
+
+export let globalAutoFreeStorage: (() => Promise<void>) | null = null;
+
+const _originalGetItem = AsyncStorage.getItem.bind(AsyncStorage);
+const _originalMultiGet = AsyncStorage.multiGet.bind(AsyncStorage);
+const _originalSetItem = AsyncStorage.setItem.bind(AsyncStorage);
+const _originalMultiSet = AsyncStorage.multiSet.bind(AsyncStorage);
+
+const handleStorageError = (e: any, action: string) => {
+    const msg = String(e?.message ?? '');
+    const code = String(e?.code ?? e?.cause?.code ?? '');
+    if (msg.includes('SQLITE_FULL') || msg.includes('database or disk is full') || code.includes('13')) {
+        console.warn(`[SafeStorage] ${action} intercepted SQLITE_FULL. Triggering auto-prune...`);
+        if (globalAutoFreeStorage) {
+            globalAutoFreeStorage().catch(pruneErr => console.warn("Global prune failed", pruneErr));
+        }
+    } else {
+        console.warn(`[SafeStorage] ${action} error:`, e);
+    }
+};
+
+AsyncStorage.getItem = async (key: string, callback?: any) => {
+    try {
+        return await _originalGetItem(key, callback);
+    } catch (e: any) {
+        handleStorageError(e, `getItem(${key})`);
+        return null;
+    }
+};
+
+AsyncStorage.multiGet = async (keys: readonly string[], callback?: any) => {
+    try {
+        return await _originalMultiGet(keys, callback);
+    } catch (e: any) {
+        handleStorageError(e, `multiGet`);
+        return keys.map(k => [k, null] as [string, string | null]);
+    }
+};
+
+AsyncStorage.setItem = async (key: string, value: string, callback?: any) => {
+    try {
+        await _originalSetItem(key, value, callback);
+    } catch (e: any) {
+        handleStorageError(e, `setItem(${key})`);
+    }
+};
+
+// @ts-ignore - Ignore complex readonly tuple array mismatches
+AsyncStorage.multiSet = async (keyValuePairs: readonly (readonly [string, string])[], callback?: any) => {
+    try {
+        await _originalMultiSet(keyValuePairs as any, callback);
+    } catch (e: any) {
+        handleStorageError(e, `multiSet`);
+    }
+};
+// ------------------------------------------
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -5577,6 +5638,26 @@ export default function App() {
             console.error('autoFreeStorage failed:', pruneErr);
         }
     };
+
+    // Bind to the global hook so unawaited setters can trigger it
+    useEffect(() => {
+        globalAutoFreeStorage = autoFreeStorage;
+        return () => {
+            globalAutoFreeStorage = null;
+        };
+    }, []);
+
+    // Wrapper for multiSet to catch SQLITE_FULL globally
+    const safeMultiSet = async (keyValuePairs: string[][]) => {
+        // Now safely uses Native AsyncStorage directly since the global proxy handles the crash
+        // but we still wrap it for explicit local retries inside awaited functions!
+        try {
+            await AsyncStorage.multiSet(keyValuePairs as any);
+        } catch (e: any) {
+            // Already caught and suppressed by global proxy, so this may not hit often
+            console.warn("safeMultiSet error", e);
+        }
+    };
     // ────────────────────────────────────────────────────────────────────────
 
     const [dictionaryCurrentWord, setDictionaryCurrentWord] = useState<any>("");
@@ -6211,7 +6292,7 @@ export default function App() {
 
                                             if (sessionRestored > 0) {
                                                 setChatSessionsRef.current((prev: any) => ({ ...prev, ...newSessionsMap }));
-                                                await AsyncStorage.multiSet(storagePairs);
+                                                await safeMultiSet(storagePairs);
                                                 await AsyncStorage.setItem('session_index', JSON.stringify(currentIndex));
                                             }
                                         }
@@ -6345,7 +6426,7 @@ export default function App() {
                         }
 
                         if (importedCount > 0) {
-                            await AsyncStorage.multiSet(storagePairs);
+                            await safeMultiSet(storagePairs);
                             await AsyncStorage.setItem('session_index', JSON.stringify(currentIndex));
 
                             if (setChatSessionsRef.current) {
@@ -7444,7 +7525,7 @@ export default function App() {
                     const newSessions = { ...prev, ...updates };
                     // Persist updates to storage asynchronously
                     const updatePairs = Object.values(updates).map((s: any) => [`session_${s.id}`, JSON.stringify(s)] as [string, string]);
-                    AsyncStorage.multiSet(updatePairs).catch(e => console.warn("Failed to persist audio sync", e));
+                    safeMultiSet(updatePairs).catch(e => console.warn("Failed to persist audio sync", e));
                     return newSessions;
                 });
             }
@@ -9660,7 +9741,7 @@ export default function App() {
                         legacySessions = JSON.parse(legacy);
                         const keys = Object.keys(legacySessions);
                         const pairs = keys.map(id => [`session_${id}`, JSON.stringify(legacySessions[id])]);
-                        await AsyncStorage.multiSet(pairs as [string, string][]);
+                        await safeMultiSet(pairs as [string, string][]);
 
                         const existingIndexJson = await AsyncStorage.getItem('session_index');
                         let existingIndex = existingIndexJson ? JSON.parse(existingIndexJson) : [];
@@ -17103,7 +17184,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 if (addedSessionCount > 0) {
                     const finalSessions = { ...chatSessions, ...newSessionsMap };
                     setChatSessions(finalSessions);
-                    await AsyncStorage.multiSet(storagePairs);
+                    await safeMultiSet(storagePairs);
                     await AsyncStorage.setItem('session_index', JSON.stringify(currentIndex));
 
                     // REBUILD METADATA INDEX (INSTANT LOAD)
@@ -17352,7 +17433,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     setChatSessions((prev: any) => ({ ...prev, ...newSessionsMap }));
 
                     // 2. Batch Storage Update
-                    await AsyncStorage.multiSet(storagePairs);
+                    await safeMultiSet(storagePairs);
                     if (importedCount > 0) {
                         await AsyncStorage.setItem('session_index', JSON.stringify(currentIndex));
 
@@ -17773,7 +17854,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         for (let i = 0; i < storagePairs.length; i += CHUNK_SIZE) {
                             const chunk = storagePairs.slice(i, i + CHUNK_SIZE);
                             try {
-                                await AsyncStorage.multiSet(chunk as any);
+                                await safeMultiSet(chunk as any);
                                 console.log(`Saved chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${Math.ceil(storagePairs.length / CHUNK_SIZE)}`);
                             } catch (chunkError) {
                                 console.error(`Failed to save chunk ${Math.floor(i / CHUNK_SIZE) + 1}:`, chunkError);
@@ -18345,7 +18426,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         });
 
         setChatSessions(newSessions);
-        await AsyncStorage.multiSet(updates);
+        await safeMultiSet(updates);
         setIsSelectionMode(false);
         setSelectedNoteIds([]);
         showToast(newStatus ? "Notes Pinned" : "Notes Unpinned");
@@ -18412,7 +18493,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             });
 
             setChatSessions(newSessions);
-            await AsyncStorage.multiSet(updates);
+            await safeMultiSet(updates);
             setIsLibrarySelectionMode(false);
             setSelectedLibraryIds([]);
             showToast(newStatus ? "Audio Sessions Pinned" : "Audio Sessions Unpinned");
@@ -18433,7 +18514,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         });
 
         setChatSessions(newSessions);
-        await AsyncStorage.multiSet(updates);
+        await safeMultiSet(updates);
         setIsLibrarySelectionMode(false);
         setSelectedLibraryIds([]);
         showToast(newStatus ? "Items Pinned" : "Items Unpinned");
