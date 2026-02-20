@@ -22643,11 +22643,17 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             } else {
                 rightAction = (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        {/* Model Priority Toggle */}
+                        {/* Model Priority Toggle — works for both Gemini and Groq */}
                         <TouchableOpacity
                             onPress={() => {
-                                const newPriority = displaySettings.modelPriority === 'speed' ? 'quality' : 'speed';
-                                saveSettings({ modelPriority: newPriority });
+                                const isGroq = displaySettings.llmProvider === 'groq';
+                                if (isGroq) {
+                                    const newPriority = (displaySettings.groqModelPriority || 'quality') === 'speed' ? 'quality' : 'speed';
+                                    saveSettings({ groqModelPriority: newPriority });
+                                } else {
+                                    const newPriority = displaySettings.modelPriority === 'speed' ? 'quality' : 'speed';
+                                    saveSettings({ modelPriority: newPriority });
+                                }
                             }}
                             style={{
                                 flexDirection: 'row',
@@ -22659,13 +22665,25 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 marginRight: 8,
                             }}
                         >
-                            {displaySettings.modelPriority === 'speed' ? (
-                                <Zap size={14} color={isDay ? '#ffffff' : '#22c55e'} fill={isDay ? '#ffffff' : '#22c55e'} style={{ marginRight: 6 }} />
-                            ) : (
-                                <Sparkles size={14} color={isDay ? '#ffffff' : '#a855f7'} fill={isDay ? '#ffffff' : '#a855f7'} style={{ marginRight: 6 }} />
-                            )}
+                            {(() => {
+                                const isGroq = displaySettings.llmProvider === 'groq';
+                                const isSpeed = isGroq
+                                    ? (displaySettings.groqModelPriority || 'quality') === 'speed'
+                                    : displaySettings.modelPriority === 'speed';
+                                return isSpeed ? (
+                                    <Zap size={14} color={isDay ? '#ffffff' : '#22c55e'} fill={isDay ? '#ffffff' : '#22c55e'} style={{ marginRight: 6 }} />
+                                ) : (
+                                    <Sparkles size={14} color={isDay ? '#ffffff' : '#a855f7'} fill={isDay ? '#ffffff' : '#a855f7'} style={{ marginRight: 6 }} />
+                                );
+                            })()}
                             <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDay ? '#ffffff' : theme.text }}>
-                                {displaySettings.modelPriority === 'speed' ? 'SPEED' : 'QUALITY'}
+                                {(() => {
+                                    const isGroq = displaySettings.llmProvider === 'groq';
+                                    const isSpeed = isGroq
+                                        ? (displaySettings.groqModelPriority || 'quality') === 'speed'
+                                        : displaySettings.modelPriority === 'speed';
+                                    return isSpeed ? 'SPEED' : 'QUALITY';
+                                })()}
                             </Text>
                         </TouchableOpacity>
 
