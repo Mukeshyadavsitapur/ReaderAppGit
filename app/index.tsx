@@ -201,8 +201,7 @@ import {
     Wrench,
     X,
     XCircle,
-    Youtube,
-    Zap
+    Youtube
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -351,8 +350,6 @@ export interface DisplaySettings {
     llmProvider?: string;
     groqApiKey?: string;
     hfApiKey?: string;
-    modelPriority?: string;
-    groqModelPriority?: string;
     groqCustomModel?: string;
     savedGroqCustomModels?: string[];
     showPersonalDictionary?: boolean;
@@ -5470,8 +5467,6 @@ export default function App() {
         voice: "Kore",
         onlineTtsEnabled: true,
         imageGenerationEnabled: true,
-        modelPriority: "speed",
-        groqModelPriority: "quality",
         groqCustomModel: "",
         savedGroqCustomModels: [],
         showPersonalDictionary: true,
@@ -10865,7 +10860,7 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
 
     const saveSettings = async (newSettings: any) => {
         // NEW: Reset active model tracking if model preferences change
-        if (newSettings.modelPriority !== undefined || newSettings.customTextModel !== undefined) {
+        if (newSettings.customTextModel !== undefined) {
             setActiveModelId(null);
         }
 
@@ -11939,16 +11934,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 // Direct override — use only that model
                 groqModelsToTry = [modelOverride];
             } else {
-                // Apply speed/quality priority
-                const groqPriority = displaySettings.groqModelPriority || 'quality';
-                if (groqPriority === 'speed') {
-                    groqModelsToTry = groqModelsToTry.filter(m => m !== 'llama-3.1-8b-instant');
-                    groqModelsToTry.unshift('llama-3.1-8b-instant');
-                } else {
-                    groqModelsToTry = groqModelsToTry.filter(m => m !== 'llama-3.3-70b-versatile');
-                    groqModelsToTry.unshift('llama-3.3-70b-versatile');
-                }
-                // Custom model takes highest priority
+                // Default: try models latest → oldest (GROQ_MODELS order)
+                // If user selected a specific model, it becomes first priority
                 if (displaySettings.groqCustomModel?.trim()) {
                     const custom = displaySettings.groqCustomModel.trim();
                     groqModelsToTry = groqModelsToTry.filter(m => m !== custom);
@@ -12008,18 +11995,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             modelsToTry = modelsToTry.filter(m => m !== modelOverride);
             modelsToTry.unshift(modelOverride);
         } else {
-            // Standard Priority Logic
-            if (displaySettings.modelPriority === 'speed') {
-                const speedModel = "gemini-2.5-flash-lite"; // Updated to flash-lite as primary speed model
-                modelsToTry = modelsToTry.filter(m => m !== speedModel);
-                modelsToTry.unshift(speedModel);
-            } else {
-                const qualityModel = "gemini-2.5-flash-preview-09-2025";
-                modelsToTry = modelsToTry.filter(m => m !== qualityModel);
-                modelsToTry.unshift(qualityModel);
-            }
-
-            // Insert User's Custom Model as First Priority (if no override)
+            // Default: try models latest → oldest (TEXT_MODELS order)
+            // If user selected a specific model, it becomes first priority
             if (displaySettings.customTextModel && displaySettings.customTextModel.trim()) {
                 const custom = displaySettings.customTextModel.trim();
                 modelsToTry = modelsToTry.filter(m => m !== custom);
@@ -12136,14 +12113,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         if (provider === 'groq') {
             let groqTestModels = [...GROQ_MODELS];
-            const groqPriority = displaySettings.groqModelPriority || 'quality';
-            if (groqPriority === 'speed') {
-                groqTestModels = groqTestModels.filter(m => m !== 'llama-3.1-8b-instant');
-                groqTestModels.unshift('llama-3.1-8b-instant');
-            } else {
-                groqTestModels = groqTestModels.filter(m => m !== 'llama-3.3-70b-versatile');
-                groqTestModels.unshift('llama-3.3-70b-versatile');
-            }
+            // Custom model becomes first priority; otherwise try latest → oldest
             if (displaySettings.groqCustomModel?.trim()) {
                 const custom = displaySettings.groqCustomModel.trim();
                 groqTestModels = groqTestModels.filter(m => m !== custom);
@@ -12181,20 +12151,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
 
 
-        // UPDATED: Check against models in correct priority order (Custom -> Priority -> Fallbacks)
-        // This ensures the test validates the same model that callLLM would select first.
+        // Custom model first, otherwise try latest → oldest (TEXT_MODELS order)
         let testModels = [...TEXT_MODELS];
-
-        if (displaySettings.modelPriority === 'speed') {
-            const speedModel = "gemini-2.5-flash-lite";
-            testModels = testModels.filter(m => m !== speedModel);
-            testModels.unshift(speedModel);
-        } else {
-            const qualityModel = "gemini-2.5-flash-preview-09-2025";
-            testModels = testModels.filter(m => m !== qualityModel);
-            testModels.unshift(qualityModel);
-        }
-
         if (displaySettings.customTextModel && displaySettings.customTextModel.trim()) {
             const custom = displaySettings.customTextModel.trim();
             testModels = testModels.filter(m => m !== custom);
@@ -22301,7 +22259,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             // Online
             Alert.alert(
                 "AI System Online",
-                `Connected to Google Gemini.\n\nPriority: ${displaySettings.modelPriority === 'speed' ? 'Speed' : 'Quality'}`,
+                `Connected to Google Gemini.\n\nModel order: Auto (latest → oldest)`,
                 [
                     { text: "OK", style: "cancel" },
                     { text: "Test Latency", onPress: handleTestConnection }
@@ -22607,31 +22565,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
             rightAction = (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            const newPriority = displaySettings.modelPriority === 'speed' ? 'quality' : 'speed';
-                            saveSettings({ modelPriority: newPriority });
-                        }}
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            backgroundColor: isDay ? 'rgba(255, 255, 255, 0.2)' : theme.buttonBg,
-                            paddingHorizontal: 12,
-                            paddingVertical: 6,
-                            borderRadius: 20,
-                        }}
-                    >
-                        {displaySettings.modelPriority === 'speed' ? (
-                            <Zap size={14} color={isDay ? '#ffffff' : '#22c55e'} fill={isDay ? '#ffffff' : '#22c55e'} style={{ marginRight: 6 }} />
-                        ) : (
-                            <Sparkles size={14} color={isDay ? '#ffffff' : '#a855f7'} fill={isDay ? '#ffffff' : '#a855f7'} style={{ marginRight: 6 }} />
-                        )}
-                        <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDay ? '#ffffff' : theme.text }}>
-                            {displaySettings.modelPriority === 'speed' ? 'SPEED' : 'QUALITY'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* REMOVED: AppearanceButton from Setup Mode */}
                     <TouchableOpacity onPress={closeAction} style={{ padding: 5 }}>
                         <X size={24} color={isDay ? '#ffffff' : theme.text} />
                     </TouchableOpacity>
@@ -22785,49 +22718,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             } else {
                 rightAction = (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        {/* Model Priority Toggle — works for both Gemini and Groq */}
-                        <TouchableOpacity
-                            onPress={() => {
-                                const isGroq = displaySettings.llmProvider === 'groq';
-                                if (isGroq) {
-                                    const newPriority = (displaySettings.groqModelPriority || 'quality') === 'speed' ? 'quality' : 'speed';
-                                    saveSettings({ groqModelPriority: newPriority });
-                                } else {
-                                    const newPriority = displaySettings.modelPriority === 'speed' ? 'quality' : 'speed';
-                                    saveSettings({ modelPriority: newPriority });
-                                }
-                            }}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                backgroundColor: isDay ? 'rgba(255, 255, 255, 0.2)' : theme.buttonBg,
-                                paddingHorizontal: 12,
-                                paddingVertical: 6,
-                                borderRadius: 20,
-                                marginRight: 8,
-                            }}
-                        >
-                            {(() => {
-                                const isGroq = displaySettings.llmProvider === 'groq';
-                                const isSpeed = isGroq
-                                    ? (displaySettings.groqModelPriority || 'quality') === 'speed'
-                                    : displaySettings.modelPriority === 'speed';
-                                return isSpeed ? (
-                                    <Zap size={14} color={isDay ? '#ffffff' : '#22c55e'} fill={isDay ? '#ffffff' : '#22c55e'} style={{ marginRight: 6 }} />
-                                ) : (
-                                    <Sparkles size={14} color={isDay ? '#ffffff' : '#a855f7'} fill={isDay ? '#ffffff' : '#a855f7'} style={{ marginRight: 6 }} />
-                                );
-                            })()}
-                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDay ? '#ffffff' : theme.text }}>
-                                {(() => {
-                                    const isGroq = displaySettings.llmProvider === 'groq';
-                                    const isSpeed = isGroq
-                                        ? (displaySettings.groqModelPriority || 'quality') === 'speed'
-                                        : displaySettings.modelPriority === 'speed';
-                                    return isSpeed ? 'SPEED' : 'QUALITY';
-                                })()}
-                            </Text>
-                        </TouchableOpacity>
+
 
                         <AppearanceButton />
                         <TouchableOpacity onPress={() => setActiveTab('settings')} style={[styles.iconBtn, { backgroundColor: isDay ? 'rgba(255, 255, 255, 0.2)' : theme.buttonBg, borderColor: 'transparent', marginLeft: 10 }]}>
@@ -25141,128 +25032,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         AI Capabilities
                     </Text>
 
-                    {/* Model Priority — only for Gemini; Groq has its own below */}
-                    {displaySettings.llmProvider !== 'groq' && (
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                            <View style={{ flex: 1, marginRight: 10 }}>
-                                <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Model Priority</Text>
-                                <Text style={{ fontSize: 12, color: theme.secondary }}>
-                                    {displaySettings.modelPriority === 'quality' ? 'Best responses (Slower)' : 'Fastest responses (Lower quality)'}
-                                </Text>
-                            </View>
 
-                            <View style={{
-                                flexDirection: 'row',
-                                backgroundColor: theme.buttonBg,
-                                borderRadius: 14,
-                                padding: 4,
-                                borderWidth: 1,
-                                borderColor: theme.border
-                            }}>
-                                <TouchableOpacity
-                                    onPress={() => saveSettings({ modelPriority: 'quality' })}
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 8,
-                                        borderRadius: 10,
-                                        backgroundColor: displaySettings.modelPriority === 'quality' ? '#8b5cf6' : 'transparent',
-                                        shadowColor: "#000",
-                                        shadowOffset: { width: 0, height: 1 },
-                                        shadowOpacity: displaySettings.modelPriority === 'quality' ? 0.2 : 0,
-                                        shadowRadius: 2,
-                                        elevation: displaySettings.modelPriority === 'quality' ? 2 : 0
-                                    }}
-                                >
-                                    <Sparkles size={14} color={displaySettings.modelPriority === 'quality' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
-                                    <Text style={{
-                                        fontSize: 12,
-                                        fontWeight: 'bold',
-                                        color: displaySettings.modelPriority === 'quality' ? 'white' : theme.secondary
-                                    }}>Quality</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => saveSettings({ modelPriority: 'speed' })}
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 8,
-                                        borderRadius: 10,
-                                        backgroundColor: displaySettings.modelPriority === 'speed' ? '#22c55e' : 'transparent',
-                                        shadowColor: "#000",
-                                        shadowOffset: { width: 0, height: 1 },
-                                        shadowOpacity: displaySettings.modelPriority === 'speed' ? 0.2 : 0,
-                                        shadowRadius: 2,
-                                        elevation: displaySettings.modelPriority === 'speed' ? 2 : 0
-                                    }}
-                                >
-                                    <Zap size={14} color={displaySettings.modelPriority === 'speed' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
-                                    <Text style={{
-                                        fontSize: 12,
-                                        fontWeight: 'bold',
-                                        color: displaySettings.modelPriority === 'speed' ? 'white' : theme.secondary
-                                    }}>Speed</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Groq-specific: Model Priority + Model Selector */}
                     {displaySettings.llmProvider === 'groq' && (
                         <>
-                            {/* Groq Model Priority */}
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                                <View style={{ flex: 1, marginRight: 10 }}>
-                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Groq Model Priority</Text>
-                                    <Text style={{ fontSize: 12, color: theme.secondary }}>
-                                        {(displaySettings.groqModelPriority || 'quality') === 'quality' ? 'llama-3.3-70b (Best quality)' : 'llama-3.1-8b (Fastest)'}
-                                    </Text>
-                                </View>
-                                <View style={{
-                                    flexDirection: 'row',
-                                    backgroundColor: theme.buttonBg,
-                                    borderRadius: 14,
-                                    padding: 4,
-                                    borderWidth: 1,
-                                    borderColor: theme.border
-                                }}>
-                                    <TouchableOpacity
-                                        onPress={() => saveSettings({ groqModelPriority: 'quality' })}
-                                        style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            paddingHorizontal: 12,
-                                            paddingVertical: 8,
-                                            borderRadius: 10,
-                                            backgroundColor: (displaySettings.groqModelPriority || 'quality') === 'quality' ? '#8b5cf6' : 'transparent',
-                                            elevation: (displaySettings.groqModelPriority || 'quality') === 'quality' ? 2 : 0
-                                        }}
-                                    >
-                                        <Sparkles size={14} color={(displaySettings.groqModelPriority || 'quality') === 'quality' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
-                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: (displaySettings.groqModelPriority || 'quality') === 'quality' ? 'white' : theme.secondary }}>Quality</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={() => saveSettings({ groqModelPriority: 'speed' })}
-                                        style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            paddingHorizontal: 12,
-                                            paddingVertical: 8,
-                                            borderRadius: 10,
-                                            backgroundColor: displaySettings.groqModelPriority === 'speed' ? '#22c55e' : 'transparent',
-                                            elevation: displaySettings.groqModelPriority === 'speed' ? 2 : 0
-                                        }}
-                                    >
-                                        <Zap size={14} color={displaySettings.groqModelPriority === 'speed' ? 'white' : theme.secondary} style={{ marginRight: 6 }} />
-                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: displaySettings.groqModelPriority === 'speed' ? 'white' : theme.secondary }}>Speed</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-
-                            {/* Groq Model Selector */}
                             <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>Groq Model</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 <TouchableOpacity
@@ -25274,7 +25046,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     }}
                                 >
                                     <Text style={{ color: displaySettings.groqCustomModel ? theme.text : theme.secondary, fontSize: 14 }} numberOfLines={1}>
-                                        {displaySettings.groqCustomModel || 'Auto (use priority preset)'}
+                                        {displaySettings.groqCustomModel || 'Auto (latest → oldest priority)'}
                                     </Text>
                                     <ChevronDown size={18} color={theme.secondary} />
                                 </TouchableOpacity>
@@ -25320,8 +25092,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                 >
                                                     <View>
                                                         <Text style={{ color: theme.text, fontSize: 14, fontWeight: displaySettings.groqCustomModel === model ? 'bold' : '400' }}>{model}</Text>
-                                                        {model === 'llama-3.3-70b-versatile' && <Text style={{ fontSize: 10, color: '#8b5cf6', marginTop: 2 }}>⭐ Quality preset</Text>}
-                                                        {model === 'llama-3.1-8b-instant' && <Text style={{ fontSize: 10, color: '#22c55e', marginTop: 2 }}>⚡ Speed preset</Text>}
+                                                        {model === GROQ_MODELS[0] && <Text style={{ fontSize: 10, color: '#8b5cf6', marginTop: 2 }}>⭐ Latest model</Text>}
                                                         {!GROQ_MODELS.includes(model) && <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 2 }}>Custom (Long press to delete)</Text>}
                                                     </View>
                                                     {displaySettings.groqCustomModel === model && <Check size={16} color="#2563eb" />}
@@ -25429,8 +25200,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text }}>Custom Text Model</Text>
                                 <View style={{ maxWidth: '50%', alignItems: 'flex-end' }}>
                                     <Text style={{ fontSize: 9, color: theme.secondary, marginBottom: 1, fontWeight: '600' }}>CURRENTLY ACTIVE</Text>
-                                    <Text style={{ fontSize: 10, color: displaySettings.modelPriority === 'speed' ? '#22c55e' : '#8b5cf6', fontWeight: 'bold' }} numberOfLines={1}>
-                                        {activeModelId || (displaySettings.customTextModel ? displaySettings.customTextModel : (displaySettings.modelPriority === 'speed' ? "gemini-2.5-flash-lite" : "gemini-2.5-flash-preview-09-2025"))}
+                                    <Text style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 'bold' }} numberOfLines={1}>
+                                        {activeModelId || (displaySettings.customTextModel ? displaySettings.customTextModel : TEXT_MODELS[0])}
                                     </Text>
                                 </View>
                             </View>
