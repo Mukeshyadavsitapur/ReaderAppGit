@@ -5280,7 +5280,30 @@ const OnboardingModal = ({ visible, onClose, theme, onSave }: any) => {
     );
 };
 
-const OnboardingPreviewFooter = ({ theme, apiKey, setApiKey, testConnection, connectionStatus, onFinish, onSkip, isLandscape }: any) => {
+const OnboardingPreviewFooter = ({
+    theme,
+    customApiKey,
+    setCustomApiKey,
+    groqApiKey,
+    setGroqApiKey,
+    llmProvider,
+    setProvider,
+    testConnection,
+    connectionStatus,
+    onFinish,
+    onSkip,
+    isLandscape
+}: any) => {
+    // Current active values
+    const provider = llmProvider || 'groq';
+    const isGroq = provider === 'groq';
+    const currentKey = isGroq ? groqApiKey : customApiKey;
+
+    const handleKeyChange = (text: string) => {
+        if (isGroq) setGroqApiKey(text);
+        else setCustomApiKey(text);
+    };
+
     return (
         <View style={{
             backgroundColor: theme.bg,
@@ -5291,7 +5314,23 @@ const OnboardingPreviewFooter = ({ theme, apiKey, setApiKey, testConnection, con
             zIndex: 1000
         }}>
             <Text style={{ color: theme.text, fontSize: isLandscape ? 14 : 18, fontWeight: 'bold', marginBottom: isLandscape ? 3 : 5 }}>Setup AI Connection</Text>
-            <Text style={{ color: theme.secondary, fontSize: isLandscape ? 12 : 14, marginBottom: isLandscape ? 8 : 15 }}>Enter your Gemini API Key to unlock Smart Features.</Text>
+            <Text style={{ color: theme.secondary, fontSize: isLandscape ? 12 : 14, marginBottom: isLandscape ? 8 : 10 }}>Connect an API Key to unlock intelligence.</Text>
+
+            {/* Provider Toggle */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: isLandscape ? 8 : 10 }}>
+                <TouchableOpacity
+                    onPress={() => setProvider('groq')}
+                    style={{ flex: 1, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: isGroq ? '#4f46e5' : theme.border, backgroundColor: isGroq ? '#4f46e520' : theme.inputBg, alignItems: 'center' }}
+                >
+                    <Text style={{ color: isGroq ? '#4f46e5' : theme.secondary, fontWeight: isGroq ? 'bold' : 'normal', fontSize: 13 }}>Groq (Fast/Default)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => setProvider('gemini')}
+                    style={{ flex: 1, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: !isGroq ? '#4f46e5' : theme.border, backgroundColor: !isGroq ? '#4f46e520' : theme.inputBg, alignItems: 'center' }}
+                >
+                    <Text style={{ color: !isGroq ? '#4f46e5' : theme.secondary, fontWeight: !isGroq ? 'bold' : 'normal', fontSize: 13 }}>Gemini (Vision)</Text>
+                </TouchableOpacity>
+            </View>
 
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: isLandscape ? 8 : 15 }}>
                 <TextInput
@@ -5305,10 +5344,10 @@ const OnboardingPreviewFooter = ({ theme, apiKey, setApiKey, testConnection, con
                         borderColor: connectionStatus === 'success' ? '#22c55e' : (connectionStatus === 'failed' ? '#ef4444' : theme.border),
                         fontSize: isLandscape ? 12 : 14
                     }}
-                    placeholder="Enter API Key..."
+                    placeholder={`Enter ${isGroq ? 'Groq' : 'Gemini'} API Key...`}
                     placeholderTextColor={theme.secondary}
-                    value={apiKey}
-                    onChangeText={setApiKey}
+                    value={currentKey}
+                    onChangeText={handleKeyChange}
                     secureTextEntry
                 />
                 <TouchableOpacity
@@ -29693,8 +29732,12 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         {isInOnboardingPreview && (
                                             <OnboardingPreviewFooter
                                                 theme={theme}
-                                                apiKey={customApiKey}
-                                                setApiKey={setCustomApiKey}
+                                                customApiKey={customApiKey}
+                                                setCustomApiKey={setCustomApiKey}
+                                                groqApiKey={displaySettings.groqApiKey || ''}
+                                                setGroqApiKey={(key: string) => saveSettings({ groqApiKey: key })}
+                                                llmProvider={displaySettings.llmProvider || 'groq'}
+                                                setProvider={(p: string) => saveSettings({ llmProvider: p })}
                                                 testConnection={handleTestConnection}
                                                 connectionStatus={apiConnectionStatus}
                                                 isLandscape={isLandscape}
@@ -30629,8 +30672,12 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         {isInOnboardingPreview && (
                                             <OnboardingPreviewFooter
                                                 theme={theme}
-                                                apiKey={customApiKey}
-                                                setApiKey={setCustomApiKey}
+                                                customApiKey={customApiKey}
+                                                setCustomApiKey={setCustomApiKey}
+                                                groqApiKey={displaySettings.groqApiKey || ''}
+                                                setGroqApiKey={(key: string) => saveSettings({ groqApiKey: key })}
+                                                llmProvider={displaySettings.llmProvider || 'groq'}
+                                                setProvider={(p: string) => saveSettings({ llmProvider: p })}
                                                 testConnection={handleTestConnection}
                                                 connectionStatus={apiConnectionStatus}
                                                 isLandscape={isLandscape}
