@@ -11951,19 +11951,46 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         // Groq fallback loop: try models from priority list, newest → oldest
         if (provider === 'groq') {
-            let openAiMessages = [{ role: "system", content: fullSystemInstruction }];
+            let openAiMessages: any[] = [{ role: "system", content: fullSystemInstruction }];
+            let hasVisionParts = false;
             if (Array.isArray(contents)) {
                 contents.forEach((c: any) => {
                     const r = c.role === 'model' ? 'assistant' : 'user';
-                    // Fix 6: join ALL parts (not just parts[0]) to avoid context loss
-                    const t = (c.parts || []).map((p: any) => p.text || '').filter(Boolean).join('\n') || "";
-                    openAiMessages.push({ role: r, content: t });
+
+                    const hasImage = c.parts?.some((p: any) => p.inlineData);
+                    if (hasImage) {
+                        hasVisionParts = true;
+                        const contentParts: any[] = [];
+                        c.parts.forEach((p: any) => {
+                            if (p.text) {
+                                contentParts.push({ type: "text", text: p.text });
+                            } else if (p.inlineData) {
+                                contentParts.push({
+                                    type: "image_url", // Groq structured vision format
+                                    image_url: {
+                                        url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}`
+                                    }
+                                });
+                            }
+                        });
+                        openAiMessages.push({ role: r, content: contentParts });
+                    } else {
+                        // Fix 6: join ALL parts (not just parts[0]) to avoid context loss
+                        const t = (c.parts || []).map((p: any) => p.text || '').filter(Boolean).join('\n') || "";
+                        openAiMessages.push({ role: r, content: t });
+                    }
                 });
             } else {
                 openAiMessages.push({ role: "user", content: String(contents) });
             }
 
             let groqModelsToTry = modelOverride ? [modelOverride] : [...GROQ_MODELS];
+
+            // NEW: If images are present, we MUST use a vision model for Groq
+            if (hasVisionParts) {
+                // Groq official Multimodal models with fallback
+                groqModelsToTry = ["meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"];
+            }
 
             let lastGroqError: any = null;
             for (const groqModel of groqModelsToTry) {
@@ -11975,7 +12002,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         max_tokens: 8192,              // Fix 2: cap output to prevent silent truncation
                         temperature: jsonMode ? 0 : 0.7, // Fix 2: 0 for deterministic JSON, 0.7 for text
                     };
-                    if (jsonMode) {
+                    // Groq vision models do not support json_object format
+                    if (jsonMode && !hasVisionParts) {
                         payload.response_format = { type: "json_object" };
                     }
                     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
