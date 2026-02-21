@@ -12463,9 +12463,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             const info = await fs.getInfoAsync(uri);
 
             if (!info.exists) {
-                // 2. If not, verify we can generate one
-                if (!key) {
-                    showToast("Add API Key to hear previews");
+                // 2. If not, verify we can generate one (Allow either Gemini or Groq key)
+                const groqKey = displaySettings.groqApiKey;
+                if (!key && !groqKey) {
+                    showToast("Add an API Key (Groq or Gemini) to hear previews");
                     return;
                 }
 
@@ -12614,9 +12615,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 const { chunks } = getChunks(text);
                 let savedCount = 0;
                 const key = customApiKey || apiKey;
+                const groqKey = displaySettings.groqApiKey;
 
-                if (!key) {
-                    Alert.alert("Error", "API Key required to download audio.");
+                if (!key && !groqKey) {
+                    Alert.alert("Error", "API Key (Groq or Gemini) required to download audio.");
                     return;
                 }
 
@@ -12917,7 +12919,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (!info.exists) {
                     // Added check for onlineTtsEnabled to prevent background downloads when in offline mode
-                    if (key && !isRateLimited && !onlineTTSBroken.current && displaySettings.onlineTtsEnabled) {
+                    const groqKey = displaySettings.groqApiKey;
+                    if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current && displaySettings.onlineTtsEnabled) {
                         speechState.current.pendingDownloads.add(uri);
 
                         // Increased delay to 4000ms to stay within rate limits (15 RPM) while prefetching smaller chunks
@@ -13212,7 +13215,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
 
         // Cache Miss - Attempt Online
-        if (key && !isRateLimited && !onlineTTSBroken.current) {
+        const groqKey = displaySettings.groqApiKey;
+        if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current) {
             try {
                 setIsTtsDownloading(true);
                 setTtsDownloadProgress(0);
