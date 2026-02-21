@@ -1662,12 +1662,10 @@ const TTS_MODELS = [
     "gemini-2.0-flash-exp"
 ];
 
-// Groq TTS Models - Prioritized (Trying both prefixed and non-prefixed IDs)
+// Groq TTS Models - Prioritized
 const GROQ_TTS_MODELS = [
     "canopylabs/orpheus-v1-english",
-    "orpheus-v1-english",
-    "canopylabs/orpheus-arabic-saudi",
-    "orpheus-arabic-saudi"
+    "canopylabs/orpheus-arabic-saudi"
 ];
 
 // ... (other code) ...
@@ -12335,14 +12333,16 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     console.log(`[TTS] Attempting Groq TTS: ${modelId}`);
                     // Note: Orpheus models default to WAV.
                     // Voice Mapping for Groq (Translate Gemini voices to Orpheus personas)
-                    let groqVoice = voiceOverride || displaySettings.voice || "Mia";
+                    let groqVoice = voiceOverride || displaySettings.voice || "Hannah";
                     if (modelId.includes("arabic")) {
-                        groqVoice = "default"; // Placeholder or specific Arabic persona if known
+                        // Arabic mapping
+                        const isMale = MALE_VOICES.includes(groqVoice);
+                        groqVoice = isMale ? "fahad" : "noura";
                     } else {
                         // English mapping
                         const isMale = MALE_VOICES.includes(groqVoice);
-                        if (groqVoice === "Kore" || !isMale) groqVoice = "Mia";
-                        else if (groqVoice === "Fenrir" || isMale) groqVoice = "Leo";
+                        if (groqVoice === "Kore" || !isMale) groqVoice = "hannah";
+                        else if (groqVoice === "Fenrir" || isMale) groqVoice = "daniel";
                     }
 
                     const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
@@ -12503,8 +12503,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         const cleanText = cleanTextForDisplay(text);
 
-        // FIXED: Reduced Limit to 3000 to prevent API 404/Length errors with Gemini TTS
-        const CHUNK_LIMIT = 3000;
+        // FIXED: Reduced Limit for Groq (1000) vs Gemini (3000) to prevent TPM/length errors
+        const groqKey = displaySettings.groqApiKey;
+        const CHUNK_LIMIT = groqKey ? 1000 : 3000;
 
         const chunks = [];
         const offsets = [];
@@ -12576,7 +12577,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
 
         return { chunks, offsets };
-    }, []);
+    }, [displaySettings.groqApiKey]);
 
     const handleDownloadAudio = async () => {
         if (!readingSession) return;
