@@ -1662,6 +1662,14 @@ const TTS_MODELS = [
     "gemini-2.0-flash-exp"
 ];
 
+// Groq TTS Models - Prioritized (Trying both prefixed and non-prefixed IDs)
+const GROQ_TTS_MODELS = [
+    "canopylabs/orpheus-v1-english",
+    "orpheus-v1-english",
+    "canopylabs/orpheus-arabic-saudi",
+    "orpheus-arabic-saudi"
+];
+
 // ... (other code) ...
 
 // NEW: Highlight Colors Definition
@@ -3159,6 +3167,12 @@ const writeString = (view: DataView, offset: number, string: string) => {
 
 // NEW: Convert Base64 PCM to WAV (Instant Header Prepend)
 const pcmToWav = (base64Pcm: string, sampleRate: number = 24000): string => {
+    // NEW: Check if already a WAV file (Starts with 'RIFF' in Base64: 'UklGR')
+    if (base64Pcm && base64Pcm.startsWith("UklGR")) {
+        console.log("[TTS] Detected pre-wrapped WAV file, skipping PCM-to-WAV conversion.");
+        return base64Pcm;
+    }
+
     // 1. Calculate PCM byte size from Base64 length
     // Base64 is 4 chars per 3 bytes. Padding '=' indicates fewer bytes.
     let pcmLength: number = (base64Pcm.length * 3) / 4;
@@ -12310,54 +12324,106 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     // UPDATED: Added voiceOverride parameter to support previews
     // UPDATED: Removed multiSpeakerConfig support as it is now obsolete
     const generateGeminiTTS = async (text: string, voiceOverride: string | null = null) => {
-        const key = customApiKey || apiKey;
-        if (!key) throw new Error("No API Key");
+        const geminiKey = customApiKey || apiKey;
+        const groqKey = displaySettings.groqApiKey;
+        let lastError: any = null;
 
-        let rateLimitHit = false; // NEW: Track rate limit specifically
+        // --- STEP 1: Try Groq TTS (High Priority) ---
+        if (groqKey) {
+            for (const modelId of GROQ_TTS_MODELS) {
+                try {
+                    console.log(`[TTS] Attempting Groq TTS: ${modelId}`);
+                    // Note: Orpheus models default to WAV.
+                    // Voice Mapping for Groq (Translate Gemini voices to Orpheus personas)
+                    let groqVoice = voiceOverride || displaySettings.voice || "Mia";
+                    if (modelId.includes("arabic")) {
+                        groqVoice = "default"; // Placeholder or specific Arabic persona if known
+                    } else {
+                        // English mapping
+                        const isMale = MALE_VOICES.includes(groqVoice);
+                        if (groqVoice === "Kore" || !isMale) groqVoice = "Mia";
+                        else if (groqVoice === "Fenrir" || isMale) groqVoice = "Leo";
+                    }
+
+                    const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${groqKey}`
+                        },
+                        body: JSON.stringify({
+                            model: modelId,
+                            input: text,
+                            voice: groqVoice,
+                            response_format: "wav"
+                        })
+                    });
+
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const reader = new FileReader();
+                        return new Promise<string>((resolve, reject) => {
+                            reader.onloadend = () => {
+                                const base64data = (reader.result as string).split(',')[1];
+                                resolve(base64data);
+                            };
+                            reader.onerror = reject;
+                            reader.readAsDataURL(blob);
+                        });
+                    } else {
+                        const err = await response.text();
+                        console.error(`[TTS] Groq model ${modelId} failed (${response.status}):`, err);
+                        lastError = new Error(`Groq TTS Error: ${response.status} - ${err}`);
+                    }
+                } catch (e: any) {
+                    console.error(`[TTS] Groq model ${modelId} connection error:`, e.message || e);
+                    lastError = e;
+                }
+            }
+        }
+
+        // --- STEP 2: Fallback to Gemini TTS ---
+        if (!geminiKey) {
+            if (lastError) throw lastError;
+            throw new Error("No API Key available for TTS (Groq or Gemini)");
+        }
+
+        let rateLimitHit = false;
 
         for (const modelId of TTS_MODELS) {
             try {
-                console.log(`Attempting TTS with: ${modelId}`);
+                console.log(`[TTS] Attempting Gemini TTS: ${modelId}`);
 
-                // Helper to construct payload dynamically
-                const buildPayload = () => {
-                    const p: any = {
-                        contents: [{ parts: [{ text: text }] }],
-                        generationConfig: {
-                            responseModalities: ["AUDIO"],
-                            // FIXED: Enforce LINEAR16 (PCM) and 24kHz to match WAV header and avoid artifacts
-                            // Fixed: audioConfig is not supported in generationConfig for this endpoint
-                            speechConfig: {
-                                voiceConfig: {
-                                    prebuiltVoiceConfig: {
-                                        voiceName: voiceOverride || displaySettings.voice || "Kore"
-                                    }
+                const payload = {
+                    contents: [{ parts: [{ text: text }] }],
+                    generationConfig: {
+                        responseModalities: ["AUDIO"],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: {
+                                    voiceName: voiceOverride || displaySettings.voice || "Kore"
                                 }
                             }
                         }
-                    };
-                    return p;
+                    }
                 };
 
-                let payload = buildPayload();
-
-                let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
+                let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${geminiKey}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
 
                 if (response.status === 429) {
-                    console.warn(`TTS Model ${modelId} rate limited (429).`);
-                    // Mark flag but try next model
+                    console.warn(`Gemini TTS Model ${modelId} rate limited.`);
                     rateLimitHit = true;
                     continue;
                 }
 
                 if (!response.ok) {
                     const errText = await response.text();
-                    console.warn(`TTS Model ${modelId} failed with status ${response.status}: ${errText}`);
-                    continue; // Try next model on error
+                    console.warn(`Gemini TTS Model ${modelId} failed: ${response.status}`);
+                    continue;
                 }
 
                 const data = await response.json();
@@ -12365,18 +12431,15 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (pcmData) {
                     return pcmData;
-                } else {
-                    console.warn(`TTS Model ${modelId} returned no audio data.`);
-                    continue;
                 }
             } catch (e) {
-                console.warn(`TTS Error on ${modelId}:`, e);
+                console.warn(`Gemini TTS Error on ${modelId}:`, e);
                 continue;
             }
         }
 
         if (rateLimitHit) throw new Error("API_LIMIT_REACHED");
-        throw new Error("All TTS models failed to generate audio.");
+        throw new Error(lastError ? lastError.message : "All TTS models failed to generate audio.");
     };
 
     // NEW: Function to play or generate a preview for a specific voice
@@ -12562,6 +12625,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 // ACCUMULATOR for Merging
                 const pcmParts = [];
                 let totalPcmLength = 0;
+                let detectedSampleRate = 24000; // Default fallback
 
                 for (let i = 0; i < chunks.length; i++) {
                     const chunk = chunks[i];
@@ -12571,27 +12635,28 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     }
 
                     try {
-                        // Pass the global speaker config to every chunk generation
                         const pcmBase64 = await generateGeminiTTS(chunk, null);
-                        // Decode to binary
                         const pcmBytes = decodeBase64(pcmBase64);
 
-                        // NEW: Strip WAV Header (RIFF) if present to avoid static noise artifacts when merging
                         let rawBytes = pcmBytes;
                         if (pcmBytes.length > 44 &&
-                            pcmBytes[0] === 82 && // R
-                            pcmBytes[1] === 73 && // I
-                            pcmBytes[2] === 70 && // F
-                            pcmBytes[3] === 70    // F
+                            pcmBytes[0] === 0x52 && // R
+                            pcmBytes[1] === 0x49 && // I
+                            pcmBytes[2] === 0x46 && // F
+                            pcmBytes[3] === 0x46    // F
                         ) {
-                            console.log("Stripping WAV header from chunk");
+                            // WAV Header detected — Extract Sample Rate (Offset 24, 4 bytes)
+                            if (pcmParts.length === 0) {
+                                const chunkView = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
+                                detectedSampleRate = chunkView.getUint32(24, true);
+                                console.log(`[TTS] Detected sample rate from first chunk: ${detectedSampleRate}Hz`);
+                            }
                             rawBytes = pcmBytes.slice(44);
                         }
 
                         pcmParts.push(rawBytes);
                         totalPcmLength += rawBytes.length;
 
-                        // Speed Optimization: Removed 4s delay. Small yield for UI responsiveness.
                         await new Promise(r => setTimeout(r, 50));
                     } catch (e: any) {
                         if (e.message === "API_LIMIT_REACHED") throw e;
@@ -12606,14 +12671,13 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 // MERGE PARTS
                 if (pcmParts.length > 0) {
                     showToast("Merging Audio...");
-                    await new Promise(r => setTimeout(r, 100)); // Yield UI
+                    await new Promise(r => setTimeout(r, 100));
 
-                    // Create buffer with WAV header (44 bytes) + Total PCM data
                     const mergedBuffer = new Uint8Array(44 + totalPcmLength);
                     const view = new DataView(mergedBuffer.buffer);
 
-                    // WRITE WAV HEADER
-                    const sampleRate = 24000;
+                    // WRITE WAV HEADER (Using detected sample rate)
+                    const sampleRate = detectedSampleRate;
                     writeString(view, 0, 'RIFF');
                     view.setUint32(4, 36 + totalPcmLength, true);
                     writeString(view, 8, 'WAVE');
@@ -12628,14 +12692,12 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     writeString(view, 36, 'data');
                     view.setUint32(40, totalPcmLength, true);
 
-                    // COPY PCM DATA
                     let offset = 44;
                     for (const part of pcmParts) {
                         mergedBuffer.set(part, offset);
                         offset += part.length;
                     }
 
-                    // ENCODE TO BASE64 & SAVE
                     const finalBase64 = encodeBase64(mergedBuffer);
                     await fs.writeAsStringAsync(mergedFileUri, finalBase64, { encoding: fs.EncodingType.Base64 });
                 }
