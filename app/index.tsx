@@ -11862,20 +11862,40 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
 
     // UPDATED: Added modelOverride parameter for performance tuning
     const callLLM = async (contents: any, systemInstruction: any, jsonMode = false, modelOverride: string | null = null) => {
+        const geminiKey = customApiKey || apiKey;
+        const groqKey = displaySettings.groqApiKey;
+
+        // NEW: Prioritize Groq if both keys are available
+        const hasBothKeys = (geminiKey && geminiKey.trim() !== '') && (groqKey && groqKey.trim() !== '');
+
+        if (hasBothKeys) {
+            console.log(`[LLM] Priority: Both keys detected. Forcing Groq priority.`);
+            const groqResult = await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, 'groq', groqKey);
+            if (!groqResult.startsWith("Error")) {
+                return groqResult;
+            }
+            console.warn(`[LLM] Groq priority failed, falling back to Gemini...`);
+            return await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, 'gemini', geminiKey);
+        }
+
         const provider = displaySettings.llmProvider || 'gemini';
-        let key = customApiKey || apiKey;
+        const effectiveProvider = provider;
+        const effectiveKey = effectiveProvider === 'groq' ? groqKey : geminiKey;
 
-        if (provider === 'groq') key = displaySettings.groqApiKey;
-
-
-        if (!key) {
+        if (!effectiveKey) {
             if (jsonMode) {
                 return JSON.stringify({ error: "API Key Required", isMissingKey: true });
             }
-            if (provider === 'groq') return "Error: Please add your Groq API Key in Settings to use online features.";
-            if (provider === 'hf') return "Error: Please add your Hugging Face Token in Settings to use online features.";
+            if (effectiveProvider === 'groq') return "Error: Please add your Groq API Key in Settings to use online features.";
+            if (effectiveProvider === 'hf') return "Error: Please add your Hugging Face Token in Settings to use online features.";
             return API_KEY_HELP_MARKDOWN.trim();
         }
+
+        return await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, effectiveProvider, effectiveKey);
+    };
+
+    // Helper to avoid recursion and handle actual calls
+    const callLLM_Internal = async (contents: any, systemInstruction: any, jsonMode: boolean, modelOverride: string | null, provider: string, key: string) => {
 
         // NEW: Inject User Context
         const userProfile = (displaySettings.userName || displaySettings.userProfession || displaySettings.userGoal || displaySettings.userBio)
@@ -11944,7 +11964,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             let lastGroqError: any = null;
             for (const groqModel of groqModelsToTry) {
                 try {
-                    console.log(`Attempting LLM call with groq: ${groqModel}`);
+                    console.log(`[LLM] Attempting Groq Call: ${groqModel}`);
                     const payload: any = {
                         model: groqModel,
                         messages: openAiMessages,
@@ -12032,7 +12052,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         for (const modelId of modelsToTry) {
             try {
-                console.log(`Attempting LLM call with: ${modelId}`);
+                console.log(`[LLM] Attempting Gemini Call: ${modelId}`);
 
                 const payload: any = {
                     systemInstruction: { parts: [{ text: fullSystemInstruction }] },
@@ -13626,9 +13646,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                            - IF the count of words in the user's NATIVE language (${userLang}) is more than 4, REFINE and RESPOND in that native language (using its native script).
                            - IF the count of English words is more than 5, REFINE and RESPOND in English.
                            - UNTIL the user speaks more than 4 words in their native language, translate the input to English (unless rule 2b applies).
-                        3. Fix grammar, remove fillers (ums, ahs), and ensure the result is a polished instruction.
-                        4. STRICTLY PROHIBITED: Do NOT use English/Latin alphabet for non-English languages (No Transliteration/Hinglish). Use native script (e.g. Devanagari for Hindi).
-                        5. Return ONLY the refined text.`;
+                        3. Fix grammar, punctuation, and capitalization to ensure the result is a polished, grammatically correct instruction.
+                        4. Remove fillers (ums, ahs, repeating words) and stuttering.
+                        5. STRICTLY PROHIBITED: Do NOT use English/Latin alphabet for non-English languages (No Transliteration/Hinglish). Use native script (e.g. Devanagari for Hindi).
+                        6. Return ONLY the refined, grammatically correct text.`;
 
                             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
                                 method: "POST",
@@ -13655,16 +13676,17 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         if (provider === 'groq') {
                             // --- Groq Whisper STT ---
                             // Send audio file directly via multipart/form-data
-                            const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3'];
+                            const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3', 'distil-whisper-large-v3-en'];
                             let groqTranscribed = false;
                             for (const whisperModel of whisperModels) {
                                 try {
-                                    console.log(`Groq STT: trying ${whisperModel}`);
+                                    console.log(`[STT] Groq: trying ${whisperModel}`);
                                     const formData = new FormData();
                                     // React Native FormData accepts { uri, name, type } for files
                                     formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
                                     formData.append('model', whisperModel);
                                     formData.append('response_format', 'json');
+                                    formData.append('prompt', 'Transcribe the audio accurately. Fix any grammatical errors, remove filler words like "um" or "ah", and ensure proper punctuation and capitalization.');
                                     // Optionally hint the language for faster + more accurate results
                                     if (displaySettings.language && displaySettings.language !== 'English') {
                                         formData.append('language', displaySettings.language.toLowerCase().slice(0, 2));
@@ -13680,7 +13702,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         const groqData = await groqRes.json();
                                         text = groqData.text?.trim() || null;
                                         if (text) {
-                                            console.log(`Groq STT success with ${whisperModel}:`, text);
+                                            console.log(`[STT] Groq success with ${whisperModel}:`, text);
                                             groqTranscribed = true;
                                             break;
                                         }
