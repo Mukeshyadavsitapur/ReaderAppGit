@@ -1642,17 +1642,14 @@ const TEXT_MODELS = [
 // Groq models ordered latest → oldest (newest models tried first in fallback)
 const GROQ_MODELS = [
     // Feb 2026 — Latest
-    "meta-llama/llama-4-scout-17b-16e-instruct",   // Llama 4 Scout: newest Meta MoE; ultra-fast
+    "meta-llama/llama-4-scout-17b-16e-instruct",    // Llama 4 Scout: newest Meta MoE; ultra-fast
     "meta-llama/llama-4-maverick-17b-128e-instruct", // Llama 4 Maverick: high-reasoning agentic
-    "qwen/qwen3-32b",                               // Qwen 3: top-tier coding (replaced Qwen 2.5)
+    "qwen/qwen3-32b",                                // Qwen 3: top-tier coding & reasoning
     // Jan 2026
-    "openai/gpt-oss-safeguard-20b",                 // GPT-OSS Safeguard: latest safety/moderation
+    "openai/gpt-oss-safeguard-20b",                  // GPT-OSS Safeguard: safety/moderation
     // Late 2025
-    "openai/gpt-oss-120b",                          // GPT-OSS 120B: flagship open-weight reasoning
-    "moonshotai/kimi-k2-instruct-0905",             // Kimi K2: 256k context; deep logic
-    // Groq confirmed free-tier classic models
-    "llama-3.3-70b-versatile",                      // Quality preset: best free-tier model
-    "llama-3.1-8b-instant",                         // Speed preset: fastest free-tier model
+    "openai/gpt-oss-120b",                           // GPT-OSS 120B: flagship open-weight reasoning
+    "moonshotai/kimi-k2-instruct-0905",              // Kimi K2: 256k context; deep logic
 ];
 
 // Cleaned Image Models List - Removed deprecated 404 models
@@ -11921,11 +11918,12 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             if (Array.isArray(contents)) {
                 contents.forEach((c: any) => {
                     const r = c.role === 'model' ? 'assistant' : 'user';
-                    const t = c.parts?.[0]?.text || "";
+                    // Fix 6: join ALL parts (not just parts[0]) to avoid context loss
+                    const t = (c.parts || []).map((p: any) => p.text || '').filter(Boolean).join('\n') || "";
                     openAiMessages.push({ role: r, content: t });
                 });
             } else {
-                openAiMessages.push({ role: "user", content: contents });
+                openAiMessages.push({ role: "user", content: String(contents) });
             }
 
             let groqModelsToTry = [...GROQ_MODELS];
@@ -11949,7 +11947,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     console.log(`Attempting LLM call with groq: ${groqModel}`);
                     const payload: any = {
                         model: groqModel,
-                        messages: openAiMessages
+                        messages: openAiMessages,
+                        max_tokens: 8192,              // Fix 2: cap output to prevent silent truncation
+                        temperature: jsonMode ? 0 : 0.7, // Fix 2: 0 for deterministic JSON, 0.7 for text
                     };
                     if (jsonMode) {
                         payload.response_format = { type: "json_object" };
@@ -11961,10 +11961,34 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     });
                     if (response.ok) {
                         const data = await response.json();
-                        if (data.choices?.[0]?.message?.content) {
-                            return data.choices[0].message.content;
+                        const choiceMsg = data.choices?.[0];
+                        // Fix 4: trim so whitespace-only content is treated as empty
+                        let txt: string = (choiceMsg?.message?.content ?? '').trim();
+
+                        // Fix 5: strip markdown code fences that some models wrap JSON in
+                        if (jsonMode && txt) {
+                            txt = txt
+                                .replace(/^```(?:json)?\s*/i, '')
+                                .replace(/\s*```\s*$/i, '')
+                                .trim();
                         }
-                        throw new Error("Invalid response format");
+
+                        if (!txt) {
+                            // Empty content — fall through to next model
+                            lastGroqError = new Error(`${groqModel} returned empty content`);
+                            console.warn(`Groq model ${groqModel} returned empty content, trying next...`);
+                            continue;
+                        }
+
+                        // Fix 3: detect truncated output and fall through to next model
+                        const finishReason = choiceMsg?.finish_reason;
+                        if (finishReason === 'length') {
+                            console.warn(`Groq model ${groqModel} response truncated (finish_reason=length), trying next...`);
+                            lastGroqError = new Error(`${groqModel} truncated output`);
+                            continue;
+                        }
+
+                        return txt;
                     }
                     const errText = await response.text();
                     // Only retry on rate-limit (429) or server errors; fail on auth (401/403)
