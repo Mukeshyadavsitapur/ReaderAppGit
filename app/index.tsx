@@ -14254,10 +14254,13 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     const handleStartQuiz = async (topic: string, isCustomList = false, subject = "General", isContextBasedInput = false, images: string[] = [], overrideCount: number | null = null, isFlashcardMode = false) => {
         // Check if API key is configured (using state instead of direct storage check for consistency)
-        if (!customApiKey || customApiKey.trim() === '') {
+        const hasGeminiKey = customApiKey && customApiKey.trim() !== '';
+        const hasGroqKey = displaySettings.groqApiKey && displaySettings.groqApiKey.trim() !== '';
+
+        if (!hasGeminiKey && !hasGroqKey) {
             Alert.alert(
                 "API Key Required",
-                "Please configure your Google API key in Settings to generate quizzes and flashcards.",
+                "Please configure either a Google API key or a Groq API key in Settings to generate quizzes and flashcards.",
                 [
                     { text: "Cancel", style: "cancel" },
                     {
