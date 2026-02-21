@@ -26747,6 +26747,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                     numColumns={isLandscape ? 2 : 1}
                                                     columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                     contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                                                    initialNumToRender={10}
+                                                    maxToRenderPerBatch={10}
+                                                    windowSize={5}
+                                                    removeClippedSubviews={true}
                                                     data={filteredLibraryItems}
                                                     ListFooterComponent={
                                                         <View style={{ paddingVertical: 20, alignItems: 'center', gap: 10 }}>
@@ -26783,6 +26787,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                     numColumns={isLandscape ? 2 : 1}
                                                     columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                     contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                                                    initialNumToRender={10}
+                                                    maxToRenderPerBatch={10}
+                                                    windowSize={5}
+                                                    removeClippedSubviews={true}
                                                     // Use memoized filtered data
                                                     data={filteredLibraryItems}
                                                     ListFooterComponent={
@@ -26832,6 +26840,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                         numColumns={isLandscape ? 2 : 1}
                                                         columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                         contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                                                        initialNumToRender={10}
+                                                        maxToRenderPerBatch={10}
+                                                        windowSize={5}
+                                                        removeClippedSubviews={true}
                                                         // Use memoized data (which is just audioFiles, but consistent)
                                                         data={filteredLibraryItems}
                                                         ListFooterComponent={<View style={{ height: 20 }} />}
@@ -27203,6 +27215,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                             numColumns={isLandscape ? 2 : 1}
                                                             columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                             contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 100 }}
+                                                            initialNumToRender={10}
+                                                            maxToRenderPerBatch={10}
+                                                            windowSize={5}
+                                                            removeClippedSubviews={true}
                                                             // Use memoized filtered data
                                                             data={filteredLibraryItems}
                                                             ListFooterComponent={<View style={{ height: 20 }} />}
@@ -27210,12 +27226,21 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                             extraData={{ librarySearchQuery }}
                                                             ListEmptyComponent={
                                                                 <View style={{ alignItems: 'center', marginTop: 50 }}>
-                                                                    <MonitorCheck size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>No quizzes.</Text>
-                                                                    {!librarySearchQuery && (
-                                                                        <TouchableOpacity onPress={() => { setSelectedScenario(SCHOOL_TOOLS.find(t => t.id === 'examiner')); setAppMode('setup'); }} style={{ marginTop: 20 }}>
-                                                                            <Text style={{ color: '#2563eb' }}>Start a New Quiz</Text>
-                                                                        </TouchableOpacity>
+                                                                    {librarySearchQuery ? (
+                                                                        <>
+                                                                            <Search size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
+                                                                            <Text style={{ color: theme.secondary, marginTop: 10 }}>No matches found.</Text>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <MonitorCheck size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
+                                                                            <Text style={{ color: theme.secondary, marginTop: 10 }}>No quizzes.</Text>
+                                                                            {!librarySearchQuery && (
+                                                                                <TouchableOpacity onPress={() => { setSelectedScenario(SCHOOL_TOOLS.find(t => t.id === 'examiner')); setAppMode('setup'); }} style={{ marginTop: 20 }}>
+                                                                                    <Text style={{ color: '#2563eb' }}>Start a New Quiz</Text>
+                                                                                </TouchableOpacity>
+                                                                            )}
+                                                                        </>
                                                                     )}
                                                                 </View>
                                                             }
@@ -27267,20 +27292,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                                                 )}
                                                                             </View>
                                                                         </View>
-
-                                                                        {session.score !== undefined && (
-                                                                            <View style={{
-                                                                                width: 42, height: 42, borderRadius: 21,
-                                                                                backgroundColor: theme.bg,
-                                                                                alignItems: 'center', justifyContent: 'center',
-                                                                                borderWidth: 3,
-                                                                                borderColor: session.score / session.totalQuestions >= 0.8 ? '#22c55e' : (session.score / session.totalQuestions >= 0.5 ? '#eab308' : '#ef4444'),
-                                                                            }}>
-                                                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.text }}>
-                                                                                    {session.score}
-                                                                                </Text>
-                                                                            </View>
-                                                                        )}
                                                                     </TouchableOpacity>
                                                                 );
                                                             }}
@@ -27317,6 +27328,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                                 numColumns={isLandscape ? 2 : 1}
                                                                 columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                                 contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                                                                initialNumToRender={10}
+                                                                maxToRenderPerBatch={10}
+                                                                windowSize={5}
+                                                                removeClippedSubviews={true}
                                                                 // Filter for Quiz Questions (with options)
                                                                 data={savedQuestions.filter((q: any) => q.options && q.options.length > 0).filter((q: any) => !librarySearchQuery || q.question.toLowerCase().includes(librarySearchQuery.toLowerCase())).sort((a: any, b: any) => new Date(b.savedAt || 0).getTime() - new Date(a.savedAt || 0).getTime())}
                                                                 ListFooterComponent={<View style={{ height: 20 }} />}
@@ -27408,6 +27423,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                                 numColumns={isLandscape ? 2 : 1}
                                                                 columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                                 contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                                                                initialNumToRender={10}
+                                                                maxToRenderPerBatch={10}
+                                                                windowSize={5}
+                                                                removeClippedSubviews={true}
                                                                 // Filter for Flashcard Questions (no options)
                                                                 data={savedQuestions.filter((q: any) => !q.options || q.options.length === 0).filter((q: any) => !librarySearchQuery || q.question.toLowerCase().includes(librarySearchQuery.toLowerCase())).sort((a: any, b: any) => new Date(b.savedAt || 0).getTime() - new Date(a.savedAt || 0).getTime())}
                                                                 ListFooterComponent={<View style={{ height: 20 }} />}
@@ -27461,6 +27480,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                             numColumns={isLandscape ? 2 : 1}
                                                             columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                             contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 100 }}
+                                                            initialNumToRender={10}
+                                                            maxToRenderPerBatch={10}
+                                                            windowSize={5}
+                                                            removeClippedSubviews={true}
                                                             data={filteredLibraryItems}
                                                             ListFooterComponent={<View style={{ height: 20 }} />}
                                                             keyExtractor={(item: ChatSession) => item.id}
@@ -27596,6 +27619,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                                 numColumns={isLandscape ? 2 : 1}
                                                                 columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
                                                                 contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                                                                initialNumToRender={10}
+                                                                maxToRenderPerBatch={10}
+                                                                windowSize={5}
+                                                                removeClippedSubviews={true}
                                                                 // Use memoized filtered data
                                                                 data={filteredLibraryItems}
                                                                 ListFooterComponent={<View style={{ height: 20 }} />}
@@ -27728,6 +27755,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                     showsVerticalScrollIndicator={false}
                                                     onEndReached={() => setVisibleWordCount((prev: number) => prev + 25)}
                                                     onEndReachedThreshold={0.5}
+                                                    initialNumToRender={10}
+                                                    maxToRenderPerBatch={10}
+                                                    windowSize={5}
+                                                    removeClippedSubviews={true}
                                                     renderItem={({ item }: { item: any }) => {
                                                         const displayWord = typeof item === 'string' ? item : item.word;
                                                         const data = typeof item === 'object' ? item.data : null;
@@ -27986,6 +28017,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                             showsVerticalScrollIndicator={false}
                                                             onEndReached={() => setVisibleWordCount((prev: number) => prev + 25)}
                                                             onEndReachedThreshold={0.5}
+                                                            initialNumToRender={10}
+                                                            maxToRenderPerBatch={10}
+                                                            windowSize={5}
+                                                            removeClippedSubviews={true}
                                                             renderItem={({ item }: { item: any }) => {
                                                                 const displayWord = typeof item === 'string' ? item : item.word;
                                                                 const data = typeof item === 'object' ? item.data : null;
@@ -29041,6 +29076,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                     // Use memoized filtered notes
                                                     data={filteredNotes}
                                                     onEndReachedThreshold={0.5}
+                                                    initialNumToRender={10}
+                                                    maxToRenderPerBatch={10}
+                                                    windowSize={5}
+                                                    removeClippedSubviews={true}
                                                     ListFooterComponent={<View style={{ height: 20 }} />}
                                                     keyExtractor={(item: ChatSession) => item.id}
                                                     ListEmptyComponent={
@@ -30744,12 +30783,17 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                         borderBottomColor: theme.border,
                                                         paddingVertical: 12
                                                     }}>
-                                                        <ScrollView
+                                                        <FlatList
                                                             horizontal
                                                             showsHorizontalScrollIndicator={false}
                                                             contentContainerStyle={{ paddingHorizontal: 15, gap: 10 }}
-                                                        >
-                                                            {quizState.questions.map((q: any, idx: number) => {
+                                                            initialNumToRender={5}
+                                                            maxToRenderPerBatch={5}
+                                                            windowSize={5}
+                                                            removeClippedSubviews={true}
+                                                            data={quizState.questions}
+                                                            keyExtractor={(_: any, index: number) => `nav-${index}`}
+                                                            renderItem={({ item: q, index: idx }: { item: any, index: number }) => {
                                                                 const isCorrect = q.selected === q.correctOptionIndex;
                                                                 const isSkipped = q.selected === null;
                                                                 const bgColor = isCorrect ? '#22c55e' : (isSkipped ? '#f59e0b' : '#ef4444');
@@ -30789,8 +30833,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                                                         </Text>
                                                                     </TouchableOpacity>
                                                                 );
-                                                            })}
-                                                        </ScrollView>
+                                                            }}
+                                                        />
                                                     </View>
 
                                                     <FlatList
@@ -31587,52 +31631,54 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     {renderMiniPlayer()}
 
                     {/* UPDATED: Show Footer in Idle OR Examiner Setup Mode */}
-                    {(appMode === 'idle' || (appMode === 'setup' && selectedScenario?.id === 'examiner')) && (
-                        <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
-                            <TouchableOpacity onPress={() => { setActiveTab('story'); setAppMode('idle'); }} style={styles.tabItem}>
-                                <BookAudio size={28} color={activeTab === 'story' ? theme.bubbleUser : theme.secondary} />
-                                <Text style={{ color: activeTab === 'story' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'story' ? '600' : '400' }}>Studio</Text>
-                            </TouchableOpacity>
+                    {
+                        (appMode === 'idle' || (appMode === 'setup' && selectedScenario?.id === 'examiner')) && (
+                            <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
+                                <TouchableOpacity onPress={() => { setActiveTab('story'); setAppMode('idle'); }} style={styles.tabItem}>
+                                    <BookAudio size={28} color={activeTab === 'story' ? theme.bubbleUser : theme.secondary} />
+                                    <Text style={{ color: activeTab === 'story' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'story' ? '600' : '400' }}>Studio</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity onPress={() => { setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }} style={styles.tabItem}>
-                                <BookA size={28} color={activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary} />
-                                <Text style={{ color: activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'dictionary' ? '600' : '400' }}>Dictionary</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity onPress={() => { setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }} style={styles.tabItem}>
+                                    <BookA size={28} color={activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary} />
+                                    <Text style={{ color: activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'dictionary' ? '600' : '400' }}>Dictionary</Text>
+                                </TouchableOpacity>
 
-                            {/* Quiz Button (Moved from Home Screen Grid) */}
-                            <TouchableOpacity
-                                onPress={() => {
-                                    // Find examiner tool and trigger setup
-                                    const allTools = getAllTools();
-                                    const tool = allTools.find(t => t.id === 'examiner');
-                                    if (tool) {
-                                        setSelectedScenario(tool);
-                                        // Use remembered subject for examiner
-                                        const targetSubject = lastQuizSubject || "General";
-                                        saveSchoolConfig({ input: "", subject: targetSubject });
-                                        setAppMode('setup');
-                                    }
-                                }}
-                                style={styles.tabItem}
-                            >
-                                <BrainCircuit size={28} color={(appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary} />
-                                <Text style={{ color: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? '600' : '400' }}>Quiz</Text>
-                            </TouchableOpacity>
+                                {/* Quiz Button (Moved from Home Screen Grid) */}
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        // Find examiner tool and trigger setup
+                                        const allTools = getAllTools();
+                                        const tool = allTools.find(t => t.id === 'examiner');
+                                        if (tool) {
+                                            setSelectedScenario(tool);
+                                            // Use remembered subject for examiner
+                                            const targetSubject = lastQuizSubject || "General";
+                                            saveSchoolConfig({ input: "", subject: targetSubject });
+                                            setAppMode('setup');
+                                        }
+                                    }}
+                                    style={styles.tabItem}
+                                >
+                                    <BrainCircuit size={28} color={(appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary} />
+                                    <Text style={{ color: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? '600' : '400' }}>Quiz</Text>
+                                </TouchableOpacity>
 
 
 
-                            <TouchableOpacity onPress={() => { setActiveTab('notes'); setAppMode('idle'); }} style={styles.tabItem}>
-                                <NotebookPen size={28} color={activeTab === 'notes' ? theme.bubbleUser : theme.secondary} />
-                                <Text style={{ color: activeTab === 'notes' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'notes' ? '600' : '400' }}>Notes</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => { setActiveTab('library'); setAppMode('idle'); }} style={styles.tabItem}>
-                                <Library size={28} color={activeTab === 'library' ? theme.bubbleUser : theme.secondary} />
-                                <Text style={{ color: activeTab === 'library' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'library' ? '600' : '400' }}>Library</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                                <TouchableOpacity onPress={() => { setActiveTab('notes'); setAppMode('idle'); }} style={styles.tabItem}>
+                                    <NotebookPen size={28} color={activeTab === 'notes' ? theme.bubbleUser : theme.secondary} />
+                                    <Text style={{ color: activeTab === 'notes' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'notes' ? '600' : '400' }}>Notes</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => { setActiveTab('library'); setAppMode('idle'); }} style={styles.tabItem}>
+                                    <Library size={28} color={activeTab === 'library' ? theme.bubbleUser : theme.secondary} />
+                                    <Text style={{ color: activeTab === 'library' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'library' ? '600' : '400' }}>Library</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )
+                    }
 
-                </View>
+                </View >
 
                 <Modal visible={showAppearance} transparent animationType="slide" onRequestClose={() => setShowAppearance(false)}>
                     <View style={styles.modalOverlay}>
@@ -32790,41 +32836,43 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
 
                 {/* NEW: Toast Notification Component */}
-                {toastMessage && (
-                    <Animated.View
-                        style={{
-                            position: 'absolute',
-                            bottom: 100,
-                            alignSelf: 'center',
-                            backgroundColor: theme.id === 'day' ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
-                            paddingHorizontal: 20,
-                            paddingVertical: 12,
-                            borderRadius: 25,
-                            zIndex: 9999,
-                            shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 4,
-                            elevation: 10,
-                            maxWidth: '90%'
-                        }}
-                    >
-                        <Text style={{
-                            color: theme.id === 'day' ? 'white' : 'black',
-                            fontWeight: 'bold',
-                            fontSize: 14,
-                            textAlign: 'center'
-                        }}>
-                            {toastMessage}
-                        </Text>
-                    </Animated.View>
-                )}
-
-            </SafeAreaView>
+                {
+                    toastMessage && (
+                        <Animated.View
+                            style={{
+                                position: 'absolute',
+                                bottom: 100,
+                                alignSelf: 'center',
+                                backgroundColor: theme.id === 'day' ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
+                                paddingHorizontal: 20,
+                                paddingVertical: 12,
+                                borderRadius: 25,
+                                zIndex: 9999,
+                                shadowColor: "#000",
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 4,
+                                elevation: 10,
+                                maxWidth: '90%'
+                            }}
+                        >
+                            <Text style={{
+                                color: theme.id === 'day' ? 'white' : 'black',
+                                fontWeight: 'bold',
+                                fontSize: 14,
+                                textAlign: 'center'
+                            }}>
+                                {toastMessage}
+                            </Text>
+                        </Animated.View>
+                    )
+                }
+            </SafeAreaView >
 
             {/* Onboarding Modal */}
             <OnboardingModal
-                visible={isSettingsLoaded && displaySettings.isOnboarded === false && isInOnboardingPreview === false}
+                visible={isSettingsLoaded && displaySettings.isOnboarded === false && isInOnboardingPreview === false
+                }
                 theme={theme}
                 onSave={async (userData: any) => {
                     // 1. Save Profile Settings provisionally
@@ -32845,3 +32893,4 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         </SafeAreaProvider >
     );
 }
+
