@@ -1614,17 +1614,17 @@ const TEXT_MODELS = [
     "gemini-2.5-flash-preview-09-2025"
 ];
 
-// Groq models ordered latest → oldest (newest models tried first in fallback)
+// Groq models ordered by specific priority request
 const GROQ_MODELS = [
-    // Feb 2026 — Latest
-    "meta-llama/llama-4-scout-17b-16e-instruct",    // Llama 4 Scout: newest Meta MoE; ultra-fast
-    "meta-llama/llama-4-maverick-17b-128e-instruct", // Llama 4 Maverick: high-reasoning agentic
-    "qwen/qwen3-32b",                                // Qwen 3: top-tier coding & reasoning
-    // Jan 2026
-    "openai/gpt-oss-safeguard-20b",                  // GPT-OSS Safeguard: safety/moderation
-    // Late 2025
-    "openai/gpt-oss-120b",                           // GPT-OSS 120B: flagship open-weight reasoning
-    "moonshotai/kimi-k2-instruct-0905",              // Kimi K2: 256k context; deep logic
+    // Top Priority
+    "openai/gpt-oss-20b",                            // GPT-OSS 20B (first priority)
+    "openai/gpt-oss-120b",                           // GPT-OSS 120B (second priority)
+
+    // Fallback support models
+    "openai/gpt-oss-safeguard-20b",                  // Safety GPT OSS 20B
+    "moonshotai/kimi-k2-instruct-0905",              // Kimi K2 Instruct
+    "meta-llama/llama-4-maverick-17b-128e-instruct", // Llama 4 Maverick
+    "meta-llama/llama-4-scout-17b-16e-instruct"      // Llama 4 Scout
 ];
 
 // Cleaned Image Models List - Removed deprecated 404 models
@@ -1643,8 +1643,7 @@ const TTS_MODELS = [
 
 // Groq TTS Models - Prioritized
 const GROQ_TTS_MODELS = [
-    "canopylabs/orpheus-v1-english",
-    "canopylabs/orpheus-arabic-saudi"
+    "canopylabs/orpheus-v1-english"
 ];
 
 // ... (other code) ...
