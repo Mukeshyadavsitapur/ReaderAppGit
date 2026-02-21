@@ -1535,90 +1535,69 @@ const APP_TITLE = "ReaderApp";
 const API_KEY_HELP_MARKDOWN = `
 # ⚠️ Connection Error: No API Key / कोई API Key नहीं
 
-You are currently in **Offline Mode**. To use AI features like Chat, Vision, and Quizzes, you need to connect your own Google Gemini API Key. It is free, private, and takes 2 minutes.
+You are currently in **Offline Mode**. To use premium AI features like Chat, Vision, and Online TTS, you need to connect a **Google Gemini** or **Groq AI** API Key. These are free, private, and take 2 minutes to set up.
 
-### 🛠️ How to Get Your Free Key / अपनी मुफ़्त Key कैसे प्राप्त करें
+### 🚀 Get Your Free Keys / अपनी मुफ़्त Key प्राप्त करें
 
-1. **Tap the Link**: Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
-   **(लिंक पर टैप करें**: [Google AI Studio](https://aistudio.google.com/app/apikey) पर जाएं।)
-2. **Sign In**: Use your Google Account.
-   **(साइन इन करें**: अपने Google खाते का उपयोग करें।)
-3. **Create Key**: Tap **"Create API Key"** (or "Create API key in new project").
-   **(Key बनाएं**: **"Create API Key"** पर टैप करें।)
-4. **Copy**: Copy the string there is a copy button near $ sign.
-   **(कॉपी करें**: $ साइन के पास कॉपी बटन का उपयोग करके स्ट्रिंग को कॉपी करें।)
-5. **Paste**: Return to this app, go to **Settings**, and paste it into the "Cloud API Settings" box.
-   **(पेस्ट करें**: इस ऐप पर वापस आएं, **Settings** में जाएं, और इसे "Cloud API Settings" बॉक्स में पेस्ट करें।)
+#### Option A: Google Gemini (For general AI & Vision)
+1. **Visit [Google AI Studio](https://aistudio.google.com/app/apikey)**.
+2. Sign in and tap **"Create API Key"**.
+3. **Copy** and paste it into the Gemini box in **Settings**.
+   **(Google AI Studio पर जाएं, Key बनाएं और Settings में पेस्ट करें।)**
 
-> **Privacy Note**: Your key is stored securely on your device and is sent directly to Google servers. It is never shared with us.
+#### Option B: Groq AI (For ultra-fast Chat & TTS)
+1. **Visit [Groq Console](https://console.groq.com/keys)**.
+2. Sign in and tap **"Create New API Key"**.
+3. **Copy** and paste it into the Groq box in **Settings**.
+   **(Groq Console पर जाएं, Key बनाएं और Settings में पेस्ट करें।)**
+
+> **Privacy Note**: Your keys are stored securely on your device and sent directly to AI servers. They are never shared with us.
 >
-> **गोपनीयता नोट**: आपकी Key आपके डिवाइस पर सुरक्षित रूप से संग्रहीत है और सीधे Google सर्वर पर भेजी जाती है। यह हमारे साथ कभी साझा नहीं की जाती है।
+> **गोपनीयता नोट**: आपकी Keys आपके डिवाइस पर सुरक्षित रूप से संग्रहीत हैं। यह हमारे साथ कभी साझा नहीं की जाती हैं।
 
 **Once saved, all AI features will unlock instantly!**
-**एक बार सहेजने के बाद, सभी AI सुविधाएँ तुरंत अनलॉक हो जाएंगी!**
+**सहेजने के बाद, सभी AI सुविधाएँ तुरंत अनलॉक हो जाएंगी!**
 `;
 
 const ONBOARDING_GUIDE_MARKDOWN = `
 # Welcome to ReaderApp! 👋
 # ReaderApp में आपका स्वागत है! 👋
 
-This application depends on **Google Gemini** for its premium online intelligence. Connecting a key unlocks:
-यह एप्लिकेशन अपनी प्रीमियम ऑनलाइन सुविधाओं के लिए **Google Gemini** पर निर्भर करता है। API Key जोड़ने से अनलॉक होगा:
+This application uses **Google Gemini** and **Groq AI** for its premium intelligence. Connecting a key unlocks:
+यह ऐप **Google Gemini** और **Groq AI** का उपयोग करता है। API Key जोड़ने से अनलॉक होगा:
 
-- **AI Chat & Vision**: Discuss images and documents in real-time.
-- **AI चैट और विज़न**: छवियों और दस्तावेज़ों पर वास्तविक समय में चर्चा करें।
+- **Ultra-Fast AI Chat**: Real-time discussions and document analysis.
+- **अल्ट्रा-फास्ट AI चैट**: वास्तविक समय में दस्तावेजों का विश्लेषण।
 
-- **Smart Storytelling**: Generate personalized stories and journals.
-- **स्मार्ट कहानी लेखन**: व्यक्तिगत कहानियाँ और जर्नल बनाएं।
+- **AI Narrator (TTS)**: High-quality natural voices that read for you.
+- **AI नरेटर (TTS)**: उच्च गुणवत्ता वाली आवाज़ें जो आपके लिए पढ़ेंगी।
 
-- **Intelligent Quizzes**: Create study materials from your own documents.
-- **बुद्धिमान क्विज़**: अपने दस्तावेज़ों से अध्ययन सामग्री बनाएं।
-
-### 🛠️ Need help getting a key?
-### 🛠️ Key प्राप्त करने में मदद चाहिए?
-
-Use the guide below in this reader to get your free key in 2 minutes.
-2 मिनट में अपनी मुफ्त Key प्राप्त करने के लिए नीचे दी गई गाइड का उपयोग करें।
+- **Smart Quizzes**: Generate study materials from your notes.
+- **स्मार्ट क्विज़**: अपने नोट्स से अध्ययन सामग्री बनाएं।
 
 ---
 
 ### 🛡️ Prefer working Offline?
 ### 🛡️ ऑफ़लाइन काम करना पसंद करते हैं?
 
-If you're not ready to connect to Google yet, don't worry! This app is packed with features that work **100% offline**:
-यदि आप अभी Google से कनेक्ट करने के लिए तैयार नहीं हैं, तो चिंता न करें! यह ऐप **100% ऑफ़लाइन** काम करने वाली सुविधाओं से भरा है:
+If you're not ready to connect yet, enjoy features that work **100% offline**:
+यदि आप अभी कनेक्ट करने के लिए तैयार नहीं हैं, तो इन सुविधाओं का आनंद लें:
 
-- **Personalized Notes**: Capture and organize your thoughts anytime.
-- **व्यक्तिगत नोट्स**: कभी भी अपने विचारों को कैप्चर और व्यवस्थित करें।
-
-- **Offline Dictionary**: Tap any word to see definitions instantly.
-- **ऑफ़लाइन शब्दकोश**: परिभाषाएँ तुरंत देखने के लिए किसी भी शब्द पर टैप करें।
-
-- **Concept Cards**: Review your key learning materials on the go.
-- **कॉन्सेप्ट कार्ड्स**: चलते-फिरते अपनी प्रमुख सीखने की सामग्री की समीक्षा करें।
-
-**Feel free to skip setup for now and explore these features!**
-**अभी के लिए सेटअप छोड़ने और इन सुविधाओं का पता लगाने के लिए स्वतंत्र महसूस करें!**
+- **Personalized Notes**: Capture and organize thoughts anytime.
+- **ऑफ़लाइन शब्दकोश**: परिभाषाएँ तुरंत देखने के लिए टैप करें।
+- **Concept Cards**: Review learning materials on the go.
 
 ---
 
-### 🚀 Get Your Free Gemini API Key
-### 🚀 अपनी मुफ्त Gemini API Key प्राप्त करें
+### 🚀 Get Your Free API Keys
+### 🚀 अपनी मुफ़्त API Keys प्राप्त करें
 
-1. **Visit [Google AI Studio](https://aistudio.google.com/app/apikey)**.
-1. **[Google AI Studio](https://aistudio.google.com/app/apikey) पर जाएं**।
+1. **Gemini**: Visit [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. **Groq**: Visit [Groq Console](https://console.groq.com/keys).
+3. Create a key, **Copy** it, and paste it in **Settings**.
 
-2. Sign in with your Google account.
-2. अपने Google खाते से साइन इन करें।
-
-3. Tap **"Create API Key"**.
-3. **"Create API Key"** पर टैप करें।
-
-4. **Copy** the key and paste it in the box at the bottom of this screen.
-4. Key को **कॉपी** करें और इस स्क्रीन के नीचे दिए गए बॉक्स में पेस्ट करें।
-
-**Everything you see on this screen is the real "Reader Mode". Go ahead and tap words or change themes to see it in action!**
-**इस स्क्रीन पर आप जो कुछ भी देख रहे हैं वह असली "रीडर मोड" है। शब्दों पर टैप करें या थीम बदलें और इसे एक्शन में देखें!**
+**Everything you see on this screen is the real "Reader Mode". Tap words or change themes to see it in action!**
+**रीडर मोड को एक्शन में देखने के लिए शब्दों पर टैप करें या थीम बदलें!**
 `;
 
 // NEW: Placeholder for Advertisement Image
