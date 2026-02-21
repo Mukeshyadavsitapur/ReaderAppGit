@@ -13618,20 +13618,17 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                         // NEW: Helper to attempt transcription with a specific model
                         const transcribeWithModel = async (modelId: string) => {
-                            // NEW: Enhanced prompt to force native script
-                            const userLang = displaySettings.language || "the spoken language";
-                            const promptText = `Refine the user's voice input into a clear, complete instruction.
-                        CONTEXT: The user's preferred native language is ${userLang}.
+                            // NEW: Enhanced prompt to force translation to the selected language
+                            const selectedLang = displaySettings.language || "English";
+                            const promptText = `Transcribe, refine, and translate the user's voice input.
+                        CONTEXT: The user's TARGET language is ${selectedLang}.
                         RULES:
-                        1. Transcribe and REFINE the speech. Complete any incomplete sentences or thoughts to make it a valid instruction.
-                        2. LANGUAGE LOGIC:
-                           - IF the count of words in the user's NATIVE language (${userLang}) is more than 4, REFINE and RESPOND in that native language (using its native script).
-                           - IF the count of English words is more than 5, REFINE and RESPOND in English.
-                           - UNTIL the user speaks more than 4 words in their native language, translate the input to English (unless rule 2b applies).
-                        3. Fix grammar, punctuation, and capitalization to ensure the result is a polished, grammatically correct instruction.
+                        1. Regardless of what language the user is speaking in the audio, you MUST TRANSLATE and REFINE the entire input into ${selectedLang}.
+                        2. Do not mix languages. If the user speaks in Hindi but uses English words (or vice versa), the final output MUST be entirely in ${selectedLang}.
+                        3. Fix grammar, punctuation, and capitalization to ensure the result is a polished, grammatically correct instruction or sentence in ${selectedLang}.
                         4. Remove fillers (ums, ahs, repeating words) and stuttering.
-                        5. STRICTLY PROHIBITED: Do NOT use English/Latin alphabet for non-English languages (No Transliteration/Hinglish). Use native script (e.g. Devanagari for Hindi).
-                        6. Return ONLY the refined, grammatically correct text.`;
+                        5. STRICTLY PROHIBITED: Do NOT use the English/Latin alphabet for non-English target languages (No Transliteration/Hinglish). Use the proper native script for ${selectedLang} (e.g., Devanagari if the target is Hindi).
+                        6. Return ONLY the final translated and refined text in ${selectedLang}. Do not add conversational replies or explanations.`;
 
                             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${geminiKey}`, {
                                 method: "POST",
@@ -13663,10 +13660,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
                                     formData.append('model', whisperModel);
                                     formData.append('response_format', 'json');
-                                    formData.append('prompt', 'Transcribe the audio accurately. Fix any grammatical errors, remove filler words like "um" or "ah", and ensure proper punctuation and capitalization.');
-                                    if (displaySettings.language && displaySettings.language !== 'English') {
-                                        formData.append('language', displaySettings.language.toLowerCase().slice(0, 2));
-                                    }
 
                                     const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
                                         method: 'POST',
@@ -13679,6 +13672,52 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         const transcript = groqData?.text?.trim() || null;
                                         if (transcript) {
                                             console.log(`[STT] Groq success with ${whisperModel}:`, transcript);
+
+                                            // Process grammar and refinement via Groq LLM
+                                            const selectedLang = displaySettings.language || "English";
+                                            const systemPrompt = `You are an expert translator and transcription assistant.
+CONTEXT: The user's TARGET language is ${selectedLang}.
+RULES:
+1. Review the following transcribed text. Regardless of what language it is currently in, you MUST TRANSLATE and REFINE the entire text into ${selectedLang}.
+2. Do not mix languages. If the raw text mixes multiple languages, the final output MUST be entirely in ${selectedLang}.
+3. Fix grammar, punctuation, and capitalization to ensure the result is a polished, grammatically correct sentence or instruction in ${selectedLang}.
+4. Remove any remaining filler words (um, ah) and stuttering. Complete any incomplete thoughts if obvious.
+5. STRICTLY PROHIBITED: Do NOT use the English/Latin alphabet for non-English target languages (No Transliteration). Use the proper native script for ${selectedLang} (e.g., Devanagari if the target is Hindi).
+6. Return ONLY the final translated and refined text in ${selectedLang}. Do not add conversational replies or explanations.`;
+
+                                            const groqModel = displaySettings.groqModel || 'llama-3.3-70b-versatile';
+                                            try {
+                                                const refineRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Authorization': `Bearer ${groqKey}`,
+                                                        'Content-Type': 'application/json'
+                                                    },
+                                                    body: JSON.stringify({
+                                                        model: groqModel,
+                                                        messages: [
+                                                            { role: 'system', content: systemPrompt },
+                                                            { role: 'user', content: `Raw transcript:\n${transcript}` }
+                                                        ],
+                                                        temperature: 0.1,
+                                                        max_tokens: 1024
+                                                    })
+                                                });
+
+                                                if (refineRes.ok) {
+                                                    const refineData = await refineRes.json();
+                                                    const refinedText = refineData.choices?.[0]?.message?.content?.trim();
+                                                    if (refinedText) {
+                                                        console.log(`[STT] Groq refinement success:`, refinedText);
+                                                        return refinedText;
+                                                    }
+                                                } else {
+                                                    console.warn(`[STT] Groq refinement failed (falling back to raw):`, await refineRes.text());
+                                                }
+                                            } catch (refineErr) {
+                                                console.warn(`[STT] Groq refinement error:`, refineErr);
+                                            }
+
                                             return transcript;
                                         }
                                     } else {
