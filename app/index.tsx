@@ -13606,10 +13606,15 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     // NEW: Voice Input Handler
     const handleVoiceToggle = async (target: string = 'search') => {
         Keyboard.dismiss();
+        const geminiKey = customApiKey || apiKey;
+        const groqKey = displaySettings.groqApiKey;
         const provider = displaySettings.llmProvider || 'gemini';
-        const key = provider === 'groq' ? displaySettings.groqApiKey : (customApiKey || apiKey);
-        if (!key) {
-            Alert.alert("Offline", `Voice input requires ${provider === 'groq' ? 'a Groq' : 'an'} API Key. Please add one in Settings.`);
+
+        const hasGemini = !!(geminiKey && geminiKey.trim());
+        const hasGroq = !!(groqKey && groqKey.trim());
+
+        if (!hasGemini && !hasGroq) {
+            Alert.alert("Offline", `Voice input requires an API Key. Please add one in Settings.`);
             return;
         }
 
@@ -13651,7 +13656,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         5. STRICTLY PROHIBITED: Do NOT use English/Latin alphabet for non-English languages (No Transliteration/Hinglish). Use native script (e.g. Devanagari for Hindi).
                         6. Return ONLY the refined, grammatically correct text.`;
 
-                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
+                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${geminiKey}`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
@@ -13671,67 +13676,72 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             return data.candidates?.[0]?.content?.parts?.[0]?.text;
                         };
 
-                        let text = null;
-
-                        if (provider === 'groq') {
+                        const attemptGroqSTT = async () => {
                             // --- Groq Whisper STT ---
-                            // Send audio file directly via multipart/form-data
                             const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3', 'distil-whisper-large-v3-en'];
-                            let groqTranscribed = false;
                             for (const whisperModel of whisperModels) {
                                 try {
                                     console.log(`[STT] Groq: trying ${whisperModel}`);
                                     const formData = new FormData();
-                                    // React Native FormData accepts { uri, name, type } for files
                                     formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
                                     formData.append('model', whisperModel);
                                     formData.append('response_format', 'json');
                                     formData.append('prompt', 'Transcribe the audio accurately. Fix any grammatical errors, remove filler words like "um" or "ah", and ensure proper punctuation and capitalization.');
-                                    // Optionally hint the language for faster + more accurate results
                                     if (displaySettings.language && displaySettings.language !== 'English') {
                                         formData.append('language', displaySettings.language.toLowerCase().slice(0, 2));
                                     }
 
                                     const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
                                         method: 'POST',
-                                        headers: { 'Authorization': `Bearer ${key}` },
+                                        headers: { 'Authorization': `Bearer ${groqKey}` },
                                         body: formData
                                     });
 
                                     if (groqRes.ok) {
                                         const groqData = await groqRes.json();
-                                        text = groqData.text?.trim() || null;
-                                        if (text) {
-                                            console.log(`[STT] Groq success with ${whisperModel}:`, text);
-                                            groqTranscribed = true;
-                                            break;
+                                        const transcript = groqData?.text?.trim() || null;
+                                        if (transcript) {
+                                            console.log(`[STT] Groq success with ${whisperModel}:`, transcript);
+                                            return transcript;
                                         }
                                     } else {
                                         const errText = await groqRes.text();
-                                        console.warn(`Groq STT ${whisperModel} failed (${groqRes.status}): ${errText}`);
-                                        if (groqRes.status === 401 || groqRes.status === 403) break; // auth error — stop
+                                        console.warn(`[STT] Groq ${whisperModel} failed (${groqRes.status}): ${errText}`);
+                                        if (groqRes.status === 401 || groqRes.status === 403) break;
                                     }
                                 } catch (groqErr) {
-                                    console.warn(`Groq STT ${whisperModel} error:`, groqErr);
+                                    console.warn(`[STT] Groq ${whisperModel} error:`, groqErr);
                                 }
                             }
-                            if (!groqTranscribed && !text) {
-                                throw new Error('Groq Whisper: all models failed to transcribe audio.');
-                            }
-                        } else {
-                            // --- Gemini Vision STT (original path) ---
+                            return null;
+                        };
+
+                        const attemptGeminiSTT = async () => {
+                            console.log(`[STT] Attempting Gemini STT...`);
                             try {
-                                // 1. Try Primary Model (Flash Lite - Fast)
-                                text = await transcribeWithModel("gemini-2.5-flash-lite");
+                                return await transcribeWithModel("gemini-2.5-flash-lite");
                             } catch (error: any) {
-                                console.warn("Primary voice model failed, attempting fallback:", error.message);
-                                try {
-                                    // 2. Try Fallback Model
-                                    text = await transcribeWithModel("gemini-robotics-er-1.5-preview");
-                                } catch (fallbackError) {
-                                    throw new Error(error.message || "API Error");
-                                }
+                                console.warn(`[STT] Gemini Primary failed:`, error.message);
+                                return await transcribeWithModel("gemini-robotics-er-1.5-preview");
                             }
+                        };
+
+                        let text = null;
+
+                        // Priority Logic: Groq First if available
+                        if (hasGroq) {
+                            console.log(`[STT] Priority: Groq key found. Attempting Groq STT...`);
+                            text = await attemptGroqSTT();
+                            if (!text && hasGemini) {
+                                console.warn(`[STT] Groq STT failed, falling back to Gemini...`);
+                                text = await attemptGeminiSTT();
+                            }
+                        } else if (hasGemini) {
+                            text = await attemptGeminiSTT();
+                        }
+
+                        if (!text) {
+                            throw new Error('All configured STT models failed to transcribe audio.');
                         }
 
                         if (text) {
