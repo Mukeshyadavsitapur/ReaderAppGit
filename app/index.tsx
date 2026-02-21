@@ -25070,7 +25070,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         <View style={{ flex: 1, marginRight: 10 }}>
                             <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Online TTS</Text>
                             <Text style={{ fontSize: 12, color: theme.secondary }}>
-                                {displaySettings.llmProvider === 'groq' ? 'High quality AI narrator (via Gemini)' : 'High quality AI narrator'}
+                                High quality AI narrator
                             </Text>
                         </View>
                         <TouchableOpacity
@@ -25233,30 +25233,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
 
 
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 15, textTransform: 'uppercase' }}>
-                        Online TTS Narrators
-                    </Text>
-                    <EditableSelectionList
-                        label="FEMALE NARRATORS"
-                        items={FEMALE_VOICES}
-                        selectedItem={displaySettings.voice}
-                        onSelect={(v: string) => {
-                            saveSettings({ voice: v });
-                            playVoicePreview(v); // Trigger preview on select
-                        }}
-                        theme={theme}
-                    />
-
-                    <EditableSelectionList
-                        label="MALE NARRATORS"
-                        items={MALE_VOICES}
-                        selectedItem={displaySettings.voice}
-                        onSelect={(v: string) => {
-                            saveSettings({ voice: v });
-                            playVoicePreview(v); // Trigger preview on select
-                        }}
-                        theme={theme}
-                    />
 
                     <CleanSlider
                         label="READING SPEED"
