@@ -1642,10 +1642,20 @@ const TEXT_MODELS = [
     "gemini-2.5-flash-preview-09-2025"
 ];
 
-// Groq confirmed free-tier models (other models return 400)
+// Groq models ordered latest → oldest (newest models tried first in fallback)
 const GROQ_MODELS = [
-    "llama-3.3-70b-versatile",    // Quality preset: best free-tier model
-    "llama-3.1-8b-instant",       // Speed preset: fastest free-tier model
+    // Feb 2026 — Latest
+    "meta-llama/llama-4-scout-17b-16e-instruct",   // Llama 4 Scout: newest Meta MoE; ultra-fast
+    "meta-llama/llama-4-maverick-17b-128e-instruct", // Llama 4 Maverick: high-reasoning agentic
+    "qwen/qwen3-32b",                               // Qwen 3: top-tier coding (replaced Qwen 2.5)
+    // Jan 2026
+    "openai/gpt-oss-safeguard-20b",                 // GPT-OSS Safeguard: latest safety/moderation
+    // Late 2025
+    "openai/gpt-oss-120b",                          // GPT-OSS 120B: flagship open-weight reasoning
+    "moonshotai/kimi-k2-instruct-0905",             // Kimi K2: 256k context; deep logic
+    // Groq confirmed free-tier classic models
+    "llama-3.3-70b-versatile",                      // Quality preset: best free-tier model
+    "llama-3.1-8b-instant",                         // Speed preset: fastest free-tier model
 ];
 
 // Cleaned Image Models List - Removed deprecated 404 models
