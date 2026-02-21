@@ -350,11 +350,7 @@ export interface DisplaySettings {
     llmProvider?: string;
     groqApiKey?: string;
     hfApiKey?: string;
-    groqCustomModel?: string;
-    savedGroqCustomModels?: string[];
     showPersonalDictionary?: boolean;
-    customTextModel?: string;
-    savedCustomModels?: any[];
     preventSleep?: boolean;
     dictionaryLimit?: number;
     libraryLimit?: number;
@@ -5464,11 +5460,8 @@ export default function App() {
         voice: "Kore",
         onlineTtsEnabled: true,
         imageGenerationEnabled: true,
-        groqCustomModel: "",
-        savedGroqCustomModels: [],
+        llmProvider: "groq", // UPDATED: Default to Groq
         showPersonalDictionary: true,
-        customTextModel: "",
-        savedCustomModels: [],
         preventSleep: false,
         userProfession: "", // NEW
         userGoal: "", // NEW
@@ -5664,9 +5657,6 @@ export default function App() {
     const [generationData, setGenerationData] = useState<any>(null);
     const [isTranslating, setIsTranslating] = useState(false);
     const [isRateLimited, setIsRateLimited] = useState(false);
-    const [isCheckingModel, setIsCheckingModel] = useState(false);
-    const [showModelSelector, setShowModelSelector] = useState(false);
-    const [showGroqModelSelector, setShowGroqModelSelector] = useState(false);
     const [isReaderQuerying, setIsReaderQuerying] = useState(false);
     const [greetingsMode, setGreetingsMode] = useState('greeting');
     const [minimizedSession, setMinimizedSession] = useState<any>(null);
@@ -6949,8 +6939,6 @@ export default function App() {
         updatePersonalAssistantPrompts();
 
     }, [debouncedProfession]);
-
-    const [activeModelId, setActiveModelId] = useState<any>(null);
 
     const loadWordFromFile = async (liteWord: any) => {
         if (!liteWord || !liteWord.id) return liteWord;
@@ -9406,8 +9394,7 @@ export default function App() {
                     setDisplaySettings((prev: any) => ({
                         ...prev,
                         ...parsed,
-                        customTextModel: loadedCustomModel,
-                        savedCustomModels: loadedSavedModels,
+                        llmProvider: parsed.llmProvider || "groq", // NEW: Default to Groq if missing
                         preventSleep: parsed.preventSleep || false,
                         dictionaryLimit: parsed.dictionaryLimit || 10000,
                         libraryLimit: parsed.libraryLimit || 2000,
@@ -10858,7 +10845,7 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
     const saveSettings = async (newSettings: any) => {
         // NEW: Reset active model tracking if model preferences change
         if (newSettings.customTextModel !== undefined) {
-            setActiveModelId(null);
+            setAppMode("idle");
         }
 
         // Critical: Use functional update to avoid stale closure issues
@@ -11946,20 +11933,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 openAiMessages.push({ role: "user", content: String(contents) });
             }
 
-            let groqModelsToTry = [...GROQ_MODELS];
-
-            if (modelOverride) {
-                // Direct override — use only that model
-                groqModelsToTry = [modelOverride];
-            } else {
-                // Default: try models latest → oldest (GROQ_MODELS order)
-                // If user selected a specific model, it becomes first priority
-                if (displaySettings.groqCustomModel?.trim()) {
-                    const custom = displaySettings.groqCustomModel.trim();
-                    groqModelsToTry = groqModelsToTry.filter(m => m !== custom);
-                    groqModelsToTry.unshift(custom);
-                }
-            }
+            let groqModelsToTry = modelOverride ? [modelOverride] : [...GROQ_MODELS];
 
             let lastGroqError: any = null;
             for (const groqModel of groqModelsToTry) {
@@ -12038,14 +12012,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             // Remove override from list if exists to avoid dupes, then unshift to top
             modelsToTry = modelsToTry.filter(m => m !== modelOverride);
             modelsToTry.unshift(modelOverride);
-        } else {
-            // Default: try models latest → oldest (TEXT_MODELS order)
-            // If user selected a specific model, it becomes first priority
-            if (displaySettings.customTextModel && displaySettings.customTextModel.trim()) {
-                const custom = displaySettings.customTextModel.trim();
-                modelsToTry = modelsToTry.filter(m => m !== custom);
-                modelsToTry.unshift(custom);
-            }
         }
 
         let lastError = null; // Track the last error encountered
@@ -12101,9 +12067,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
                     if (isRateLimited) setIsRateLimited(false);
 
-                    // NEW: Update active model on success
-                    setActiveModelId(modelId);
-
                     let text = data.candidates[0].content.parts[0].text;
                     // Strictly remove double dollar signs ($$) which are often used for LaTeX block math
                     if (text) {
@@ -12157,12 +12120,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         if (provider === 'groq') {
             let groqTestModels = [...GROQ_MODELS];
-            // Custom model becomes first priority; otherwise try latest → oldest
-            if (displaySettings.groqCustomModel?.trim()) {
-                const custom = displaySettings.groqCustomModel.trim();
-                groqTestModels = groqTestModels.filter(m => m !== custom);
-                groqTestModels.unshift(custom);
-            }
 
             for (const groqModel of groqTestModels) {
                 try {
@@ -12173,8 +12130,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     });
                     if (response.ok) {
                         setApiConnectionStatus("success");
-                        setActiveModelId(groqModel);
-                        Alert.alert("Success", `Connection established! (Groq: ${groqModel})`);
+                        Alert.alert("Success", `Connection established!`);
                         if (!displaySettings.smartBio) generateSmartBio();
                         return;
                     }
@@ -12197,11 +12153,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         // Custom model first, otherwise try latest → oldest (TEXT_MODELS order)
         let testModels = [...TEXT_MODELS];
-        if (displaySettings.customTextModel && displaySettings.customTextModel.trim()) {
-            const custom = displaySettings.customTextModel.trim();
-            testModels = testModels.filter(m => m !== custom);
-            testModels.unshift(custom);
-        }
 
         for (const testModel of testModels) {
             try {
@@ -12215,14 +12166,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (response.ok) {
                     setApiConnectionStatus("success");
-                    setActiveModelId(testModel); // NEW: Update active model
-                    Alert.alert("Success", `Connection established! (Active: ${testModel})`);
-
-                    // NEW: Automatically generate bio if it's currently empty
-                    if (!displaySettings.smartBio) {
-                        generateSmartBio();
-                    }
-                    return;
+                    saveSettings({ nameLocked: true })
+                    return; // Stop check after success
                 }
             } catch (e) {
                 console.log(`Connection test failed for ${testModel}, trying next...`);
@@ -12359,87 +12304,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     };
 
     // NEW: Function to check availability of custom model
-    const handleCheckModelAvailability = async () => {
-        const modelToCheck = displaySettings.customTextModel?.trim();
-        const provider = displaySettings.llmProvider || 'gemini';
-        let key = customApiKey || apiKey;
-
-        if (provider === 'groq') key = displaySettings.groqApiKey;
-
-
-        if (!modelToCheck) {
-            Alert.alert("Input Required", "Please enter a Custom Model ID first.");
-            return;
-        }
-        if (!key) {
-            Alert.alert("API Key Required", `Please enter your ${provider === 'groq' ? 'Groq' : 'Gemini'} API Key first.`);
-            return;
-        }
-
-        setIsCheckingModel(true);
-
-        try {
-            // 1. Check User's Custom Model
-            console.log(`Verifying custom model: ${modelToCheck} on ${provider}`);
-            let response;
-            if (provider === 'groq') {
-                response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                    body: JSON.stringify({ model: modelToCheck, messages: [{ role: "user", content: "Hello" }] })
-                });
-            } else {
-                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToCheck}:generateContent?key=${key}`, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "Hello" }] }] })
-                });
-            }
-
-            if (response.ok) {
-                setIsCheckingModel(false);
-
-                // NEW: Add to saved list if not default and not already saved
-                if (!TEXT_MODELS.includes(modelToCheck) && !displaySettings.savedCustomModels?.includes(modelToCheck)) {
-                    const newSaved = [...(displaySettings.savedCustomModels || []), modelToCheck];
-                    saveSettings({ savedCustomModels: newSaved });
-                }
-
-                Alert.alert("Success", `"${modelToCheck}" is available and active!`);
-                return;
-            }
-
-            throw new Error(`Status ${response.status}`);
-
-        } catch (e) {
-            console.log("Custom model check failed, checking defaults...", e);
-
-            // 2. Fallback: Check Standard Models to suggest alternatives
-            const workingModels = [];
-            for (const m of TEXT_MODELS) {
-                try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
-                    });
-                    if (res.ok) workingModels.push(m);
-                } catch (err) {
-                    // Ignore individual failures during fallback check
-                }
-            }
-
-            setIsCheckingModel(false);
-
-            let msg = `Could not connect to "${modelToCheck}".\nIt may be misspelled or your API key doesn't have access to it.`;
-
-            if (workingModels.length > 0) {
-                msg += `\n\n✅ Verified models for your key:\n• ${workingModels.join('\n• ')}`;
-            } else {
-                msg += "\n\n❌ No working models detected. Please check your API Key and internet connection.";
-            }
-
-            Alert.alert("Model Unavailable", msg);
-        }
-    };
 
 
 
@@ -25133,77 +24997,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     </Text>
 
 
-                    {displaySettings.llmProvider === 'groq' && (
-                        <>
-                            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>Groq Model</Text>
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                                <TouchableOpacity
-                                    onPress={() => setShowGroqModelSelector(true)}
-                                    style={{
-                                        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                                        padding: 12, borderRadius: 8, borderWidth: 1,
-                                        borderColor: theme.border, backgroundColor: theme.inputBg
-                                    }}
-                                >
-                                    <Text style={{ color: displaySettings.groqCustomModel ? theme.text : theme.secondary, fontSize: 14 }} numberOfLines={1}>
-                                        {displaySettings.groqCustomModel || 'Auto (latest → oldest priority)'}
-                                    </Text>
-                                    <ChevronDown size={18} color={theme.secondary} />
-                                </TouchableOpacity>
-                                {displaySettings.groqCustomModel ? (
-                                    <TouchableOpacity
-                                        onPress={() => saveSettings({ groqCustomModel: '' })}
-                                        style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.buttonBg, justifyContent: 'center' }}
-                                    >
-                                        <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: 'bold' }}>Clear</Text>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-
-                            <Modal visible={showGroqModelSelector} transparent animationType="fade" onRequestClose={() => setShowGroqModelSelector(false)}>
-                                <TouchableOpacity
-                                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}
-                                    activeOpacity={1}
-                                    onPress={() => setShowGroqModelSelector(false)}
-                                >
-                                    <View style={{ backgroundColor: theme.bg, borderRadius: 16, padding: 10, elevation: 5, maxHeight: 400 }}>
-                                        <Text style={{ textAlign: 'center', fontWeight: 'bold', color: theme.secondary, marginBottom: 10, marginTop: 5, textTransform: 'uppercase', fontSize: 12 }}>Select Groq Model</Text>
-                                        <ScrollView>
-                                            {[...GROQ_MODELS, ...(displaySettings.savedGroqCustomModels || [])].map((model: string, i: number, arr: string[]) => (
-                                                <TouchableOpacity
-                                                    key={model}
-                                                    onPress={() => { saveSettings({ groqCustomModel: model }); setShowGroqModelSelector(false); }}
-                                                    onLongPress={() => {
-                                                        if (!GROQ_MODELS.includes(model)) {
-                                                            Alert.alert("Delete Model", `Remove "${model}"?`, [
-                                                                { text: "Cancel", style: "cancel" },
-                                                                {
-                                                                    text: "Delete", style: "destructive", onPress: () => {
-                                                                        const newSaved = (displaySettings.savedGroqCustomModels || []).filter((m: string) => m !== model);
-                                                                        const newCurrent = displaySettings.groqCustomModel === model ? '' : displaySettings.groqCustomModel;
-                                                                        saveSettings({ savedGroqCustomModels: newSaved, groqCustomModel: newCurrent });
-                                                                    }
-                                                                }
-                                                            ]);
-                                                        }
-                                                    }}
-                                                    delayLongPress={500}
-                                                    style={{ padding: 15, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: theme.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
-                                                >
-                                                    <View>
-                                                        <Text style={{ color: theme.text, fontSize: 14, fontWeight: displaySettings.groqCustomModel === model ? 'bold' : '400' }}>{model}</Text>
-                                                        {model === GROQ_MODELS[0] && <Text style={{ fontSize: 10, color: '#8b5cf6', marginTop: 2 }}>⭐ Latest model</Text>}
-                                                        {!GROQ_MODELS.includes(model) && <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 2 }}>Custom (Long press to delete)</Text>}
-                                                    </View>
-                                                    {displaySettings.groqCustomModel === model && <Check size={16} color="#2563eb" />}
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
-                                    </View>
-                                </TouchableOpacity>
-                            </Modal>
-                        </>
-                    )}
 
                     {/* Online TTS */}
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -25293,146 +25086,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         </TouchableOpacity>
                     </View>
 
-                    {/* Custom Text Model — only for Gemini */}
-                    {displaySettings.llmProvider !== 'groq' && (
-                        <View style={{ marginTop: 20 }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-                                <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text }}>Custom Text Model</Text>
-                                <View style={{ maxWidth: '50%', alignItems: 'flex-end' }}>
-                                    <Text style={{ fontSize: 9, color: theme.secondary, marginBottom: 1, fontWeight: '600' }}>CURRENTLY ACTIVE</Text>
-                                    <Text style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 'bold' }} numberOfLines={1}>
-                                        {activeModelId || (displaySettings.customTextModel ? displaySettings.customTextModel : TEXT_MODELS[0])}
-                                    </Text>
-                                </View>
-                            </View>
-                            <Text style={{ fontSize: 12, color: theme.secondary, marginBottom: 10 }}>
-                                Optional: Enter a specific model ID (e.g. gemini-2.5-pro). This will override the default priority.
-                            </Text>
-
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                                <TextInput
-                                    style={{
-                                        flex: 1,
-                                        padding: 12,
-                                        borderRadius: 12,
-                                        borderWidth: 1,
-                                        borderColor: theme.border,
-                                        backgroundColor: theme.inputBg,
-                                        color: theme.text,
-                                        fontSize: 14,
-                                        height: 50
-                                    }}
-                                    placeholder="e.g. gemini-2.5-flash-preview-09-2025"
-                                    placeholderTextColor={theme.secondary}
-                                    value={displaySettings.customTextModel}
-                                    onChangeText={(txt) => saveSettings({ customTextModel: txt })}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-
-                                <TouchableOpacity
-                                    onPress={() => setShowModelSelector(true)}
-                                    style={{
-                                        width: 50,
-                                        height: 50,
-                                        backgroundColor: theme.buttonBg,
-                                        borderRadius: 12,
-                                        borderWidth: 1,
-                                        borderColor: theme.border,
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                    }}
-                                >
-                                    <ChevronDown size={24} color={theme.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <Modal visible={showModelSelector} transparent animationType="fade" onRequestClose={() => setShowModelSelector(false)}>
-                                <TouchableOpacity
-                                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}
-                                    activeOpacity={1}
-                                    onPress={() => setShowModelSelector(false)}
-                                >
-                                    <View style={{ backgroundColor: theme.bg, borderRadius: 16, padding: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, maxHeight: 400 }}>
-                                        <Text style={{ textAlign: 'center', fontWeight: 'bold', color: theme.secondary, marginBottom: 10, marginTop: 5, textTransform: 'uppercase', fontSize: 12 }}>Quick Select Model</Text>
-                                        <ScrollView>
-                                            {[...TEXT_MODELS, ...(displaySettings.savedCustomModels || [])].map((model: string, i: number, arr: string[]) => (
-                                                <TouchableOpacity
-                                                    key={model}
-                                                    onPress={() => { saveSettings({ customTextModel: model }); setShowModelSelector(false); }}
-                                                    onLongPress={() => {
-                                                        if (!TEXT_MODELS.includes(model)) {
-                                                            Alert.alert(
-                                                                "Delete Model",
-                                                                `Remove "${model}" from your list?`,
-                                                                [
-                                                                    { text: "Cancel", style: "cancel" },
-                                                                    {
-                                                                        text: "Delete",
-                                                                        style: "destructive",
-                                                                        onPress: () => {
-                                                                            const newSaved = (displaySettings.savedCustomModels || []).filter((m: string) => m !== model);
-                                                                            const newCurrent = displaySettings.customTextModel === model ? "" : displaySettings.customTextModel;
-                                                                            saveSettings({ savedCustomModels: newSaved, customTextModel: newCurrent });
-                                                                        }
-                                                                    }
-                                                                ]
-                                                            );
-                                                        }
-                                                    }}
-                                                    delayLongPress={500}
-                                                    style={{
-                                                        padding: 15,
-                                                        borderBottomWidth: i === arr.length - 1 ? 0 : 1,
-                                                        borderBottomColor: theme.border,
-                                                        flexDirection: 'row',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center'
-                                                    }}
-                                                >
-                                                    <View>
-                                                        <Text style={{ color: theme.text, fontSize: 14, fontWeight: displaySettings.customTextModel === model ? 'bold' : '400' }}>{model}</Text>
-                                                        {!TEXT_MODELS.includes(model) && (
-                                                            <Text style={{ fontSize: 10, color: theme.secondary, marginTop: 2 }}>Custom Added (Long press to delete)</Text>
-                                                        )}
-                                                    </View>
-                                                    {displaySettings.customTextModel === model && <Check size={16} color="#2563eb" />}
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
-                                    </View>
-                                </TouchableOpacity>
-                            </Modal>
-
-                            {/* Check Availability Button */}
-                            <TouchableOpacity
-                                onPress={handleCheckModelAvailability}
-                                disabled={isCheckingModel}
-                                style={{
-                                    marginTop: 10,
-                                    backgroundColor: theme.buttonBg,
-                                    paddingVertical: 12,
-                                    borderRadius: 12,
-                                    alignItems: 'center',
-                                    borderWidth: 1,
-                                    borderColor: theme.border,
-                                    flexDirection: 'row',
-                                    justifyContent: 'center',
-                                    gap: 8,
-                                    opacity: isCheckingModel ? 0.7 : 1
-                                }}
-                            >
-                                {isCheckingModel ? (
-                                    <ActivityIndicator size="small" color={theme.text} />
-                                ) : (
-                                    <CheckCircle size={16} color={theme.text} />
-                                )}
-                                <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
-                                    {isCheckingModel ? "Verifying..." : "Check Availability"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
 
                     <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 20 }} />
 
