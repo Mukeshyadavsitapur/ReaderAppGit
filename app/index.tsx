@@ -21415,8 +21415,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         INSTRUCTION:
         For EACH word in the list, return a Dictionary Object.
         
-        STRICT OUTPUT FORMAT:
-        Return a single JSON Array containing an object for each word.
+        FORMATTING:
+        1. JSON PREFERRED: Return a single JSON Array containing an object for each word.
         [
           {
             "word": "Base form",
@@ -21430,43 +21430,84 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
           },
           ...
         ]
+        2. TEXT FALLBACK: If you cannot provide valid JSON for any reason, provide a clear and detailed dictionary definition in plain text.
         `;
 
         try {
             // Use callLLM's built-in model fallback for reliability
-            const raw = await callLLM(prompt, "Dictionary", true);
+            // jsonMode=false allows models to return plain text if they fail to format JSON
+            const raw = await callLLM(prompt, "Dictionary", false);
 
-            if (!raw || raw.startsWith("Error")) {
+            if (!raw || String(raw).startsWith("Error")) {
                 console.error("Dictionary lookup failed.");
                 return [];
             }
 
             console.log(`Dictionary lookup successful`);
             const cleanJson = extractJSON(raw);
-            let parsed = JSON.parse(cleanJson);
+            let parsed: any = null;
+
+            try {
+                parsed = JSON.parse(cleanJson);
+            } catch (e) {
+                console.log("Dictionary: First JSON.parse failed, attempting repair...");
+                try {
+                    parsed = JSON.parse(repairMalformedJson(cleanJson));
+                } catch (e2) {
+                    console.log("Dictionary: JSON repair failed, using raw fallback (Fix 9)");
+                    // RAW FALLBACK (Fix 9): Return a pseudo-object so the user sees the output even if not JSON
+                    return [{
+                        word: words[0],
+                        definition: raw, // Store full raw response in definition
+                        simple: { definition: raw, examples: [] },
+                        advanced: { definition: raw, examples: [], collocations: [], nuances: "Raw output fallback (parsing failed)" },
+                        phonetic: "",
+                        partOfSpeech: "AI Response",
+                        forms: [],
+                        synonyms: [],
+                        antonyms: []
+                    }];
+                }
+            }
 
             // Groq's json_object mode wraps arrays in an object (e.g. {"definitions": [...]})
-            // Unwrap: if parsed is an object (not array), find the first array-valued property
             if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
                 const arrayProp = Object.values(parsed).find(v => Array.isArray(v));
                 if (Array.isArray(arrayProp)) {
                     parsed = arrayProp;
-                    console.log(`Dictionary: unwrapped Groq object response → array of ${parsed.length}`);
-                } else {
+                } else if (parsed.word || parsed.simple || parsed.advanced) {
                     // Single object result (single-word lookup) — wrap in array
+                    parsed = [parsed];
+                } else {
+                    // Unknown object structure with no array — wrap as is
                     parsed = [parsed];
                 }
             }
 
-            // SANITIZATION: Ensure definitions are strings, not objects (fixes "Objects are not valid as React child" error)
+            // SANITIZATION: Ensure definitions are strings, not objects
             const sanitized = Array.isArray(parsed) ? parsed.map((item: any) => {
-                if (item.simple && typeof item.simple.definition === 'object') {
-                    item.simple.definition = Object.values(item.simple.definition).join(' / ');
+                let obj = item;
+                // Fix: convert string items to objects to avoid TypeError (e.g. "Cannot create property 'word' on string")
+                if (typeof item === 'string') {
+                    obj = { word: item };
+                } else if (!item || typeof item !== 'object') {
+                    obj = { word: words[0] };
                 }
-                if (item.advanced && typeof item.advanced.definition === 'object') {
-                    item.advanced.definition = Object.values(item.advanced.definition).join(' / ');
+
+                // Ensure there is at least a word field
+                if (!obj.word) obj.word = words[0];
+
+                if (obj.simple && typeof obj.simple.definition === 'object') {
+                    obj.simple.definition = Object.values(obj.simple.definition).join(' / ');
                 }
-                return item;
+                if (obj.advanced && typeof obj.advanced.definition === 'object') {
+                    obj.advanced.definition = Object.values(obj.advanced.definition).join(' / ');
+                }
+                // If the model changed the key to 'definition' instead of 'simple.definition'
+                if (!obj.simple && obj.definition) {
+                    obj.simple = { definition: obj.definition, examples: obj.examples || [] };
+                }
+                return obj;
             }) : [];
 
             return sanitized;
