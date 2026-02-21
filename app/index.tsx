@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { HINDI_UI_DATA } from './constants/HindiUiData';
 
 // ---- GLOBAL ASYNCSTORAGE SAFETY PROXY ----
 // SQLite (AsyncStorage's backend) can throw SQLITE_FULL (code 13) even during READ operations
@@ -6826,7 +6827,6 @@ export default function App() {
                 })),
                 toolPrompts: TOOL_QUICK_PROMPTS,
                 subjectPrompts: SUBJECT_QUICK_PROMPTS,
-                // ... all action lists ...
                 visionActions: VISION_QUICK_ACTIONS,
                 documentActions: DOCUMENT_QUICK_ACTIONS,
                 quizVisionActions: QUIZ_VISION_QUICK_ACTIONS,
@@ -6850,67 +6850,36 @@ export default function App() {
             };
 
             try {
-                const translationRule = keepLabels
-                    ? `CRITICAL INSTRUCTION FOR PARTIAL TRANSLATION:
-                   - Field "prompt": TRANSLATE value to ${targetLang}.
-                   - Field "placeholder": TRANSLATE value to ${targetLang}.
-                   - Field "label": DO NOT TRANSLATE. KEEP IN ENGLISH.
-                   - Field "title": DO NOT TRANSLATE. KEEP IN ENGLISH.
-                   - Field "actionLabel": DO NOT TRANSLATE. KEEP IN ENGLISH.
-                   - Field "description": DO NOT TRANSLATE. KEEP IN ENGLISH.
-                   
-                   Example for Quick Prompt:
-                   Input: { "label": "Summarize", "prompt": "Summarize this text." }
-                   Output: { "label": "Summarize", "prompt": "[Translated prompt in ${targetLang}]" }`
-                    : `TRANSLATE ALL VALUES (title, label, prompt, placeholder, actionLabel, description, and staticText content) to ${targetLang}.`;
+                // NEW: Use static Hindi translation instantly, ignoring keepLabels preference for simplicity.
+                if (targetLang === 'Hindi') {
+                    console.log("[UI Translation] Applying static Hindi translation.");
+                    const mergedTools = SCHOOL_TOOLS.map((tool, index) => ({
+                        ...tool,
+                        ...HINDI_UI_DATA.tools[index],
+                        Icon: tool.Icon
+                    }));
 
-                const prompt = `
-              Task: Transform the JSON object for an App Interface.
-              Target Language: ${targetLang}.
-              
-              RULES:
-              1. Preserve the exact JSON structure and keys.
-              2. ${translationRule}
-              3. Do NOT translate "id", "role", "type", "color", "iconName" or keys of the objects.
-              4. Return VALID JSON only.
-              
-              JSON:
-              ${JSON.stringify(textPayload)}
-              `;
+                    const newUiData = {
+                        ...uiData,
+                        ...HINDI_UI_DATA,
+                        tools: mergedTools,
+                        staticText: HINDI_UI_DATA.staticText
+                    };
 
-                const raw = await callLLM(prompt, "System Translator", true, "gemini-2.5-flash-lite");
-
-                if (!raw || raw.startsWith("Error")) {
-                    console.warn("UI Translation failed:", raw);
+                    // Cache and Set
+                    setUiCache((prev: any) => {
+                        const updated = { ...prev, [cacheKey]: newUiData };
+                        AsyncStorage.setItem('ui_translations_cache', JSON.stringify(updated));
+                        return updated;
+                    });
+                    setUiData(newUiData);
                     return;
                 }
 
-                const clean = extractJSON(raw);
-                const translatedText = JSON.parse(clean);
+                // NEW: If NOT Hindi, keep UI in English (don't call LLM)
+                console.log(`[UI Translation] Language ${targetLang} requested, keeping English UI.`);
+                setUiData((prev: any) => ({ ...prev, ...(uiCache as any)["English"] }));
 
-                const mergedTools = SCHOOL_TOOLS.map((tool, index) => ({
-                    ...tool,
-                    ...translatedText.tools[index],
-                    Icon: tool.Icon
-                }));
-
-                // FIX: Ensure staticText is never undefined. Fallback to STATIC_TEXT if translation missing.
-                const finalStaticText = (keepLabels || !translatedText.staticText) ? STATIC_TEXT : translatedText.staticText;
-
-                const newUiData = {
-                    ...uiData,
-                    ...translatedText,
-                    tools: mergedTools,
-                    staticText: finalStaticText
-                };
-
-                // Cache and Set
-                setUiCache((prev: any) => {
-                    const updated = { ...prev, [cacheKey]: newUiData };
-                    AsyncStorage.setItem('ui_translations_cache', JSON.stringify(updated));
-                    return updated;
-                });
-                setUiData(newUiData);
             } catch (e) {
                 console.warn("UI Translation failed", e);
             }
@@ -11983,7 +11952,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 openAiMessages.push({ role: "user", content: String(contents) });
             }
 
-            let groqModelsToTry = modelOverride ? [modelOverride] : [...GROQ_MODELS];
+            // NEW: Ignore Gemini model overrides when routing to Groq
+            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...GROQ_MODELS];
 
             // NEW: If images are present, we MUST use a vision model for Groq
             if (hasVisionParts) {
@@ -22687,21 +22657,21 @@ RULES:
             );
         } else if (appMode === 'idle') {
             if (activeTab === 'library') {
-                displayTitle = "Library";
+                displayTitle = uiData.staticText?.tabs?.library || "Library";
             }
             if (activeTab === 'notes') {
                 if (isSaving) {
                     displayTitle = "Saving...";
                 } else {
-                    displayTitle = isEditingNote ? "Edit Note" : "My Notes";
+                    displayTitle = isEditingNote ? (uiData.staticText?.notes?.edit || "Edit Note") : (uiData.staticText?.notes?.title || "My Notes");
                 }
             }
-            if (activeTab === 'dictionary') displayTitle = "Dictionary";
-            if (activeTab === 'studio') displayTitle = "All Apps";
+            if (activeTab === 'dictionary') displayTitle = uiData.staticText?.tabs?.dictionary || "Dictionary";
+            if (activeTab === 'studio') displayTitle = uiData.staticText?.tabs?.studio || "All Apps";
             if (activeTab === 'story') {
-                displayTitle = storyTabMode === 'editorial' ? "Editorial Writer" : "Story Generator";
+                displayTitle = storyTabMode === 'editorial' ? "Editorial Writer" : (uiData.staticText?.story?.title || "Story Generator");
             }
-            if (activeTab === 'settings') displayTitle = "Settings";
+            if (activeTab === 'settings') displayTitle = uiData.staticText?.tabs?.settings || "Settings";
 
             if (activeTab !== 'home') {
                 closeAction = () => {
@@ -25498,7 +25468,7 @@ RULES:
                         }}
                     >
                         <RefreshCcw size={18} color="#ef4444" />
-                        <Text style={{ color: "#ef4444", fontWeight: 'bold', fontSize: 14 }}>Reset All Data</Text>
+                        <Text style={{ color: "#ef4444", fontWeight: 'bold', fontSize: 14 }}>{uiData.staticText?.settings?.clearData || "Reset All Data"}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -25875,7 +25845,7 @@ RULES:
                 <TextInput
                     style={[styles.searchInput, { color: theme.text, marginLeft: 10 }]} // Added marginLeft since button is gone
                     // FIXED: Unified Placeholder
-                    placeholder="Search library or ask AI..."
+                    placeholder={uiData.staticText?.home?.searchOnline || "Search library or ask AI..."}
                     placeholderTextColor={theme.secondary}
                     value={quickSearchQuery}
                     onChangeText={setQuickSearchQuery}
@@ -25982,7 +25952,7 @@ RULES:
         <View style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border, marginBottom: marginBottom, height: 50, borderRadius: 12 }]}>
             <TextInput
                 style={[styles.searchInput, { color: theme.text, fontSize: 16, marginLeft: 10 }]}
-                placeholder="Type a word..."
+                placeholder={uiData.staticText?.dictionary?.search || "Type a word..."}
                 placeholderTextColor={theme.secondary}
                 value={dictionaryInput}
                 onChangeText={setDictionaryInput}
@@ -26103,15 +26073,15 @@ RULES:
                                                 borderBottomColor: theme.id === 'day' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)'
                                             }}>
                                                 <View style={[styles.welcomeSection, { marginTop: 0, marginBottom: 15 }]}>
-                                                    <Text style={[styles.welcomeTitle, { color: theme.text }]}>Hello, Friend!</Text>
+                                                    <Text style={[styles.welcomeTitle, { color: theme.text }]}>{uiData.staticText?.home?.welcome || "Hello, Friend!"}</Text>
                                                     <Text style={[styles.welcomeSub, { color: theme.secondary }]}>
-                                                        What shall we learn in{' '}
+                                                        {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
+                                                        {' '}
                                                         <Text
                                                             onPress={cycleGlobalLanguage}
                                                             style={{ color: primaryColor, fontWeight: 'bold', textDecorationLine: 'underline' }}>
                                                             {displaySettings.language}
                                                         </Text>
-                                                        {' '}today?
                                                     </Text>
                                                 </View>
 
@@ -26169,7 +26139,7 @@ RULES:
                                                                     fontSize: 12,
                                                                     textTransform: 'uppercase'
                                                                 }}>
-                                                                    Recent Words Flashcards (200)
+                                                                    {uiData.staticText?.home?.dictTitle || "Recent Words Flashcards"} ({recentSearches.length})
                                                                 </Text>
                                                                 <TouchableOpacity
                                                                     onPress={() => setIsDictionaryExpanded(!isDictionaryExpanded)}
@@ -26761,7 +26731,7 @@ RULES:
                                                 <View style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border, marginBottom: 10 }]}>
                                                     <TextInput
                                                         style={[styles.searchInput, { color: theme.text }]}
-                                                        placeholder="Search library..."
+                                                        placeholder={uiData.staticText?.library?.search || "Search library..."}
                                                         placeholderTextColor={theme.secondary}
                                                         value={librarySearchQuery}
                                                         onChangeText={setLibrarySearchQuery}
@@ -26837,9 +26807,9 @@ RULES:
                                                             ) : (
                                                                 <>
                                                                     <NotebookPen size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>No journals yet.</Text>
+                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No journals yet."}</Text>
                                                                     <TouchableOpacity onPress={() => setActiveTab('home')} style={{ marginTop: 20 }}>
-                                                                        <Text style={{ color: '#2563eb' }}>Create your first one!</Text>
+                                                                        <Text style={{ color: '#2563eb' }}>{uiData.staticText?.library?.emptySub || "Create your first one!"}</Text>
                                                                     </TouchableOpacity>
                                                                 </>
                                                             )}
@@ -26875,9 +26845,9 @@ RULES:
                                                             ) : (
                                                                 <>
                                                                     <BookOpenText size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>No stories saved yet.</Text>
+                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No stories saved yet."}</Text>
                                                                     <TouchableOpacity onPress={() => setActiveTab('story')} style={{ marginTop: 20 }}>
-                                                                        <Text style={{ color: '#2563eb' }}>Write a Story</Text>
+                                                                        <Text style={{ color: '#2563eb' }}>{uiData.staticText?.library?.emptySub || "Write a Story"}</Text>
                                                                     </TouchableOpacity>
                                                                 </>
                                                             )}
@@ -26921,9 +26891,9 @@ RULES:
                                                                 ) : (
                                                                     <>
                                                                         <Headphones size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                        <Text style={{ color: theme.secondary, marginTop: 10 }}>No offline audio found.</Text>
+                                                                        <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No offline audio found."}</Text>
                                                                         <TouchableOpacity onPress={() => setActiveTab('story')} style={{ marginTop: 20 }}>
-                                                                            <Text style={{ color: '#2563eb' }}>Create a Story & Download Audio</Text>
+                                                                            <Text style={{ color: '#2563eb' }}>{uiData.staticText?.library?.emptySub || "Create a Story & Download Audio"}</Text>
                                                                         </TouchableOpacity>
                                                                     </>
                                                                 )}
@@ -27300,10 +27270,10 @@ RULES:
                                                                     ) : (
                                                                         <>
                                                                             <MonitorCheck size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                            <Text style={{ color: theme.secondary, marginTop: 10 }}>No quizzes.</Text>
+                                                                            <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No quizzes."}</Text>
                                                                             {!librarySearchQuery && (
                                                                                 <TouchableOpacity onPress={() => { setSelectedScenario(SCHOOL_TOOLS.find(t => t.id === 'examiner')); setAppMode('setup'); }} style={{ marginTop: 20 }}>
-                                                                                    <Text style={{ color: '#2563eb' }}>Start a New Quiz</Text>
+                                                                                    <Text style={{ color: '#2563eb' }}>{uiData.staticText?.library?.emptySub || "Start a New Quiz"}</Text>
                                                                                 </TouchableOpacity>
                                                                             )}
                                                                         </>
@@ -27558,10 +27528,10 @@ RULES:
                                                             ListEmptyComponent={
                                                                 <View style={{ alignItems: 'center', marginTop: 50 }}>
                                                                     <Copy size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>No flashcards.</Text>
+                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No flashcards."}</Text>
                                                                     {!librarySearchQuery && (
                                                                         <TouchableOpacity onPress={() => { setSelectedScenario(SCHOOL_TOOLS.find(t => t.id === 'examiner')); setAppMode('setup'); }} style={{ marginTop: 20 }}>
-                                                                            <Text style={{ color: '#2563eb' }}>Create Flashcards</Text>
+                                                                            <Text style={{ color: '#2563eb' }}>{uiData.staticText?.library?.emptySub || "Create Flashcards"}</Text>
                                                                         </TouchableOpacity>
                                                                     )}
                                                                 </View>
@@ -27677,7 +27647,7 @@ RULES:
                                                                         </View>
                                                                     </View>
                                                                 ) : !librarySearchQuery && (
-                                                                    <Text style={{ fontStyle: 'italic', color: theme.secondary, textAlign: 'center' }}>Save words to start a quiz.</Text>
+                                                                    <Text style={{ fontStyle: 'italic', color: theme.secondary, textAlign: 'center' }}>{uiData.staticText?.library?.emptySub || "Save words to start a quiz."}</Text>
                                                                 )}
                                                             </View>
                                                             <FlatList
@@ -27704,7 +27674,7 @@ RULES:
                                                                         ) : (
                                                                             <>
                                                                                 <BookA size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                                <Text style={{ color: theme.secondary, marginTop: 10 }}>No saved words.</Text>
+                                                                                <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No saved words."}</Text>
                                                                             </>
                                                                         )}
                                                                     </View>
@@ -27860,7 +27830,7 @@ RULES:
                                                     ListEmptyComponent={
                                                         <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                                                             <BookOpen size={32} color={theme.secondary} />
-                                                            <Text style={{ color: theme.secondary, marginTop: 10, fontSize: 12, textAlign: 'center' }}>Empty History</Text>
+                                                            <Text style={{ color: theme.secondary, marginTop: 10, fontSize: 12, textAlign: 'center' }}>{uiData.staticText?.dictionary?.empty || "Empty History"}</Text>
                                                         </View>
                                                     }
                                                 />
@@ -28124,7 +28094,7 @@ RULES:
                                                                 <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                                                                     <BookOpen size={48} color={theme.secondary} />
                                                                     <Text style={{ color: theme.secondary, marginTop: 15, textAlign: 'center' }}>
-                                                                        Your history is empty.
+                                                                        {uiData.staticText?.dictionary?.empty || "Your history is empty."}
                                                                     </Text>
                                                                 </View>
                                                             }
@@ -29096,7 +29066,7 @@ RULES:
 
                                                         <TextInput
                                                             style={[styles.searchInput, { color: theme.text }]}
-                                                            placeholder="Search notes..."
+                                                            placeholder={uiData.staticText?.notes?.search || "Search notes..."}
                                                             placeholderTextColor={theme.secondary}
                                                             value={noteSearchQuery}
                                                             onChangeText={setNoteSearchQuery}
@@ -31702,12 +31672,12 @@ RULES:
                             <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
                                 <TouchableOpacity onPress={() => { setActiveTab('story'); setAppMode('idle'); }} style={styles.tabItem}>
                                     <BookAudio size={28} color={activeTab === 'story' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'story' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'story' ? '600' : '400' }}>Studio</Text>
+                                    <Text style={{ color: activeTab === 'story' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'story' ? '600' : '400' }}>{uiData.staticText?.tabs?.studio || "Studio"}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity onPress={() => { setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }} style={styles.tabItem}>
                                     <BookA size={28} color={activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'dictionary' ? '600' : '400' }}>Dictionary</Text>
+                                    <Text style={{ color: activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'dictionary' ? '600' : '400' }}>{uiData.staticText?.tabs?.dictionary || "Dictionary"}</Text>
                                 </TouchableOpacity>
 
                                 {/* Quiz Button (Moved from Home Screen Grid) */}
@@ -31727,18 +31697,18 @@ RULES:
                                     style={styles.tabItem}
                                 >
                                     <BrainCircuit size={28} color={(appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? '600' : '400' }}>Quiz</Text>
+                                    <Text style={{ color: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? '600' : '400' }}>{uiData.tools?.find((t: any) => t.id === 'examiner')?.title || "Quiz"}</Text>
                                 </TouchableOpacity>
 
 
 
                                 <TouchableOpacity onPress={() => { setActiveTab('notes'); setAppMode('idle'); }} style={styles.tabItem}>
                                     <NotebookPen size={28} color={activeTab === 'notes' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'notes' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'notes' ? '600' : '400' }}>Notes</Text>
+                                    <Text style={{ color: activeTab === 'notes' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'notes' ? '600' : '400' }}>{uiData.staticText?.tabs?.notes || "Notes"}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity onPress={() => { setActiveTab('library'); setAppMode('idle'); }} style={styles.tabItem}>
                                     <Library size={28} color={activeTab === 'library' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'library' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'library' ? '600' : '400' }}>Library</Text>
+                                    <Text style={{ color: activeTab === 'library' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'library' ? '600' : '400' }}>{uiData.staticText?.tabs?.library || "Library"}</Text>
                                 </TouchableOpacity>
                             </View>
                         )
@@ -31760,7 +31730,7 @@ RULES:
                                     <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: theme.highlight, alignItems: 'center', justifyContent: 'center' }}>
                                         <Palette size={18} color={primaryColor} />
                                     </View>
-                                    <Text style={[styles.modalTitle, { color: theme.text, fontSize: 20 }]}>Appearance</Text>
+                                    <Text style={[styles.modalTitle, { color: theme.text, fontSize: 20 }]}>{uiData.staticText?.settings?.appearance || "Appearance"}</Text>
                                 </View>
                                 <TouchableOpacity onPress={() => setShowAppearance(false)} style={{ padding: 8, backgroundColor: theme.buttonBg, borderRadius: 20 }}>
                                     <X size={20} color={theme.text} />
@@ -31775,7 +31745,7 @@ RULES:
 
                                 {/* VISUAL THEME SECTION */}
                                 <View style={styles.appearanceSection}>
-                                    <Text style={[styles.appearanceSectionTitle, { color: theme.secondary }]}>VISUAL THEME</Text>
+                                    <Text style={[styles.appearanceSectionTitle, { color: theme.secondary }]}>{uiData.staticText?.settings?.theme || "VISUAL THEME"}</Text>
                                     <ScrollView
                                         horizontal
                                         showsHorizontalScrollIndicator={false}
