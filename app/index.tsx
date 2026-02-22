@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { HINDI_UI_DATA } from './constants/HindiUiData';
+
 
 // ---- GLOBAL ASYNCSTORAGE SAFETY PROXY ----
 // SQLite (AsyncStorage's backend) can throw SQLITE_FULL (code 13) even during READ operations
@@ -6850,31 +6850,6 @@ export default function App() {
             };
 
             try {
-                // NEW: Use static Hindi translation instantly, ignoring keepLabels preference for simplicity.
-                if (targetLang === 'Hindi') {
-                    console.log("[UI Translation] Applying static Hindi translation.");
-                    const mergedTools = SCHOOL_TOOLS.map((tool, index) => ({
-                        ...tool,
-                        ...HINDI_UI_DATA.tools[index],
-                        Icon: tool.Icon
-                    }));
-
-                    const newUiData = {
-                        ...uiData,
-                        ...HINDI_UI_DATA,
-                        tools: mergedTools,
-                        staticText: HINDI_UI_DATA.staticText
-                    };
-
-                    // Cache and Set
-                    setUiCache((prev: any) => {
-                        const updated = { ...prev, [cacheKey]: newUiData };
-                        AsyncStorage.setItem('ui_translations_cache', JSON.stringify(updated));
-                        return updated;
-                    });
-                    setUiData(newUiData);
-                    return;
-                }
 
                 // NEW: If NOT Hindi, keep UI in English (don't call LLM)
                 console.log(`[UI Translation] Language ${targetLang} requested, keeping English UI.`);
