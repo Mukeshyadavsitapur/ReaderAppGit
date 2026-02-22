@@ -5378,13 +5378,13 @@ const OnboardingPreviewFooter = ({
                     onPress={() => setProvider('groq')}
                     style={{ flex: 1, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: isGroq ? '#4f46e5' : theme.border, backgroundColor: isGroq ? '#4f46e520' : theme.inputBg, alignItems: 'center' }}
                 >
-                    <Text style={{ color: isGroq ? '#4f46e5' : theme.secondary, fontWeight: isGroq ? 'bold' : 'normal', fontSize: 13 }}>Groq (Fast/Default)</Text>
+                    <Text style={{ color: isGroq ? '#4f46e5' : theme.secondary, fontWeight: isGroq ? 'bold' : 'normal', fontSize: 13 }}>Groq (Recommended)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     onPress={() => setProvider('gemini')}
                     style={{ flex: 1, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: !isGroq ? '#4f46e5' : theme.border, backgroundColor: !isGroq ? '#4f46e520' : theme.inputBg, alignItems: 'center' }}
                 >
-                    <Text style={{ color: !isGroq ? '#4f46e5' : theme.secondary, fontWeight: !isGroq ? 'bold' : 'normal', fontSize: 13 }}>Gemini (Vision)</Text>
+                    <Text style={{ color: !isGroq ? '#4f46e5' : theme.secondary, fontWeight: !isGroq ? 'bold' : 'normal', fontSize: 13 }}>Gemini</Text>
                 </TouchableOpacity>
             </View>
 
@@ -5544,9 +5544,9 @@ export default function App() {
         availableLanguages: ["English"],
         primaryLanguage: "English", // NEW
         voice: "Kore",
-        onlineTtsEnabled: true,
-        offlineSttEnabled: false, // NEW: Offline STT Fallback
-        imageGenerationEnabled: true,
+        onlineTtsEnabled: false,
+        offlineSttEnabled: true, // NEW: Offline STT Fallback
+        imageGenerationEnabled: false,
         llmProvider: "groq", // UPDATED: Default to Groq
         showPersonalDictionary: true,
         preventSleep: false,
@@ -5640,12 +5640,27 @@ export default function App() {
     });
 
     const getOfflineSTT = (): Promise<string | null> => {
-        return new Promise((resolve) => {
+        return new Promise(async (resolve) => {
             if (!ExpoSpeechRecognitionModule) {
                 showToast("⚠️ Speech Recognition module not found. Rebuild may be required.");
                 resolve(null);
                 return;
             }
+
+            try {
+                const permResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+                if (!permResult.granted) {
+                    showToast("⚠️ Microphone permission is required for speech recognition.");
+                    resolve(null);
+                    return;
+                }
+            } catch (e) {
+                console.warn("Offline STT Permission request failed", e);
+                showToast("⚠️ Failed to request microphone permission.");
+                resolve(null);
+                return;
+            }
+
             offlineSTTResolver.current = resolve;
             ExpoSpeechRecognitionModule.start({
                 lang: displaySettings.offlineTtsLanguage || "en-US",
@@ -25350,6 +25365,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             <Text style={{ fontSize: 12, color: theme.secondary }}>
                                 High quality AI narrator
                             </Text>
+                            {displaySettings.onlineTtsEnabled && (
+                                <Text style={{ fontSize: 11, color: '#f97316', marginTop: 4, fontStyle: 'italic' }}>
+                                    ⚠️ Note: Online TTS may slow down AI response times.
+                                </Text>
+                            )}
                         </View>
                         <TouchableOpacity
                             activeOpacity={0.8}
@@ -25394,6 +25414,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             <Text style={{ fontSize: 12, color: theme.secondary }}>
                                 Use device dictation (No internet needed)
                             </Text>
+                            {!displaySettings.offlineSttEnabled && (
+                                <Text style={{ fontSize: 11, color: '#f97316', marginTop: 4, fontStyle: 'italic' }}>
+                                    ⚠️ Note: Online STT may slow down AI response times.
+                                </Text>
+                            )}
                         </View>
                         <TouchableOpacity
                             activeOpacity={0.8}
@@ -25438,6 +25463,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             <Text style={{ fontSize: 12, color: theme.secondary }}>
                                 {displaySettings.llmProvider === 'groq' ? 'Generate visual diagrams (via Gemini)' : 'Generate visual diagrams'}
                             </Text>
+                            {displaySettings.imageGenerationEnabled && (
+                                <Text style={{ fontSize: 11, color: '#f97316', marginTop: 4, fontStyle: 'italic' }}>
+                                    ⚠️ Note: AI Image generation may slow down AI response times.
+                                </Text>
+                            )}
                         </View>
                         <TouchableOpacity
                             activeOpacity={0.8}
