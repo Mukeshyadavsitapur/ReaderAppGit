@@ -1608,11 +1608,8 @@ If you're not ready to connect yet, enjoy features that work **100% offline**:
 // const AD_IMAGE = require("./assets/banner.jpg");
 
 const TEXT_MODELS = [
-    "gemini-3.0-ultra",
-    "gemini-3.0-pro-exp",
-    "gemini-3.0-flash-exp",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
+    "gemini-2.5-flash",         //move "gemini-2.5-flash" as first priority model
+    "gemini-2.5-pro",          //remove gemini-3.0 model due to error keep only working model
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash-preview-09-2025"
 ];
@@ -2170,8 +2167,7 @@ const CHATBOT_CHARACTERS: any[] = [
         id: 'shorty_bot',
         title: 'Shorty (Quick Answers)',
         role: 'Brevity Specialist',
-        prompt: 'You are Shorty, a brevity specialist. Your goal is to give extremely short and concise answers. CRITICAL: Your total response, including follow-up questions, MUST NOT exceed 500 characters. Be direct and precise. Always end with a very short question. REMEMBER the chat history to provide better context and feedback.',
-        iconName: 'Zap',
+        prompt: 'You are Shorty, a brevity specialist. Your goal is to give extremely short and concise answers. CRITICAL: Your total response, including follow-up questions, MUST NOT exceed 500 characters. DO NOT use ellipsis for cutting off; simply be very brief. Always end with a very short question. REMEMBER the chat history to provide better context.',
         color: ['#f59e0b', '#d97706'], // Amber/Orange
         greeting: "Hi! I'm Shorty. I give quick answers. What's on your mind?"
     },
@@ -2179,7 +2175,7 @@ const CHATBOT_CHARACTERS: any[] = [
         id: 'wordy_bot',
         title: 'Wordy (Vocab Tutor)',
         role: 'Recent Words Practice',
-        prompt: 'You are Wordy, a vocab tutor. You help the user practice words they recently searched. DO NOT provide dictionary definitions (user can search themselves). Instead, focus on providing natural EXAMPLES, pronunciation tips (how to sound more native), and POSING PRACTICE QUESTIONS (one at a time). CRITICAL: Your response MUST NOT exceed 500 characters. REMEMBER the chat history to provide better feedback and more practice questions if asked.',
+        prompt: 'You are Wordy, a vocab tutor. You help the user practice words they recently searched. DO NOT provide dictionary definitions. Instead, focus on natural EXAMPLES, pronunciation tips, and POSING ONE PRACTICE QUESTION at a time. CRITICAL: Your response MUST NOT exceed 500 characters. REMEMBER the chat history for continuous practice.',
         iconName: 'BookOpen',
         color: ['#3b82f6', '#2563eb'], // Blue
         greeting: "Hello! I'm Wordy. Let's practice the words you recently searched!"
@@ -2188,7 +2184,7 @@ const CHATBOT_CHARACTERS: any[] = [
         id: 'acti_bot',
         title: 'Acti (Activity Guide)',
         role: 'Recent Activity Guide',
-        prompt: 'You are Acti, an activity guide. You help the user reflect on their MOST RECENT app activity. You will receive a summary of the single most recent session. Use it to suggest what to learn next or review. CRITICAL: Your response MUST NOT exceed 500 characters. REMEMBER the chat history to provide more details or feedback if asked.',
+        prompt: 'You are Acti, an activity guide. You help the user reflect on their MOST RECENT session. Suggest what to learn next or review based on the summary provided. CRITICAL: Your response MUST NOT exceed 500 characters. REMEMBER the history to provide details if asked.',
         iconName: 'Activity',
         color: ['#ec4899', '#db2777'], // Pink
         greeting: "Hi! I'm Acti. Let's talk about what you've been doing."
@@ -26135,12 +26131,7 @@ RULES:
 
             let aiText = typeof response === 'string' ? response : (response?.text ?? "I'm sorry, I couldn't process that.");
 
-            // ENFORCE: Short Answer Limit (Shorty, Wordy, Acti)
-            const charsWithLimit = ['shorty_bot', 'wordy_bot', 'acti_bot'];
-            if (charsWithLimit.includes(activeChatbotChar?.id) && aiText.length > 500) {
-                // Truncate and add ellipsis
-                aiText = aiText.substring(0, 497) + "...";
-            }
+            // REMOVED: Hard truncation (Letting LLM prompts handle brevity instead)
 
             const aiMsg: Message = {
                 id: 'ai_' + Date.now(),
@@ -26155,10 +26146,21 @@ RULES:
             // Automated TTS response (FORCED OFFLINE for flow)
             if (aiText) {
                 let textToSpeak = aiText;
+
+                // Refinement: If Wordy, skip the pronunciation line for audio (to avoid IPA spelling)
+                if (activeChatbotChar?.id === 'wordy_bot') {
+                    textToSpeak = textToSpeak.replace(/Pronunciation:.*(?=\n|$)/gi, '');
+                }
+
                 // Refinement: If Trans-O-Bot, strip the "Tricky parts explained" from AUDIO
                 if (activeChatbotChar?.id === 'trans_o_bot') {
-                    textToSpeak = aiText.replace(/Tricky parts explained[\s\S]*?(?=Try saying|Would you like|$)/i, '');
+                    textToSpeak = textToSpeak.replace(/Tricky parts explained[\s\S]*?(?=Try saying|Would you like|$)/i, '');
                 }
+
+                // Refinement: Remove IPA phonetic strings (text between slashes /.../)
+                // and other phonetic symbols that offline TTS might spell out.
+                textToSpeak = textToSpeak.replace(/\/[^\/]+\//g, '');
+
                 const cleaned = cleanTextForDisplay(textToSpeak);
                 speak(cleaned, 0, true, false, null, true); // forceOffline = true
             }
