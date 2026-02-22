@@ -2165,6 +2165,33 @@ const CHATBOT_CHARACTERS: any[] = [
         iconName: 'Languages',
         color: ['#06b6d4', '#0891b2'], // Cyan
         greeting: "Beep boop! I am Trans-O-Bot. I can help you translate anything! What should we translate first?"
+    },
+    {
+        id: 'shorty_bot',
+        title: 'Shorty (Quick Answers)',
+        role: 'Brevity Specialist',
+        prompt: 'You are Shorty, a brevity specialist. Your goal is to give extremely short and concise answers. CRITICAL: Your total response, including follow-up questions, MUST NOT exceed 500 characters. Be direct and precise. Always end with a very short question. REMEMBER the chat history to provide better context and feedback.',
+        iconName: 'Zap',
+        color: ['#f59e0b', '#d97706'], // Amber/Orange
+        greeting: "Hi! I'm Shorty. I give quick answers. What's on your mind?"
+    },
+    {
+        id: 'wordy_bot',
+        title: 'Wordy (Vocab Tutor)',
+        role: 'Recent Words Practice',
+        prompt: 'You are Wordy, a vocab tutor. You help the user practice words they recently searched. DO NOT provide dictionary definitions (user can search themselves). Instead, focus on providing natural EXAMPLES, pronunciation tips (how to sound more native), and POSING PRACTICE QUESTIONS (one at a time). CRITICAL: Your response MUST NOT exceed 500 characters. REMEMBER the chat history to provide better feedback and more practice questions if asked.',
+        iconName: 'BookOpen',
+        color: ['#3b82f6', '#2563eb'], // Blue
+        greeting: "Hello! I'm Wordy. Let's practice the words you recently searched!"
+    },
+    {
+        id: 'acti_bot',
+        title: 'Acti (Activity Guide)',
+        role: 'Recent Activity Guide',
+        prompt: 'You are Acti, an activity guide. You help the user reflect on their MOST RECENT app activity. You will receive a summary of the single most recent session. Use it to suggest what to learn next or review. CRITICAL: Your response MUST NOT exceed 500 characters. REMEMBER the chat history to provide more details or feedback if asked.',
+        iconName: 'Activity',
+        color: ['#ec4899', '#db2777'], // Pink
+        greeting: "Hi! I'm Acti. Let's talk about what you've been doing."
     }
 ];
 
@@ -23010,23 +23037,47 @@ RULES:
     };
 
     const handleChatbotCharSelect = (char: any) => {
-        setActiveChatbotChar(char);
+        let personalGreeting = char.greeting;
+        let systemContext = "";
+
+        // Context Injection for Special Characters
+        if (char.id === 'wordy_bot') {
+            const lastWords = recentSearches.slice(0, 10).map((w: any) => typeof w === 'string' ? w : w.word);
+            if (lastWords.length > 0) {
+                personalGreeting = `Hello! I'm Wordy. I see you recently searched for: ${lastWords.join(', ')}. Let's practice these words! Which one should we start with?`;
+                systemContext = `\n\nUSER CONTEXT (Recent Words): ${lastWords.join(', ')}`;
+            }
+        } else if (char.id === 'acti_bot') {
+            const recentSessions = Object.values(chatSessions || {})
+                .sort((a: any, b: any) => {
+                    const timeA = new Date(a.lastOpened || a.timestamp).getTime();
+                    const timeB = new Date(b.lastOpened || b.timestamp).getTime();
+                    return timeB - timeA;
+                })
+                .slice(0, 1); // ONLY ONE RECENT ACTIVITY
+
+            if (recentSessions.length > 0) {
+                const sessionTitle = (recentSessions[0] as any).title || "Untitled Session";
+                personalGreeting = `Hi! I'm Acti. I see you've been working on "${sessionTitle}" recently. Let's talk about it!`;
+                systemContext = `\n\nUSER CONTEXT (Most Recent Activity): ${sessionTitle}`;
+            }
+        }
+
+        // Create modified character object with context if needed
+        const activeChar = systemContext ? { ...char, prompt: char.prompt + systemContext } : char;
+        setActiveChatbotChar(activeChar);
+
         const greetingMsg: Message = {
             id: 'greeting_' + Date.now(),
             role: 'assistant',
-            content: char.greeting,
+            content: personalGreeting,
             timestamp: new Date().toISOString()
         };
         setChatbotMessages([greetingMsg]);
 
         // Auto-speak greeting
-        if (displaySettings.onlineTtsEnabled) {
-            speak(char.greeting);
-        } else {
-            // Apply offline cleaning for consistency
-            const cleaned = cleanTextForDisplay(char.greeting);
-            speak(cleaned);
-        }
+        const textToSpeak = displaySettings.onlineTtsEnabled ? personalGreeting : cleanTextForDisplay(personalGreeting);
+        speak(textToSpeak, 0, true, false, null, true); // forceOffline = true
     };
 
     const renderChatbotHome = () => {
@@ -26015,10 +26066,22 @@ RULES:
                 keyToUse = groqKey;
             }
 
-            const contents = chatbotMessages.concat(userMsg).map(m => ({
+            // Prep history for context persistence
+            let contents = chatbotMessages.concat(userMsg).map(m => ({
                 role: m.role === 'assistant' ? 'model' : 'user',
                 parts: [{ text: m.content }]
             }));
+
+            // Fix for Gemini/Groq: Conversation MUST start with a 'user' message.
+            // If it starts with 'model' (the greeting), we'll skip the greeting in the LLM context.
+            if (contents.length > 0 && contents[0].role === 'model') {
+                contents = contents.slice(1);
+            }
+
+            // Ensure we don't send an empty array if somehow that happened
+            if (contents.length === 0) {
+                contents = [{ role: 'user', parts: [{ text: userMsg.content }] }];
+            }
 
             let response;
             try {
@@ -26047,7 +26110,14 @@ RULES:
                 }
             }
 
-            const aiText = typeof response === 'string' ? response : (response?.text ?? "I'm sorry, I couldn't process that.");
+            let aiText = typeof response === 'string' ? response : (response?.text ?? "I'm sorry, I couldn't process that.");
+
+            // ENFORCE: Short Answer Limit (Shorty, Wordy, Acti)
+            const charsWithLimit = ['shorty_bot', 'wordy_bot', 'acti_bot'];
+            if (charsWithLimit.includes(activeChatbotChar?.id) && aiText.length > 500) {
+                // Truncate and add ellipsis
+                aiText = aiText.substring(0, 497) + "...";
+            }
 
             const aiMsg: Message = {
                 id: 'ai_' + Date.now(),
