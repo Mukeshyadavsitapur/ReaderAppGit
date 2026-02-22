@@ -268,8 +268,10 @@ export interface Theme {
 }
 
 export interface Message {
+    id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
+    timestamp?: string;
 }
 
 export interface Highlight {
@@ -2135,6 +2137,36 @@ const loadRecentSearchesFromFile = async () => {
 };
 
 // REMOVED: AMBIENT_SOUNDS constant
+
+const CHATBOT_CHARACTERS: any[] = [
+    {
+        id: 'luna_teacher',
+        title: 'Luna (Teacher)',
+        role: 'Encouraging Language Tutor',
+        prompt: 'You are Luna, an encouraging and patient language tutor. Your goal is to help the user learn their selected language. Always be positive, correct mistakes gently, and always end your responses with a follow-up question that encourages the user to keep practicing. Be precise and concise.',
+        iconName: 'GraduationCap',
+        color: ['#8b5cf6', '#7c3aed'], // Purple
+        greeting: "Hello! I'm Luna. I'm so excited to help you practice! What would you like to talk about today?"
+    },
+    {
+        id: 'buddy_friend',
+        title: 'Buddy (Friend)',
+        role: 'Casual Native Speaker',
+        prompt: 'You are Buddy, a friendly and casual native speaker. Talk to the user like a close friend. Use informal language, slang (where appropriate), and keep the conversation light and fun. Always end with a question to keep the chat going. Be precise and concise.',
+        iconName: 'Smile',
+        color: ['#10b981', '#059669'], // Emerald
+        greeting: "Hey there! I'm Buddy. Great to see you! How's your day going?"
+    },
+    {
+        id: 'trans_o_bot',
+        title: 'Trans-O-Bot (Translator)',
+        role: 'Translation Assistant',
+        prompt: 'You are Trans-O-Bot, a highly efficient translation assistant. Your primary job is to translate what the user says into their target language and explain any tricky parts. Always encourage the user to try repeating the translation. Always end with a question. Be precise and concise.',
+        iconName: 'Languages',
+        color: ['#06b6d4', '#0891b2'], // Cyan
+        greeting: "Beep boop! I am Trans-O-Bot. I can help you translate anything! What should we translate first?"
+    }
+];
 
 const SCHOOL_TOOLS: any[] = [
     // Row 1
@@ -5576,6 +5608,7 @@ export default function App() {
         setWordMap(m);
     }, [savedWords]);
 
+
     const [availableSubjects, setAvailableSubjects] = useState<any[]>([]);
     const [readingSession, setReadingSession] = useState<any>(null);
     const [isEditingNote, setIsEditingNote] = useState<any>(false);
@@ -5598,6 +5631,20 @@ export default function App() {
     const [isExamMode, setIsExamMode] = useState<any>(false);
     const [isFlashcardMode, setIsFlashcardMode] = useState<any>(false);
     const [savedQuestions, setSavedQuestions] = useState<any[]>([]);
+
+    // --- CHATBOT MODE STATE ---
+    const [isChatbotMode, setIsChatbotMode] = useState(false);
+    const [chatbotMessages, setChatbotMessages] = useState<Message[]>([]);
+    const [activeChatbotChar, setActiveChatbotChar] = useState<any>(null);
+    const [isChatbotHeld, setIsChatbotHeld] = useState(false);
+    const chatbotSilenceTimer = useRef<any>(null);
+    const chatbotHoldTimer = useRef<any>(null);
+    const chatbotVolumeRef = useRef<number>(0);
+    const [isChatbotTyping, setIsChatbotTyping] = useState(false);
+    const [isChatbotInputExpanded, setIsChatbotInputExpanded] = useState(false);
+    const [chatbotInput, setChatbotInput] = useState("");
+    const [isChatScrolling, setIsChatScrolling] = useState(false);
+    const chatbotScrollRef = useRef<ScrollView>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
     const [dictionaryInput, setDictionaryInput] = useState<any>("");
@@ -5708,6 +5755,59 @@ export default function App() {
 
     // NEW: State to prevent onboarding flash (Race Condition Fix)
     const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+
+    // --- CHATBOT VOICE AUTOMATION EFFECT ---
+    useEffect(() => {
+        let interval: any = null;
+        if (isChatbotMode && isRecording && !isChatbotHeld) {
+            interval = setInterval(async () => {
+                try {
+                    const status = await recorder.getStatus();
+                    if (status.metering !== undefined) {
+                        const volume = status.metering;
+                        // Sensitivity threshold (Depends on expo-audio metering scale: usually -160 to 0)
+                        if (volume < -50) {
+                            if (!chatbotSilenceTimer.current) {
+                                chatbotSilenceTimer.current = setTimeout(() => {
+                                    handleChatbotVoiceToggle(); // Auto-send on 4s silence
+                                }, 4000);
+                            }
+                        } else {
+                            // Sound detected, reset silence timer
+                            if (chatbotSilenceTimer.current) {
+                                clearTimeout(chatbotSilenceTimer.current);
+                                chatbotSilenceTimer.current = null;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Metering error", e);
+                }
+            }, 500);
+        } else {
+            if (chatbotSilenceTimer.current) {
+                clearTimeout(chatbotSilenceTimer.current);
+                chatbotSilenceTimer.current = null;
+            }
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+            if (chatbotSilenceTimer.current) clearTimeout(chatbotSilenceTimer.current);
+        };
+    }, [isChatbotMode, isRecording, isChatbotHeld]);
+
+    // --- AUTO-HOLD EFFECT ---
+    useEffect(() => {
+        if (isChatbotMode && !isChatbotHeld && chatbotMessages.length > 0) {
+            chatbotHoldTimer.current = setTimeout(() => {
+                setIsChatbotHeld(true);
+            }, 20000); // 20s auto-hold
+        }
+        return () => {
+            if (chatbotHoldTimer.current) clearTimeout(chatbotHoldTimer.current);
+        };
+    }, [isChatbotMode, isChatbotHeld, chatbotMessages.length]);
 
     useEffect(() => {
         // Load custom audio mappings
@@ -13378,6 +13478,35 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         setSpeechRange(null);
         setTtsStatus('stopped');
         // Note: We don't clear playingMeta here to allow the UI to show "Last Played" info in Mini Player
+    };
+
+    const endChatbotSession = async () => {
+        // Stop any active TTS
+        stopTTS();
+
+        // Stop recording
+        if (isRecording) {
+            try {
+                setIsRecording(false);
+                await recorder.stop();
+            } catch (e) { }
+        }
+
+        // Clear timers
+        if (chatbotSilenceTimer.current) {
+            clearTimeout(chatbotSilenceTimer.current);
+            chatbotSilenceTimer.current = null;
+        }
+        if (chatbotHoldTimer.current) {
+            clearTimeout(chatbotHoldTimer.current);
+            chatbotHoldTimer.current = null;
+        }
+
+        // Reset state
+        setChatbotMessages([]);
+        setActiveChatbotChar(null);
+        setIsChatbotHeld(false);
+        setIsChatbotTyping(false);
     };
 
     const handleTTSSeek = async (val: number) => {
@@ -22821,12 +22950,41 @@ RULES:
                                 {displayTitle.length > 25 ? displayTitle.substring(0, 25) + '...' : displayTitle}
                             </Text>
                             {activeTab === 'home' && (
-                                <TouchableOpacity
-                                    onPress={handleDownloadDictionary}
-                                    style={{ padding: 4, marginLeft: 2 }}
-                                >
-                                    <DownloadCloud size={18} color={headerIconColor} />
-                                </TouchableOpacity>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            if (isChatbotMode) {
+                                                endChatbotSession();
+                                                setIsChatbotMode(false);
+                                            } else {
+                                                setIsChatbotMode(true);
+                                            }
+                                        }}
+                                        style={{
+                                            padding: 6,
+                                            paddingHorizontal: 10,
+                                            backgroundColor: isChatbotMode ? 'rgba(255,255,255,0.25)' : 'transparent',
+                                            borderRadius: 16,
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            borderWidth: 1,
+                                            borderColor: isChatbotMode ? 'rgba(255,255,255,0.3)' : 'transparent'
+                                        }}
+                                    >
+                                        <Bot size={20} color={headerIconColor} />
+                                        {isChatbotMode && (
+                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>Chatbot</Text>
+                                        )}
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        onPress={handleDownloadDictionary}
+                                        style={{ padding: 4, marginLeft: 2 }}
+                                    >
+                                        <DownloadCloud size={18} color={headerIconColor} />
+                                    </TouchableOpacity>
+                                </View>
                             )}
                         </View>
                     </View>
@@ -22835,6 +22993,77 @@ RULES:
                 <View style={appMode === 'reader' ? { flex: 1 } : { flexDirection: 'row', gap: 10 }}>
                     {rightAction}
                 </View>
+            </View>
+        );
+    };
+
+    const handleChatbotCharSelect = (char: any) => {
+        setActiveChatbotChar(char);
+        const greetingMsg: Message = {
+            id: 'greeting_' + Date.now(),
+            role: 'assistant',
+            content: char.greeting,
+            timestamp: new Date().toISOString()
+        };
+        setChatbotMessages([greetingMsg]);
+
+        // Auto-speak greeting
+        if (displaySettings.onlineTtsEnabled) {
+            speak(char.greeting);
+        } else {
+            // Apply offline cleaning for consistency
+            const cleaned = cleanTextForDisplay(char.greeting);
+            speak(cleaned);
+        }
+    };
+
+    const renderChatbotHome = () => {
+        return (
+            <View style={{ flex: 1, padding: 20 }}>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: theme.text, marginBottom: 10 }}>
+                    Pick a Character
+                </Text>
+                <Text style={{ fontSize: 14, color: theme.secondary, marginBottom: 25 }}>
+                    Select a companion to help you practice your language skills.
+                </Text>
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                    <View style={{ gap: 16 }}>
+                        {CHATBOT_CHARACTERS.map((char) => {
+                            const IconComponent = ICON_MAP[char.iconName] || Bot;
+                            return (
+                                <TouchableOpacity
+                                    key={char.id}
+                                    onPress={() => handleChatbotCharSelect(char)}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        padding: 16,
+                                        backgroundColor: theme.uiBg,
+                                        borderRadius: 20,
+                                        borderWidth: 1,
+                                        borderColor: theme.border,
+                                        gap: 16,
+                                        shadowColor: "#000",
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.05,
+                                        shadowRadius: 4,
+                                        elevation: 2
+                                    }}
+                                >
+                                    <LinearGradient colors={char.color} style={{ width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
+                                        <IconComponent size={28} color="white" />
+                                    </LinearGradient>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginBottom: 4 }}>{char.title}</Text>
+                                        <Text style={{ fontSize: 13, color: theme.secondary }}>{char.role}</Text>
+                                    </View>
+                                    <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </ScrollView>
             </View>
         );
     };
@@ -25740,6 +25969,299 @@ RULES:
     }, [handleLibraryLongPress]);
 
     // Render Functions
+    const handleChatbotSend = async (text: string) => {
+        if (!text.trim()) return;
+        if (!activeChatbotChar) return;
+
+        // Reset timers
+        if (chatbotSilenceTimer.current) {
+            clearTimeout(chatbotSilenceTimer.current);
+            chatbotSilenceTimer.current = null;
+        }
+
+        const userMsg: Message = {
+            id: 'user_' + Date.now(),
+            role: 'user',
+            content: text,
+            timestamp: new Date().toISOString()
+        };
+
+        setChatbotMessages(prev => [...prev, userMsg]);
+        setChatbotInput("");
+        setIsChatbotTyping(true);
+
+        try {
+            const geminiKey = customApiKey || apiKey;
+            const groqKey = displaySettings.groqApiKey;
+            const provider = displaySettings.llmProvider || 'gemini';
+            const key = provider === 'groq' ? groqKey : geminiKey;
+
+            const contents = chatbotMessages.concat(userMsg).map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }]
+            }));
+
+            const response = await callLLM_Internal(
+                contents,
+                activeChatbotChar.prompt,
+                false, // jsonMode
+                null, // modelOverride
+                provider,
+                key
+            );
+
+            const aiText = typeof response === 'string' ? response : (response?.text ?? "I'm sorry, I couldn't process that.");
+
+            const aiMsg: Message = {
+                id: 'ai_' + Date.now(),
+                role: 'assistant',
+                content: aiText,
+                timestamp: new Date().toISOString()
+            };
+
+            setChatbotMessages(prev => [...prev, aiMsg]);
+            setIsChatbotTyping(false);
+
+            // Automated TTS response
+            if (aiText) {
+                if (displaySettings.onlineTtsEnabled) {
+                    speak(aiText);
+                } else {
+                    const cleaned = cleanTextForDisplay(aiText);
+                    speak(cleaned);
+                }
+            }
+
+            // Restart hold timer after response
+            if (chatbotHoldTimer.current) clearTimeout(chatbotHoldTimer.current);
+            chatbotHoldTimer.current = setTimeout(() => {
+                setIsChatbotHeld(true);
+            }, 20000);
+
+        } catch (error) {
+            console.warn("Chatbot LLM Error", error);
+            setIsChatbotTyping(false);
+        }
+    };
+
+    const handleChatbotVoiceToggle = async () => {
+        // Instant stop TTS if microphone is clicked
+        if (ttsStatus === 'playing') {
+            stopTTS();
+        }
+
+        if (isRecording) {
+            setIsRecording(false);
+            await recorder.stop();
+            const uri = recorder.uri;
+            if (uri) {
+                // Transcription logic (Reusing existing STT logic from handleVoiceToggle)
+                // For brevity, I'll call a simplified version or the transcribed result
+                setIsTranscribing(true);
+                const text = await performSTT(uri); // I'll define this helper
+                setIsTranscribing(false);
+                if (text) {
+                    handleChatbotSend(text);
+                }
+            }
+        } else {
+            // Start recording
+            try {
+                await recorder.prepareToRecordAsync(SPEECH_RECORDING_OPTIONS);
+                await recorder.record();
+                setIsRecording(true);
+                setIsChatbotHeld(false);
+
+                // Start silence detection if not held
+                if (chatbotSilenceTimer.current) clearTimeout(chatbotSilenceTimer.current);
+                // Note: Actual silence detection via metering would go in a separate useEffect
+            } catch (e) {
+                console.warn("Recorder Error", e);
+            }
+        }
+    };
+
+    // Helper for STT in chatbot context
+    const performSTT = async (uri: string) => {
+        // This is a condensed version of the logic in handleVoiceToggle
+        const geminiKey = customApiKey || apiKey;
+        const groqKey = displaySettings.groqApiKey;
+        const provider = displaySettings.llmProvider || 'gemini';
+
+        const base64 = await fs.readAsStringAsync(uri, { encoding: fs.EncodingType.Base64 });
+        const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+
+        // Simplified: use Gemini for STT by default in chatbot
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            { text: "Transcribe the following audio precisely. Return ONLY the text." },
+                            { inlineData: { mimeType: mimeType, data: base64 } }
+                        ]
+                    }]
+                })
+            });
+            const data = await response.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        } catch (e) {
+            console.warn("STT Error", e);
+            return null;
+        }
+    };
+
+    const renderChatbotMessaging = () => {
+        if (!activeChatbotChar) return null;
+
+        return (
+            <View style={{ flex: 1, backgroundColor: theme.bg }}>
+                {/* Scrollable Conversation */}
+                <ScrollView
+                    ref={chatbotScrollRef}
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+                    onScrollBeginDrag={() => setIsChatScrolling(true)}
+                    onScrollEndDrag={() => setIsChatScrolling(false)}
+                    onContentSizeChange={() => {
+                        if (!isChatScrolling) chatbotScrollRef.current?.scrollToEnd({ animated: true });
+                    }}
+                >
+                    {chatbotMessages.map((msg, idx) => (
+                        <View key={msg.id} style={{
+                            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                            maxWidth: '85%',
+                            marginBottom: 16,
+                            backgroundColor: msg.role === 'user' ? primaryColor : (theme.id === 'day' ? '#f3f4f6' : theme.uiBg),
+                            padding: 14,
+                            borderRadius: 20,
+                            borderBottomRightRadius: msg.role === 'user' ? 4 : 20,
+                            borderBottomLeftRadius: msg.role === 'assistant' ? 4 : 20,
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.05,
+                            shadowRadius: 2,
+                            elevation: 1
+                        }}>
+                            <InteractiveText
+                                rawText={msg.content}
+                                theme={theme}
+                                onWordPress={handleWordLookup}
+                                style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 16, lineHeight: 22 }}
+                            />
+                            {msg.role === 'assistant' && (
+                                <TouchableOpacity
+                                    onPress={() => speak(msg.content)}
+                                    style={{ alignSelf: 'flex-end', marginTop: 8 }}
+                                >
+                                    <Volume2 size={16} color={theme.secondary} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    ))}
+                    {isChatbotTyping && (
+                        <View style={{ alignSelf: 'flex-start', padding: 14, backgroundColor: theme.uiBg, borderRadius: 20, borderBottomLeftRadius: 4 }}>
+                            <ActivityIndicator size="small" color={primaryColor} />
+                        </View>
+                    )}
+                </ScrollView>
+
+                {/* Automation Overlay (Hold State) */}
+                {isChatbotHeld && (
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', zIndex: 100 }]}>
+                        <View style={{ backgroundColor: theme.bg, padding: 30, borderRadius: 24, alignItems: 'center', gap: 20 }}>
+                            <Pause size={48} color={primaryColor} />
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text }}>On Hold</Text>
+                            <TouchableOpacity
+                                onPress={() => setIsChatbotHeld(false)}
+                                style={{ backgroundColor: primaryColor, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16 }}
+                            >
+                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Resume Call</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+
+                {/* Bottom Controls */}
+                <View style={{
+                    padding: 20,
+                    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+                    borderTopWidth: 1,
+                    borderTopColor: theme.border,
+                    backgroundColor: theme.bg,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 15
+                }}>
+                    <TouchableOpacity
+                        onPress={() => setIsChatbotInputExpanded(!isChatbotInputExpanded)}
+                        style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.uiBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}
+                    >
+                        {isChatbotInputExpanded ? <X size={20} color={theme.text} /> : <FileText size={20} color={theme.text} />}
+                    </TouchableOpacity>
+
+                    {isChatbotInputExpanded ? (
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.uiBg, borderRadius: 22, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 15 }}>
+                            <TextInput
+                                style={{ flex: 1, height: 44, color: theme.text }}
+                                placeholder="Type a message..."
+                                placeholderTextColor={theme.secondary}
+                                value={chatbotInput}
+                                onChangeText={setChatbotInput}
+                                onSubmitEditing={() => handleChatbotSend(chatbotInput)}
+                            />
+                            <TouchableOpacity onPress={() => handleChatbotSend(chatbotInput)}>
+                                <ArrowRight size={20} color={primaryColor} />
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <>
+                            <TouchableOpacity
+                                onPress={handleChatbotVoiceToggle}
+                                style={{
+                                    flex: 1,
+                                    height: 56,
+                                    borderRadius: 28,
+                                    backgroundColor: isRecording ? '#ef4444' : primaryColor,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10,
+                                    shadowColor: isRecording ? '#ef4444' : primaryColor,
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 8,
+                                    elevation: 6
+                                }}
+                            >
+                                {isTranscribing ? (
+                                    <ActivityIndicator size="small" color="white" />
+                                ) : (
+                                    <>
+                                        <Mic size={24} color="white" />
+                                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
+                                            {isRecording ? 'Listening...' : 'Push to Talk'}
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => setIsChatbotHeld(true)}
+                                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.uiBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}
+                            >
+                                <Pause size={20} color={theme.text} />
+                            </TouchableOpacity>
+                        </>
+                    )}
+                </View>
+            </View>
+        );
+    };
+
     const renderLibraryItem = useCallback(({ item }: { item: any }) => {
         if (item.isGroup) {
             return (
@@ -26035,252 +26557,382 @@ RULES:
                             <>
                                 {activeTab === 'home' ? (
                                     <View style={{ flex: 1 }}>
-                                        {/* PERSISTENT HEADER: Greeting + Search Bar (ONLY IN PORTRAIT) */}
-                                        {!isLandscape && (
-                                            <View style={{
-                                                paddingHorizontal: 20,
-                                                paddingTop: 15,
-                                                paddingBottom: 15,
-                                                backgroundColor: theme.bg,
-                                                zIndex: 10,
-                                                // Subtle divider for separation
-                                                borderBottomWidth: 1,
-                                                borderBottomColor: theme.id === 'day' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)'
-                                            }}>
-                                                <View style={[styles.welcomeSection, { marginTop: 0, marginBottom: 15 }]}>
-                                                    <Text style={[styles.welcomeTitle, { color: theme.text }]}>{uiData.staticText?.home?.welcome || "Hello, Friend!"}</Text>
-                                                    <Text style={[styles.welcomeSub, { color: theme.secondary }]}>
-                                                        {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
-                                                        {' '}
-                                                        <Text
-                                                            onPress={cycleGlobalLanguage}
-                                                            style={{ color: primaryColor, fontWeight: 'bold', textDecorationLine: 'underline' }}>
-                                                            {displaySettings.language}
-                                                        </Text>
-                                                    </Text>
-                                                </View>
+                                        {isChatbotMode ? (
+                                            activeChatbotChar ? renderChatbotMessaging() : renderChatbotHome()
+                                        ) : (
+                                            <>
+                                                {/* PERSISTENT HEADER: Greeting + Search Bar (ONLY IN PORTRAIT) */}
+                                                {!isLandscape && (
+                                                    <View style={{
+                                                        paddingHorizontal: 20,
+                                                        paddingTop: 15,
+                                                        paddingBottom: 15,
+                                                        backgroundColor: theme.bg,
+                                                        zIndex: 10,
+                                                        // Subtle divider for separation
+                                                        borderBottomWidth: 1,
+                                                        borderBottomColor: theme.id === 'day' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)'
+                                                    }}>
+                                                        <View style={[styles.welcomeSection, { marginTop: 0, marginBottom: 15 }]}>
+                                                            <Text style={[styles.welcomeTitle, { color: theme.text }]}>{uiData.staticText?.home?.welcome || "Hello, Friend!"}</Text>
+                                                            <Text style={[styles.welcomeSub, { color: theme.secondary }]}>
+                                                                {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
+                                                                {' '}
+                                                                <Text
+                                                                    onPress={cycleGlobalLanguage}
+                                                                    style={{ color: primaryColor, fontWeight: 'bold', textDecorationLine: 'underline' }}>
+                                                                    {displaySettings.language}
+                                                                </Text>
+                                                            </Text>
+                                                        </View>
 
-                                                {renderHomeSearchBar()}
-                                            </View>
-                                        )}
-
-                                        <KeyboardAvoidingView
-                                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                                            style={{ flex: 1 }}
-                                            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-                                        >
-                                            <ScrollView contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 100 }]} keyboardShouldPersistTaps="handled">
-
-                                                {/* SCROLLABLE SEARCH BAR (ONLY IN LANDSCAPE) */}
-                                                {isLandscape && (
-                                                    <View style={{ marginTop: 20, marginBottom: 10, zIndex: 100 }}>
                                                         {renderHomeSearchBar()}
                                                     </View>
                                                 )}
 
-                                                {/* UPDATED: Check displaySettings.showPersonalDictionary */}
-                                                {displaySettings.showPersonalDictionary && recentSearches.length > 0 && (() => {
-                                                    // Handle load more on scroll
-                                                    const handleLoadMore = () => {
-                                                        if (visibleWordCount < recentSearches.length) {
-                                                            setVisibleWordCount((prev: number) => Math.min(prev + 25, 200, recentSearches.length));
-                                                        }
-                                                    };
+                                                <KeyboardAvoidingView
+                                                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                                                    style={{ flex: 1 }}
+                                                    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                                                >
+                                                    <ScrollView contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 100 }]} keyboardShouldPersistTaps="handled">
 
-                                                    const visibleWords = isDictionaryExpanded
-                                                        ? recentSearches.slice(1, visibleWordCount) // Skip first word (shown as preview)
-                                                        : [];
+                                                        {/* SCROLLABLE SEARCH BAR (ONLY IN LANDSCAPE) */}
+                                                        {isLandscape && (
+                                                            <View style={{ marginTop: 20, marginBottom: 10, zIndex: 100 }}>
+                                                                {renderHomeSearchBar()}
+                                                            </View>
+                                                        )}
 
-                                                    // Get first word for preview
-                                                    const firstWord = recentSearches[0];
-                                                    const firstDisplayWord = typeof firstWord === 'string' ? firstWord : firstWord.word;
-                                                    const firstData = typeof firstWord === 'object' ? firstWord.data : null;
-                                                    const firstDisplayDef = firstData?.simple?.definition || firstData?.definition || "Tap to define";
-                                                    const firstDisplayPart = firstData?.partOfSpeech;
+                                                        {/* UPDATED: Check displaySettings.showPersonalDictionary */}
+                                                        {displaySettings.showPersonalDictionary && recentSearches.length > 0 && (() => {
+                                                            // Handle load more on scroll
+                                                            const handleLoadMore = () => {
+                                                                if (visibleWordCount < recentSearches.length) {
+                                                                    setVisibleWordCount((prev: number) => Math.min(prev + 25, 200, recentSearches.length));
+                                                                }
+                                                            };
 
-                                                    return (
-                                                        <View style={{ marginBottom: 25, marginTop: 10 }}>
-                                                            {/* Header with Word Count and Expand Button */}
-                                                            <View style={{
-                                                                flexDirection: 'row',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                marginBottom: 10,
-                                                                paddingHorizontal: 4
-                                                            }}>
-                                                                <Text style={{
-                                                                    color: theme.secondary,
-                                                                    fontWeight: '700',
-                                                                    fontSize: 12,
-                                                                    textTransform: 'uppercase'
-                                                                }}>
-                                                                    {uiData.staticText?.home?.dictTitle || "Recent Words Flashcards"} ({recentSearches.length})
-                                                                </Text>
-                                                                <TouchableOpacity
-                                                                    onPress={() => setIsDictionaryExpanded(!isDictionaryExpanded)}
-                                                                    style={{
+                                                            const visibleWords = isDictionaryExpanded
+                                                                ? recentSearches.slice(1, visibleWordCount) // Skip first word (shown as preview)
+                                                                : [];
+
+                                                            // Get first word for preview
+                                                            const firstWord = recentSearches[0];
+                                                            const firstDisplayWord = typeof firstWord === 'string' ? firstWord : firstWord.word;
+                                                            const firstData = typeof firstWord === 'object' ? firstWord.data : null;
+                                                            const firstDisplayDef = firstData?.simple?.definition || firstData?.definition || "Tap to define";
+                                                            const firstDisplayPart = firstData?.partOfSpeech;
+
+                                                            return (
+                                                                <View style={{ marginBottom: 25, marginTop: 10 }}>
+                                                                    {/* Header with Word Count and Expand Button */}
+                                                                    <View style={{
                                                                         flexDirection: 'row',
                                                                         alignItems: 'center',
-                                                                        gap: 6,
-                                                                        paddingVertical: 6,
-                                                                        paddingHorizontal: 12,
-                                                                        backgroundColor: theme.buttonBg,
-                                                                        borderRadius: 12,
-                                                                        borderWidth: 1,
-                                                                        borderColor: theme.border
-                                                                    }}
-                                                                >
-                                                                    <Text style={{
-                                                                        fontSize: 12,
-                                                                        fontWeight: '600',
-                                                                        color: theme.text
+                                                                        justifyContent: 'space-between',
+                                                                        marginBottom: 10,
+                                                                        paddingHorizontal: 4
                                                                     }}>
-                                                                        {isDictionaryExpanded ? 'Collapse' : 'Expand'}
-                                                                    </Text>
-                                                                    {isDictionaryExpanded ? (
-                                                                        <ChevronUp size={16} color={theme.text} />
-                                                                    ) : (
-                                                                        <ChevronDown size={16} color={theme.text} />
-                                                                    )}
-                                                                </TouchableOpacity>
-                                                            </View>
-
-                                                            {/* First Word Preview (Always Visible) */}
-                                                            <TouchableOpacity
-                                                                onPress={() => {
-                                                                    // Start Flashcards with dynamic count from schoolConfig.length
-                                                                    let count = 10;
-                                                                    const configLength = parseInt(schoolConfig.length);
-                                                                    if (!isNaN(configLength) && configLength > 0) {
-                                                                        count = configLength;
-                                                                    } else {
-                                                                        if (schoolConfig.length === 'Short') count = 5;
-                                                                        if (schoolConfig.length === 'Medium') count = 10;
-                                                                        if (schoolConfig.length === 'Large') count = 25;
-                                                                    }
-                                                                    const subset = recentSearches.slice(0, count);
-                                                                    const flashcardItems = subset.map((si: any) => {
-                                                                        if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
-                                                                        const d = si.data || {};
-                                                                        return {
-                                                                            ...d,
-                                                                            id: d.id,
-                                                                            word: d.word || si.word,
-                                                                            definition: d.definition || d.simple?.definition || "No definition available",
-                                                                            examples: d.examples || d.simple?.examples || []
-                                                                        };
-                                                                    });
-
-                                                                    setFlashcardSession({
-                                                                        items: flashcardItems,
-                                                                        currentIndex: 0,
-                                                                        flipped: false,
-                                                                        type: 'word'
-                                                                    });
-                                                                    setAppMode('flashcards');
-                                                                }}
-                                                                onLongPress={() => deleteRecentSearch(firstDisplayWord)}
-                                                                style={{
-                                                                    flexDirection: 'row',
-                                                                    alignItems: 'center',
-                                                                    padding: 16,
-                                                                    backgroundColor: theme.uiBg,
-                                                                    borderRadius: 20,
-                                                                    borderWidth: 1,
-                                                                    borderColor: theme.border,
-                                                                    shadowColor: "#000",
-                                                                    shadowOffset: { width: 0, height: 2 },
-                                                                    shadowOpacity: 0.05,
-                                                                    shadowRadius: 4,
-                                                                    elevation: 2,
-                                                                    marginBottom: isDictionaryExpanded ? 10 : 0
-                                                                }}
-                                                            >
-                                                                <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'day' ? '#eff6ff' : theme.buttonBg, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                                                                    <BookOpen size={24} color={primaryColor} />
-                                                                </View>
-
-                                                                <View style={{ flex: 1 }}>
-                                                                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                                                                        <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-                                                                            {firstDisplayWord}
+                                                                        <Text style={{
+                                                                            color: theme.secondary,
+                                                                            fontWeight: '700',
+                                                                            fontSize: 12,
+                                                                            textTransform: 'uppercase'
+                                                                        }}>
+                                                                            {uiData.staticText?.home?.dictTitle || "Recent Words Flashcards"} ({recentSearches.length})
                                                                         </Text>
-                                                                        {firstDisplayPart && (
-                                                                            <Text style={{ fontSize: 12, fontWeight: '600', color: theme.secondary, fontStyle: 'italic' }}>
-                                                                                {firstDisplayPart}
+                                                                        <TouchableOpacity
+                                                                            onPress={() => setIsDictionaryExpanded(!isDictionaryExpanded)}
+                                                                            style={{
+                                                                                flexDirection: 'row',
+                                                                                alignItems: 'center',
+                                                                                gap: 6,
+                                                                                paddingVertical: 6,
+                                                                                paddingHorizontal: 12,
+                                                                                backgroundColor: theme.buttonBg,
+                                                                                borderRadius: 12,
+                                                                                borderWidth: 1,
+                                                                                borderColor: theme.border
+                                                                            }}
+                                                                        >
+                                                                            <Text style={{
+                                                                                fontSize: 12,
+                                                                                fontWeight: '600',
+                                                                                color: theme.text
+                                                                            }}>
+                                                                                {isDictionaryExpanded ? 'Collapse' : 'Expand'}
                                                                             </Text>
-                                                                        )}
+                                                                            {isDictionaryExpanded ? (
+                                                                                <ChevronUp size={16} color={theme.text} />
+                                                                            ) : (
+                                                                                <ChevronDown size={16} color={theme.text} />
+                                                                            )}
+                                                                        </TouchableOpacity>
                                                                     </View>
-                                                                    <Text style={{ fontSize: 13, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
-                                                                        {firstDisplayDef}
-                                                                    </Text>
+
+                                                                    {/* First Word Preview (Always Visible) */}
+                                                                    <TouchableOpacity
+                                                                        onPress={() => {
+                                                                            // Start Flashcards with dynamic count from schoolConfig.length
+                                                                            let count = 10;
+                                                                            const configLength = parseInt(schoolConfig.length);
+                                                                            if (!isNaN(configLength) && configLength > 0) {
+                                                                                count = configLength;
+                                                                            } else {
+                                                                                if (schoolConfig.length === 'Short') count = 5;
+                                                                                if (schoolConfig.length === 'Medium') count = 10;
+                                                                                if (schoolConfig.length === 'Large') count = 25;
+                                                                            }
+                                                                            const subset = recentSearches.slice(0, count);
+                                                                            const flashcardItems = subset.map((si: any) => {
+                                                                                if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
+                                                                                const d = si.data || {};
+                                                                                return {
+                                                                                    ...d,
+                                                                                    id: d.id,
+                                                                                    word: d.word || si.word,
+                                                                                    definition: d.definition || d.simple?.definition || "No definition available",
+                                                                                    examples: d.examples || d.simple?.examples || []
+                                                                                };
+                                                                            });
+
+                                                                            setFlashcardSession({
+                                                                                items: flashcardItems,
+                                                                                currentIndex: 0,
+                                                                                flipped: false,
+                                                                                type: 'word'
+                                                                            });
+                                                                            setAppMode('flashcards');
+                                                                        }}
+                                                                        onLongPress={() => deleteRecentSearch(firstDisplayWord)}
+                                                                        style={{
+                                                                            flexDirection: 'row',
+                                                                            alignItems: 'center',
+                                                                            padding: 16,
+                                                                            backgroundColor: theme.uiBg,
+                                                                            borderRadius: 20,
+                                                                            borderWidth: 1,
+                                                                            borderColor: theme.border,
+                                                                            shadowColor: "#000",
+                                                                            shadowOffset: { width: 0, height: 2 },
+                                                                            shadowOpacity: 0.05,
+                                                                            shadowRadius: 4,
+                                                                            elevation: 2,
+                                                                            marginBottom: isDictionaryExpanded ? 10 : 0
+                                                                        }}
+                                                                    >
+                                                                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'day' ? '#eff6ff' : theme.buttonBg, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+                                                                            <BookOpen size={24} color={primaryColor} />
+                                                                        </View>
+
+                                                                        <View style={{ flex: 1 }}>
+                                                                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                                                                                <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }} numberOfLines={1}>
+                                                                                    {firstDisplayWord}
+                                                                                </Text>
+                                                                                {firstDisplayPart && (
+                                                                                    <Text style={{ fontSize: 12, fontWeight: '600', color: theme.secondary, fontStyle: 'italic' }}>
+                                                                                        {firstDisplayPart}
+                                                                                    </Text>
+                                                                                )}
+                                                                            </View>
+                                                                            <Text style={{ fontSize: 13, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
+                                                                                {firstDisplayDef}
+                                                                            </Text>
+                                                                        </View>
+
+                                                                        <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
+                                                                    </TouchableOpacity>
+
+                                                                    {/* Expanded Vertical List (Independent Scrolling) */}
+                                                                    {isDictionaryExpanded && (
+                                                                        <ScrollView
+                                                                            style={{ maxHeight: 600 }}
+                                                                            nestedScrollEnabled={true}
+                                                                            onScroll={({ nativeEvent }) => {
+                                                                                const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+                                                                                const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
+                                                                                if (isCloseToBottom) {
+                                                                                    handleLoadMore();
+                                                                                }
+                                                                            }}
+                                                                            scrollEventThrottle={400}
+                                                                            showsVerticalScrollIndicator={true}
+                                                                        >
+                                                                            <View style={{ gap: 10 }}>
+                                                                                {visibleWords.map((item: any, index: number) => {
+                                                                                    const displayWord = typeof item === 'string' ? item : item.word;
+
+                                                                                    // Extract Simple/Beginner content
+                                                                                    const data = typeof item === 'object' ? item.data : null;
+                                                                                    const displayDef = data?.simple?.definition || data?.definition || "Tap to define";
+                                                                                    const displayExamples = data?.simple?.examples?.slice(0, 2) || [];
+                                                                                    const displayPart = data?.partOfSpeech;
+
+                                                                                    return (
+                                                                                        <TouchableOpacity
+                                                                                            key={index}
+                                                                                            onPress={() => {
+                                                                                                // Start Flashcards from this word with dynamic count
+                                                                                                let count = 10;
+                                                                                                const configLength = parseInt(schoolConfig.length);
+                                                                                                if (!isNaN(configLength) && configLength > 0) {
+                                                                                                    count = configLength;
+                                                                                                } else {
+                                                                                                    if (schoolConfig.length === 'Short') count = 5;
+                                                                                                    if (schoolConfig.length === 'Medium') count = 10;
+                                                                                                    if (schoolConfig.length === 'Large') count = 25;
+                                                                                                }
+                                                                                                const actualIndex = index + 1;
+                                                                                                const subset = recentSearches.slice(actualIndex, actualIndex + count);
+                                                                                                const flashcardItems = subset.map((si: any) => {
+                                                                                                    if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
+                                                                                                    const d = si.data || {};
+                                                                                                    return {
+                                                                                                        ...d,
+                                                                                                        id: d.id,
+                                                                                                        word: d.word || si.word,
+                                                                                                        definition: d.definition || d.simple?.definition || "No definition available",
+                                                                                                        examples: d.examples || d.simple?.examples || []
+                                                                                                    };
+                                                                                                });
+
+                                                                                                setFlashcardSession({
+                                                                                                    items: flashcardItems,
+                                                                                                    currentIndex: 0,
+                                                                                                    flipped: false,
+                                                                                                    type: 'word'
+                                                                                                });
+                                                                                                setAppMode('flashcards');
+                                                                                            }}
+                                                                                            onLongPress={() => deleteRecentSearch(displayWord)}
+                                                                                            style={{
+                                                                                                flexDirection: 'row',
+                                                                                                alignItems: 'center',
+                                                                                                padding: 16,
+                                                                                                backgroundColor: theme.uiBg,
+                                                                                                borderRadius: 20,
+                                                                                                borderWidth: 1,
+                                                                                                borderColor: theme.border,
+                                                                                                shadowColor: "#000",
+                                                                                                shadowOffset: { width: 0, height: 2 },
+                                                                                                shadowOpacity: 0.05,
+                                                                                                shadowRadius: 4,
+                                                                                                elevation: 2
+                                                                                            }}
+                                                                                        >
+                                                                                            <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'day' ? '#eff6ff' : theme.buttonBg, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+                                                                                                <BookOpen size={24} color={primaryColor} />
+                                                                                            </View>
+
+                                                                                            <View style={{ flex: 1 }}>
+                                                                                                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                                                                                                    <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }} numberOfLines={1}>
+                                                                                                        {displayWord}
+                                                                                                    </Text>
+                                                                                                    {displayPart && (
+                                                                                                        <Text style={{ fontSize: 12, fontWeight: '600', color: theme.secondary, fontStyle: 'italic' }}>
+                                                                                                            {displayPart}
+                                                                                                        </Text>
+                                                                                                    )}
+                                                                                                </View>
+                                                                                                <Text style={{ fontSize: 13, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
+                                                                                                    {displayDef}
+                                                                                                </Text>
+                                                                                            </View>
+
+                                                                                            <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
+                                                                                        </TouchableOpacity>
+                                                                                    );
+                                                                                })}
+
+                                                                                {/* Load More Indicator */}
+                                                                                {visibleWordCount < Math.min(recentSearches.length, 200) && (
+                                                                                    <View style={{ padding: 20, alignItems: 'center' }}>
+                                                                                        <Text style={{ color: theme.secondary, fontSize: 12 }}>
+                                                                                            Scroll down and up to load more... ({visibleWordCount}/200)
+                                                                                        </Text>
+                                                                                    </View>
+                                                                                )}
+                                                                            </View>
+                                                                        </ScrollView>
+                                                                    )}
                                                                 </View>
+                                                            );
+                                                        })()}
 
-                                                                <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                            </TouchableOpacity>
+                                                        {/* NEW: Vertical Recent Activity List (High Priority) */}
+                                                        {(() => {
+                                                            // 1. Aggregate Recent Items (Sessions: AI, Quiz, Story, Notes)
+                                                            const recentSessions = Object.values(chatSessions || {})
+                                                                .sort((a: any, b: any) => {
+                                                                    const timeA = new Date(a.lastOpened || a.timestamp).getTime();
+                                                                    const timeB = new Date(b.lastOpened || b.timestamp).getTime();
+                                                                    return timeB - timeA;
+                                                                })
+                                                                .slice(0, 20); // Show Top 20
 
-                                                            {/* Expanded Vertical List (Independent Scrolling) */}
-                                                            {isDictionaryExpanded && (
-                                                                <ScrollView
-                                                                    style={{ maxHeight: 600 }}
-                                                                    nestedScrollEnabled={true}
-                                                                    onScroll={({ nativeEvent }) => {
-                                                                        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-                                                                        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
-                                                                        if (isCloseToBottom) {
-                                                                            handleLoadMore();
-                                                                        }
-                                                                    }}
-                                                                    scrollEventThrottle={400}
-                                                                    showsVerticalScrollIndicator={true}
-                                                                >
-                                                                    <View style={{ gap: 10 }}>
-                                                                        {visibleWords.map((item: any, index: number) => {
-                                                                            const displayWord = typeof item === 'string' ? item : item.word;
+                                                            if (recentSessions.length === 0) return null;
 
-                                                                            // Extract Simple/Beginner content
-                                                                            const data = typeof item === 'object' ? item.data : null;
-                                                                            const displayDef = data?.simple?.definition || data?.definition || "Tap to define";
-                                                                            const displayExamples = data?.simple?.examples?.slice(0, 2) || [];
-                                                                            const displayPart = data?.partOfSpeech;
+                                                            return (
+                                                                <View style={{ marginBottom: 25, paddingHorizontal: 4 }}>
+                                                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 }}>
+                                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 12, textTransform: 'uppercase' }}>
+                                                                            Recent Activity
+                                                                        </Text>
+                                                                        <TouchableOpacity onPress={() => setActiveTab('library')}>
+                                                                            <Text style={{ color: primaryColor, fontSize: 13, fontWeight: '600' }}>See All</Text>
+                                                                        </TouchableOpacity>
+                                                                    </View>
+
+                                                                    <View style={{ gap: 12 }}>
+                                                                        {recentSessions.map((item: any) => {
+                                                                            // Determine Icon & Color based on Tool ID
+                                                                            let Icon = MessageSquare;
+                                                                            let color = theme.primary;
+                                                                            let label = "Session";
+                                                                            let subLabel = new Date(item.timestamp).toLocaleDateString();
+
+                                                                            if (item.toolId === 'ai_tutor') {
+                                                                                Icon = GraduationCap;
+                                                                                color = "#8b5cf6"; // Purple
+                                                                                label = "Personal Assistant";
+                                                                            } else if (item.toolId === 'quiz_mode' || item.toolId === 'examiner') {
+                                                                                Icon = HelpCircle;
+                                                                                color = "#10b981"; // Emerald
+                                                                                label = "Quiz";
+                                                                            } else if (item.toolId === 'flashcards') {
+                                                                                Icon = Layers;
+                                                                                color = "#f59e0b"; // Amber
+                                                                                label = "Flashcards";
+                                                                            } else if (item.toolId === 'story_writer') {
+                                                                                Icon = BookOpen;
+                                                                                color = "#ec4899"; // Pink
+                                                                                label = "Story";
+                                                                            } else if (item.toolId === 'quick_notes') {
+                                                                                Icon = StickyNote;
+                                                                                color = "#eab308"; // Yellow
+                                                                                label = "Note";
+                                                                            } else if (item.toolId === 'visual_learner') {
+                                                                                Icon = Camera;
+                                                                                color = "#06b6d4"; // Cyan
+                                                                                label = "Vision";
+                                                                            } else if (item.toolId === 'writer') {
+                                                                                Icon = FileText;
+                                                                                color = "#6366f1"; // Indigo
+                                                                                label = "Document";
+                                                                            } else if (item.toolId === 'audio_player') {
+                                                                                Icon = Headphones;
+                                                                                color = "#f43f5e"; // Rose
+                                                                                label = "Audio";
+                                                                            }
 
                                                                             return (
                                                                                 <TouchableOpacity
-                                                                                    key={index}
-                                                                                    onPress={() => {
-                                                                                        // Start Flashcards from this word with dynamic count
-                                                                                        let count = 10;
-                                                                                        const configLength = parseInt(schoolConfig.length);
-                                                                                        if (!isNaN(configLength) && configLength > 0) {
-                                                                                            count = configLength;
-                                                                                        } else {
-                                                                                            if (schoolConfig.length === 'Short') count = 5;
-                                                                                            if (schoolConfig.length === 'Medium') count = 10;
-                                                                                            if (schoolConfig.length === 'Large') count = 25;
-                                                                                        }
-                                                                                        const actualIndex = index + 1;
-                                                                                        const subset = recentSearches.slice(actualIndex, actualIndex + count);
-                                                                                        const flashcardItems = subset.map((si: any) => {
-                                                                                            if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
-                                                                                            const d = si.data || {};
-                                                                                            return {
-                                                                                                ...d,
-                                                                                                id: d.id,
-                                                                                                word: d.word || si.word,
-                                                                                                definition: d.definition || d.simple?.definition || "No definition available",
-                                                                                                examples: d.examples || d.simple?.examples || []
-                                                                                            };
-                                                                                        });
-
-                                                                                        setFlashcardSession({
-                                                                                            items: flashcardItems,
-                                                                                            currentIndex: 0,
-                                                                                            flipped: false,
-                                                                                            type: 'word'
-                                                                                        });
-                                                                                        setAppMode('flashcards');
-                                                                                    }}
-                                                                                    onLongPress={() => deleteRecentSearch(displayWord)}
+                                                                                    key={item.id}
+                                                                                    onPress={() => loadHistorySession(item)}
+                                                                                    onLongPress={() => handleDeleteRecentActivity(item)}
                                                                                     style={{
                                                                                         flexDirection: 'row',
                                                                                         alignItems: 'center',
@@ -26289,6 +26941,7 @@ RULES:
                                                                                         borderRadius: 20,
                                                                                         borderWidth: 1,
                                                                                         borderColor: theme.border,
+                                                                                        gap: 16,
                                                                                         shadowColor: "#000",
                                                                                         shadowOffset: { width: 0, height: 2 },
                                                                                         shadowOpacity: 0.05,
@@ -26296,23 +26949,29 @@ RULES:
                                                                                         elevation: 2
                                                                                     }}
                                                                                 >
-                                                                                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'day' ? '#eff6ff' : theme.buttonBg, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                                                                                        <BookOpen size={24} color={primaryColor} />
+                                                                                    <View style={{
+                                                                                        width: 48, height: 48,
+                                                                                        borderRadius: 14,
+                                                                                        backgroundColor: theme.id === 'day' ? `${color}15` : theme.buttonBg, // Light tint if day
+                                                                                        alignItems: 'center', justifyContent: 'center'
+                                                                                    }}>
+                                                                                        <Icon size={24} color={color} />
                                                                                     </View>
 
                                                                                     <View style={{ flex: 1 }}>
-                                                                                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                                                                                            <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-                                                                                                {displayWord}
-                                                                                            </Text>
-                                                                                            {displayPart && (
-                                                                                                <Text style={{ fontSize: 12, fontWeight: '600', color: theme.secondary, fontStyle: 'italic' }}>
-                                                                                                    {displayPart}
-                                                                                                </Text>
-                                                                                            )}
-                                                                                        </View>
-                                                                                        <Text style={{ fontSize: 13, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
-                                                                                            {displayDef}
+                                                                                        <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 4 }} numberOfLines={1}>
+                                                                                            {item.title || "Untitled"}
+                                                                                        </Text>
+                                                                                        <Text style={{ fontSize: 13, color: theme.secondary }}>
+                                                                                            {label} • {(() => {
+                                                                                                const refTime = item.lastOpened || item.timestamp;
+                                                                                                const diff = new Date().getTime() - new Date(refTime).getTime();
+                                                                                                const seconds = Math.floor(diff / 1000);
+                                                                                                if (seconds < 60) return `${Math.max(0, seconds)}s ago`;
+                                                                                                if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+                                                                                                if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+                                                                                                return `${Math.floor(seconds / 86400)}d ago`;
+                                                                                            })()}
                                                                                         </Text>
                                                                                     </View>
 
@@ -26320,282 +26979,151 @@ RULES:
                                                                                 </TouchableOpacity>
                                                                             );
                                                                         })}
-
-                                                                        {/* Load More Indicator */}
-                                                                        {visibleWordCount < Math.min(recentSearches.length, 200) && (
-                                                                            <View style={{ padding: 20, alignItems: 'center' }}>
-                                                                                <Text style={{ color: theme.secondary, fontSize: 12 }}>
-                                                                                    Scroll down and up to load more... ({visibleWordCount}/200)
-                                                                                </Text>
-                                                                            </View>
-                                                                        )}
                                                                     </View>
-                                                                </ScrollView>
-                                                            )}
-                                                        </View>
-                                                    );
-                                                })()}
-
-                                                {/* NEW: Vertical Recent Activity List (High Priority) */}
-                                                {(() => {
-                                                    // 1. Aggregate Recent Items (Sessions: AI, Quiz, Story, Notes)
-                                                    const recentSessions = Object.values(chatSessions || {})
-                                                        .sort((a: any, b: any) => {
-                                                            const timeA = new Date(a.lastOpened || a.timestamp).getTime();
-                                                            const timeB = new Date(b.lastOpened || b.timestamp).getTime();
-                                                            return timeB - timeA;
-                                                        })
-                                                        .slice(0, 20); // Show Top 20
-
-                                                    if (recentSessions.length === 0) return null;
-
-                                                    return (
-                                                        <View style={{ marginBottom: 25, paddingHorizontal: 4 }}>
-                                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 }}>
-                                                                <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 12, textTransform: 'uppercase' }}>
-                                                                    Recent Activity
-                                                                </Text>
-                                                                <TouchableOpacity onPress={() => setActiveTab('library')}>
-                                                                    <Text style={{ color: primaryColor, fontSize: 13, fontWeight: '600' }}>See All</Text>
-                                                                </TouchableOpacity>
-                                                            </View>
-
-                                                            <View style={{ gap: 12 }}>
-                                                                {recentSessions.map((item: any) => {
-                                                                    // Determine Icon & Color based on Tool ID
-                                                                    let Icon = MessageSquare;
-                                                                    let color = theme.primary;
-                                                                    let label = "Session";
-                                                                    let subLabel = new Date(item.timestamp).toLocaleDateString();
-
-                                                                    if (item.toolId === 'ai_tutor') {
-                                                                        Icon = GraduationCap;
-                                                                        color = "#8b5cf6"; // Purple
-                                                                        label = "Personal Assistant";
-                                                                    } else if (item.toolId === 'quiz_mode' || item.toolId === 'examiner') {
-                                                                        Icon = HelpCircle;
-                                                                        color = "#10b981"; // Emerald
-                                                                        label = "Quiz";
-                                                                    } else if (item.toolId === 'flashcards') {
-                                                                        Icon = Layers;
-                                                                        color = "#f59e0b"; // Amber
-                                                                        label = "Flashcards";
-                                                                    } else if (item.toolId === 'story_writer') {
-                                                                        Icon = BookOpen;
-                                                                        color = "#ec4899"; // Pink
-                                                                        label = "Story";
-                                                                    } else if (item.toolId === 'quick_notes') {
-                                                                        Icon = StickyNote;
-                                                                        color = "#eab308"; // Yellow
-                                                                        label = "Note";
-                                                                    } else if (item.toolId === 'visual_learner') {
-                                                                        Icon = Camera;
-                                                                        color = "#06b6d4"; // Cyan
-                                                                        label = "Vision";
-                                                                    } else if (item.toolId === 'writer') {
-                                                                        Icon = FileText;
-                                                                        color = "#6366f1"; // Indigo
-                                                                        label = "Document";
-                                                                    } else if (item.toolId === 'audio_player') {
-                                                                        Icon = Headphones;
-                                                                        color = "#f43f5e"; // Rose
-                                                                        label = "Audio";
-                                                                    }
-
-                                                                    return (
-                                                                        <TouchableOpacity
-                                                                            key={item.id}
-                                                                            onPress={() => loadHistorySession(item)}
-                                                                            onLongPress={() => handleDeleteRecentActivity(item)}
-                                                                            style={{
-                                                                                flexDirection: 'row',
-                                                                                alignItems: 'center',
-                                                                                padding: 16,
-                                                                                backgroundColor: theme.uiBg,
-                                                                                borderRadius: 20,
-                                                                                borderWidth: 1,
-                                                                                borderColor: theme.border,
-                                                                                gap: 16,
-                                                                                shadowColor: "#000",
-                                                                                shadowOffset: { width: 0, height: 2 },
-                                                                                shadowOpacity: 0.05,
-                                                                                shadowRadius: 4,
-                                                                                elevation: 2
-                                                                            }}
-                                                                        >
-                                                                            <View style={{
-                                                                                width: 48, height: 48,
-                                                                                borderRadius: 14,
-                                                                                backgroundColor: theme.id === 'day' ? `${color}15` : theme.buttonBg, // Light tint if day
-                                                                                alignItems: 'center', justifyContent: 'center'
-                                                                            }}>
-                                                                                <Icon size={24} color={color} />
-                                                                            </View>
-
-                                                                            <View style={{ flex: 1 }}>
-                                                                                <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 4 }} numberOfLines={1}>
-                                                                                    {item.title || "Untitled"}
-                                                                                </Text>
-                                                                                <Text style={{ fontSize: 13, color: theme.secondary }}>
-                                                                                    {label} • {(() => {
-                                                                                        const refTime = item.lastOpened || item.timestamp;
-                                                                                        const diff = new Date().getTime() - new Date(refTime).getTime();
-                                                                                        const seconds = Math.floor(diff / 1000);
-                                                                                        if (seconds < 60) return `${Math.max(0, seconds)}s ago`;
-                                                                                        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-                                                                                        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-                                                                                        return `${Math.floor(seconds / 86400)}d ago`;
-                                                                                    })()}
-                                                                                </Text>
-                                                                            </View>
-
-                                                                            <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                                        </TouchableOpacity>
-                                                                    );
-                                                                })}
-                                                            </View>
-                                                        </View>
-                                                    );
-                                                })()}
-
-                                                <View style={{ flex: 1 }} />
-
-                                                <View>
-                                                    <View>
-                                                        {(() => {
-                                                            // 1. Get All Available Tools & Sort by MRU
-                                                            const allTools = getAllTools();
-                                                            const toolsSource = allTools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner');
-
-                                                            toolsSource.sort((a: any, b: any) => {
-                                                                const indexA = lastUsedTools.indexOf(a.id);
-                                                                const indexB = lastUsedTools.indexOf(b.id);
-                                                                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                                                                if (indexA !== -1) return -1;
-                                                                if (indexB !== -1) return 1;
-                                                                return 0; // Default order
-                                                            });
-
-                                                            // 2. Prepare Items List (New Role LAST)
-                                                            const allItems = [
-                                                                ...toolsSource.map((t: any) => ({ id: t.id, type: 'tool', data: t }))
-                                                            ];
-
-                                                            // Check if image exists on disk to avoid re-download/re-generation
-                                                            const checkImageExists = async (uri: string) => {
-                                                                if (!uri) return false;
-                                                            }; // Closing checkImageExists here
-                                                            // 3. Shared Tool Press Handler
-                                                            const onToolPress = (tool: any) => {
-                                                                // Update MRU
-                                                                setLastUsedTools((prev: any) => {
-                                                                    const newOrder = [tool.id, ...prev.filter((id: string) => id !== tool.id)];
-                                                                    return newOrder.slice(0, 50);
-                                                                });
-
-                                                                // Original Action
-                                                                if (tool.id === 'visual_learner') {
-                                                                    setImagePickerMode('vision');
-                                                                    setVisionDraft({ uris: [], prompt: "" });
-                                                                    setShowImageSourceModal(true);
-                                                                } else {
-                                                                    setSelectedScenario(tool);
-                                                                    const defLength = tool.id === 'examiner' ? "" : "Medium";
-                                                                    const targetSubject = tool.id === 'examiner' ? lastQuizSubject : "General";
-                                                                    saveSchoolConfig({ input: "", length: defLength, complexity: "Intermediate", subject: targetSubject });
-                                                                    setAppMode('setup');
-                                                                }
-                                                            };
-
-                                                            // --- STATE 1: COLLAPSED VERTICAL LIST ---
-                                                            return (
-                                                                <View style={{ marginBottom: 10 }}>
-                                                                    <ScrollView
-                                                                        style={{ maxHeight: 380 }} // Increased height slightly
-                                                                        nestedScrollEnabled={true}
-                                                                        showsVerticalScrollIndicator={false} // Hide scrollbar for cleaner look
-                                                                        contentContainerStyle={{ gap: 12, paddingHorizontal: 4, paddingBottom: 4 }} // Added padding for shadows
-                                                                    >
-                                                                        {allItems.map((item: any, index: number) => {
-                                                                            if (item.type === 'new_role') {
-                                                                                return (
-                                                                                    <TouchableOpacity
-                                                                                        key="new_role"
-                                                                                        onPress={handleNewRolePress}
-                                                                                        style={{
-                                                                                            flexDirection: 'row',
-                                                                                            alignItems: 'center',
-                                                                                            padding: 16, // Increased padding
-                                                                                            backgroundColor: theme.buttonBg,
-                                                                                            borderRadius: 20, // More rounded
-                                                                                            borderWidth: 1,
-                                                                                            borderColor: theme.border,
-                                                                                            gap: 16,
-                                                                                            // Premium Shadow
-                                                                                            shadowColor: "#000",
-                                                                                            shadowOffset: { width: 0, height: 2 },
-                                                                                            shadowOpacity: 0.05,
-                                                                                            shadowRadius: 4,
-                                                                                            elevation: 2
-                                                                                        }}
-                                                                                    >
-                                                                                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'sepia' ? '#fffefb' : primaryColor, alignItems: 'center', justifyContent: 'center', borderWidth: theme.id === 'sepia' ? 1 : 0, borderColor: '#e3dccf' }}>
-                                                                                            <Plus size={24} color={theme.id === 'sepia' ? theme.secondary : "white"} />
-                                                                                        </View>
-                                                                                        <View style={{ flex: 1 }}>
-                                                                                            <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text, marginBottom: 2 }}>New Role</Text>
-                                                                                            <Text style={{ fontSize: 13, color: theme.secondary }}>Create a custom AI character</Text>
-                                                                                        </View>
-                                                                                        <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                                                    </TouchableOpacity>
-                                                                                );
-                                                                            } else {
-                                                                                const tool = item.data;
-                                                                                const IconComponent = tool.isCustom ? (ICON_MAP[tool.iconName] || Bot) : tool.Icon;
-                                                                                return (
-                                                                                    <TouchableOpacity
-                                                                                        key={tool.id}
-                                                                                        onPress={() => onToolPress(tool)}
-                                                                                        onLongPress={() => handleRoleLongPress(tool)}
-                                                                                        style={{
-                                                                                            flexDirection: 'row',
-                                                                                            alignItems: 'center',
-                                                                                            padding: 16, // Increased padding
-                                                                                            backgroundColor: theme.uiBg,
-                                                                                            borderRadius: 20, // More rounded
-                                                                                            borderWidth: 1,
-                                                                                            borderColor: theme.border,
-                                                                                            gap: 16,
-                                                                                            // Premium Shadow
-                                                                                            shadowColor: "#000",
-                                                                                            shadowOffset: { width: 0, height: 2 },
-                                                                                            shadowOpacity: 0.05,
-                                                                                            shadowRadius: 4,
-                                                                                            elevation: 2
-                                                                                        }}
-                                                                                    >
-                                                                                        <LinearGradient colors={theme.toolColor || tool.color} style={{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
-                                                                                            <IconComponent size={24} color={!theme.toolColor ? "white" : tool.color[1]} />
-                                                                                        </LinearGradient>
-                                                                                        <View style={{ flex: 1 }}>
-                                                                                            <Text style={{ fontSize: 17, fontWeight: '600', color: theme.text, marginBottom: 2 }}>{tool.title}</Text>
-                                                                                            <Text style={{ fontSize: 13, color: theme.secondary }} numberOfLines={1}>{tool.role}</Text>
-                                                                                        </View>
-                                                                                        <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                                                    </TouchableOpacity>
-                                                                                );
-                                                                            }
-                                                                        })}
-                                                                    </ScrollView>
                                                                 </View>
                                                             );
                                                         })()}
-                                                    </View>
 
-                                                    {/* REMOVED: Help & Guide Section from Home (Moved to 'help_guide_char' Tool) */}
-                                                </View>
-                                            </ScrollView>
-                                        </KeyboardAvoidingView>
+                                                        <View style={{ flex: 1 }} />
+
+                                                        <View>
+                                                            <View>
+                                                                {(() => {
+                                                                    // 1. Get All Available Tools & Sort by MRU
+                                                                    const allTools = getAllTools();
+                                                                    const toolsSource = allTools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner');
+
+                                                                    toolsSource.sort((a: any, b: any) => {
+                                                                        const indexA = lastUsedTools.indexOf(a.id);
+                                                                        const indexB = lastUsedTools.indexOf(b.id);
+                                                                        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                                                                        if (indexA !== -1) return -1;
+                                                                        if (indexB !== -1) return 1;
+                                                                        return 0; // Default order
+                                                                    });
+
+                                                                    // 2. Prepare Items List (New Role LAST)
+                                                                    const allItems = [
+                                                                        ...toolsSource.map((t: any) => ({ id: t.id, type: 'tool', data: t }))
+                                                                    ];
+
+                                                                    // Check if image exists on disk to avoid re-download/re-generation
+                                                                    const checkImageExists = async (uri: string) => {
+                                                                        if (!uri) return false;
+                                                                    }; // Closing checkImageExists here
+                                                                    // 3. Shared Tool Press Handler
+                                                                    const onToolPress = (tool: any) => {
+                                                                        // Update MRU
+                                                                        setLastUsedTools((prev: any) => {
+                                                                            const newOrder = [tool.id, ...prev.filter((id: string) => id !== tool.id)];
+                                                                            return newOrder.slice(0, 50);
+                                                                        });
+
+                                                                        // Original Action
+                                                                        if (tool.id === 'visual_learner') {
+                                                                            setImagePickerMode('vision');
+                                                                            setVisionDraft({ uris: [], prompt: "" });
+                                                                            setShowImageSourceModal(true);
+                                                                        } else {
+                                                                            setSelectedScenario(tool);
+                                                                            const defLength = tool.id === 'examiner' ? "" : "Medium";
+                                                                            const targetSubject = tool.id === 'examiner' ? lastQuizSubject : "General";
+                                                                            saveSchoolConfig({ input: "", length: defLength, complexity: "Intermediate", subject: targetSubject });
+                                                                            setAppMode('setup');
+                                                                        }
+                                                                    };
+
+                                                                    // --- STATE 1: COLLAPSED VERTICAL LIST ---
+                                                                    return (
+                                                                        <View style={{ marginBottom: 10 }}>
+                                                                            <ScrollView
+                                                                                style={{ maxHeight: 380 }} // Increased height slightly
+                                                                                nestedScrollEnabled={true}
+                                                                                showsVerticalScrollIndicator={false} // Hide scrollbar for cleaner look
+                                                                                contentContainerStyle={{ gap: 12, paddingHorizontal: 4, paddingBottom: 4 }} // Added padding for shadows
+                                                                            >
+                                                                                {allItems.map((item: any, index: number) => {
+                                                                                    if (item.type === 'new_role') {
+                                                                                        return (
+                                                                                            <TouchableOpacity
+                                                                                                key="new_role"
+                                                                                                onPress={handleNewRolePress}
+                                                                                                style={{
+                                                                                                    flexDirection: 'row',
+                                                                                                    alignItems: 'center',
+                                                                                                    padding: 16, // Increased padding
+                                                                                                    backgroundColor: theme.buttonBg,
+                                                                                                    borderRadius: 20, // More rounded
+                                                                                                    borderWidth: 1,
+                                                                                                    borderColor: theme.border,
+                                                                                                    gap: 16,
+                                                                                                    // Premium Shadow
+                                                                                                    shadowColor: "#000",
+                                                                                                    shadowOffset: { width: 0, height: 2 },
+                                                                                                    shadowOpacity: 0.05,
+                                                                                                    shadowRadius: 4,
+                                                                                                    elevation: 2
+                                                                                                }}
+                                                                                            >
+                                                                                                <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'sepia' ? '#fffefb' : primaryColor, alignItems: 'center', justifyContent: 'center', borderWidth: theme.id === 'sepia' ? 1 : 0, borderColor: '#e3dccf' }}>
+                                                                                                    <Plus size={24} color={theme.id === 'sepia' ? theme.secondary : "white"} />
+                                                                                                </View>
+                                                                                                <View style={{ flex: 1 }}>
+                                                                                                    <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text, marginBottom: 2 }}>New Role</Text>
+                                                                                                    <Text style={{ fontSize: 13, color: theme.secondary }}>Create a custom AI character</Text>
+                                                                                                </View>
+                                                                                                <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
+                                                                                            </TouchableOpacity>
+                                                                                        );
+                                                                                    } else {
+                                                                                        const tool = item.data;
+                                                                                        const IconComponent = tool.isCustom ? (ICON_MAP[tool.iconName] || Bot) : tool.Icon;
+                                                                                        return (
+                                                                                            <TouchableOpacity
+                                                                                                key={tool.id}
+                                                                                                onPress={() => onToolPress(tool)}
+                                                                                                onLongPress={() => handleRoleLongPress(tool)}
+                                                                                                style={{
+                                                                                                    flexDirection: 'row',
+                                                                                                    alignItems: 'center',
+                                                                                                    padding: 16, // Increased padding
+                                                                                                    backgroundColor: theme.uiBg,
+                                                                                                    borderRadius: 20, // More rounded
+                                                                                                    borderWidth: 1,
+                                                                                                    borderColor: theme.border,
+                                                                                                    gap: 16,
+                                                                                                    // Premium Shadow
+                                                                                                    shadowColor: "#000",
+                                                                                                    shadowOffset: { width: 0, height: 2 },
+                                                                                                    shadowOpacity: 0.05,
+                                                                                                    shadowRadius: 4,
+                                                                                                    elevation: 2
+                                                                                                }}
+                                                                                            >
+                                                                                                <LinearGradient colors={theme.toolColor || tool.color} style={{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
+                                                                                                    <IconComponent size={24} color={!theme.toolColor ? "white" : tool.color[1]} />
+                                                                                                </LinearGradient>
+                                                                                                <View style={{ flex: 1 }}>
+                                                                                                    <Text style={{ fontSize: 17, fontWeight: '600', color: theme.text, marginBottom: 2 }}>{tool.title}</Text>
+                                                                                                    <Text style={{ fontSize: 13, color: theme.secondary }} numberOfLines={1}>{tool.role}</Text>
+                                                                                                </View>
+                                                                                                <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
+                                                                                            </TouchableOpacity>
+                                                                                        );
+                                                                                    }
+                                                                                })}
+                                                                            </ScrollView>
+                                                                        </View>
+                                                                    );
+                                                                })()}
+                                                            </View>
+
+                                                            {/* REMOVED: Help & Guide Section from Home (Moved to 'help_guide_char' Tool) */}
+                                                        </View>
+                                                    </ScrollView>
+                                                </KeyboardAvoidingView>
+                                            </>
+                                        )}
                                     </View>
                                 ) : activeTab === 'library' ? (
                                     <View style={{ flex: 1 }}>
