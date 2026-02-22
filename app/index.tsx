@@ -164,6 +164,7 @@ import {
     Palette,
     Pause,
     PenLine,
+    PhoneOff,
     Pin,
     Plane,
     Play,
@@ -5659,9 +5660,7 @@ export default function App() {
     const [isChatbotMode, setIsChatbotMode] = useState(false);
     const [chatbotMessages, setChatbotMessages] = useState<Message[]>([]);
     const [activeChatbotChar, setActiveChatbotChar] = useState<any>(null);
-    const [isChatbotHeld, setIsChatbotHeld] = useState(false);
     const chatbotSilenceTimer = useRef<any>(null);
-    const chatbotHoldTimer = useRef<any>(null);
     const chatbotVolumeRef = useRef<number>(0);
     const [isChatbotTyping, setIsChatbotTyping] = useState(false);
     const [isChatbotInputExpanded, setIsChatbotInputExpanded] = useState(false);
@@ -5791,7 +5790,7 @@ export default function App() {
     // --- CHATBOT VOICE AUTOMATION EFFECT ---
     useEffect(() => {
         let interval: any = null;
-        if (isChatbotMode && isRecording && !isChatbotHeld) {
+        if (isChatbotMode && isRecording) {
             interval = setInterval(async () => {
                 try {
                     const status = await recorder.getStatus();
@@ -5827,22 +5826,8 @@ export default function App() {
             if (interval) clearInterval(interval);
             if (chatbotSilenceTimer.current) clearTimeout(chatbotSilenceTimer.current);
         };
-    }, [isChatbotMode, isRecording, isChatbotHeld]);
+    }, [isChatbotMode, isRecording]);
 
-    // --- AUTO-HOLD EFFECT ---
-    useEffect(() => {
-        // Only trigger if no one is speaking/active
-        const isAnyoneActive = isRecording || isChatbotTyping || ttsStatus === 'playing';
-
-        if (isChatbotMode && !isChatbotHeld && chatbotMessages.length > 0 && !isAnyoneActive) {
-            chatbotHoldTimer.current = setTimeout(() => {
-                setIsChatbotHeld(true);
-            }, 60000); // 60s auto-hold
-        }
-        return () => {
-            if (chatbotHoldTimer.current) clearTimeout(chatbotHoldTimer.current);
-        };
-    }, [isChatbotMode, isChatbotHeld, chatbotMessages.length, isRecording, isChatbotTyping, ttsStatus]);
 
     useEffect(() => {
         // Load custom audio mappings
@@ -13532,15 +13517,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             clearTimeout(chatbotSilenceTimer.current);
             chatbotSilenceTimer.current = null;
         }
-        if (chatbotHoldTimer.current) {
-            clearTimeout(chatbotHoldTimer.current);
-            chatbotHoldTimer.current = null;
-        }
-
         // Reset state
         setChatbotMessages([]);
         setActiveChatbotChar(null);
-        setIsChatbotHeld(false);
         setIsChatbotTyping(false);
     };
 
@@ -26166,11 +26145,6 @@ RULES:
                 speak(cleaned, 0, true, false, null, true); // forceOffline = true
             }
 
-            // Restart hold timer after response
-            if (chatbotHoldTimer.current) clearTimeout(chatbotHoldTimer.current);
-            chatbotHoldTimer.current = setTimeout(() => {
-                setIsChatbotHeld(true);
-            }, 20000);
 
         } catch (error) {
             console.warn("Chatbot LLM Error", error);
@@ -26209,7 +26183,6 @@ RULES:
                 await recorder.prepareToRecordAsync(SPEECH_RECORDING_OPTIONS);
                 await recorder.record();
                 setIsRecording(true);
-                setIsChatbotHeld(false);
 
                 // Start silence detection if not held
                 if (chatbotSilenceTimer.current) clearTimeout(chatbotSilenceTimer.current);
@@ -26256,36 +26229,51 @@ RULES:
         }
 
         // PRIORITY 2: Gemini STT
-        if (geminiKey && geminiKey.trim()) {
-            try {
-                const base64 = await fs.readAsStringAsync(uri, { encoding: fs.EncodingType.Base64 });
-                const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+        if (geminiKey && geminiKey.trim() && !rawTranscript) {
+            const sttFallbackModels = [
+                'gemini-3-flash-preview',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-lite',
+                'gemini-2.5-pro'
+            ];
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiKey}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{
-                            role: "user",
-                            parts: [
-                                { text: "Transcribe the following audio precisely. Return ONLY the text." },
-                                { inlineData: { mimeType: mimeType, data: base64 } }
-                            ]
-                        }]
-                    })
-                });
-                const data = await response.json();
-                if (data.error) {
-                    console.warn("Gemini STT API Error:", data.error.message);
-                } else {
-                    const transcript = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    if (transcript) {
-                        console.log("Chatbot STT (Gemini) Raw Result:", transcript);
-                        rawTranscript = transcript;
+            for (const model of sttFallbackModels) {
+                try {
+                    const base64 = await fs.readAsStringAsync(uri, { encoding: fs.EncodingType.Base64 });
+                    const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            contents: [{
+                                role: "user",
+                                parts: [
+                                    { text: "Transcribe the following audio precisely. Return ONLY the text." },
+                                    { inlineData: { mimeType: mimeType, data: base64 } }
+                                ]
+                            }]
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.error) {
+                        console.warn(`Gemini STT API Error (${model}):`, data.error.message);
+                        if (data.error.message?.includes("quota") || response.status === 429) {
+                            console.log(`Quota exceeded for ${model}, trying fallback...`);
+                            continue; // Try next model
+                        }
+                        break; // Fatal error for this key, stop
+                    } else {
+                        const transcript = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                        if (transcript) {
+                            console.log(`Chatbot STT (Gemini ${model}) Raw Result:`, transcript);
+                            rawTranscript = transcript;
+                            break; // Success
+                        }
                     }
+                } catch (e) {
+                    console.warn(`Gemini STT Chatbot Error (${model})`, e);
                 }
-            } catch (e) {
-                console.warn("Gemini STT Chatbot Error", e);
             }
         }
 
@@ -26328,27 +26316,48 @@ Review the following raw transcribed text:
                         return refinedText;
                     }
                 }
-            } else if (geminiKey) {
-                // Fallback to Gemini for refinement
-                const refineRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiKey}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{
-                            role: "user",
-                            parts: [{ text: `${refinementPrompt}\n\nRaw transcript:\n${rawTranscript}` }]
-                        }]
-                    })
-                });
-                const refineData = await refineRes.json();
-                const refinedText = refineData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                if (refinedText) {
-                    console.log("Chatbot STT (Gemini Refined) Result:", refinedText);
-                    return refinedText;
+            }
+
+            if (geminiKey) {
+                const refineFallbackModels = [
+                    'gemini-3-flash-preview',
+                    'gemini-2.5-flash',
+                    'gemini-2.5-flash-lite',
+                    'gemini-2.5-pro'
+                ];
+
+                for (const model of refineFallbackModels) {
+                    try {
+                        const refineRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{
+                                    role: "user",
+                                    parts: [{ text: `${refinementPrompt}\n\nRaw transcript:\n${rawTranscript}` }]
+                                }]
+                            })
+                        });
+                        const refineData = await refineRes.json();
+                        if (refineData.error) {
+                            console.warn(`Gemini Refinement Error (${model}):`, refineData.error.message);
+                            if (refineData.error.message?.includes("quota") || refineRes.status === 429) {
+                                continue; // Try next model
+                            }
+                            break;
+                        }
+                        const refinedText = refineData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                        if (refinedText) {
+                            console.log(`Chatbot STT (Gemini Refined ${model}) Result:`, refinedText);
+                            return refinedText;
+                        }
+                    } catch (err) {
+                        console.warn(`Gemini STT Refinement failed (${model}):`, err);
+                    }
                 }
             }
         } catch (err) {
-            console.warn("Chatbot STT Refinement failed, using raw:", err);
+            console.warn("Chatbot STT Refinement sequence failed, using raw:", err);
         }
 
         return rawTranscript;
@@ -26456,28 +26465,6 @@ Review the following raw transcribed text:
                     )}
                 </ScrollView>
 
-                {/* Automation Overlay (Hold State) */}
-                {isChatbotHeld && (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', zIndex: 100 }]}>
-                        <View style={{ backgroundColor: theme.bg, padding: 30, borderRadius: 24, alignItems: 'center', gap: 20 }}>
-                            <Pause size={48} color={primaryColor} />
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text }}>On Hold</Text>
-                            <TouchableOpacity
-                                onPress={() => setIsChatbotHeld(false)}
-                                style={{ backgroundColor: primaryColor, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16 }}
-                            >
-                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Resume Call</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                onPress={endChatbotSession}
-                                style={{ backgroundColor: theme.id === 'day' ? '#fee2e2' : 'rgba(239, 68, 68, 0.1)', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16, borderWidth: 1, borderColor: '#ef4444' }}
-                            >
-                                <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>End Call</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
 
                 {/* Bottom Controls */}
                 <View style={{
@@ -26545,10 +26532,10 @@ Review the following raw transcribed text:
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                onPress={() => setIsChatbotHeld(true)}
-                                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.uiBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}
+                                onPress={endChatbotSession}
+                                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.id === 'day' ? '#fee2e2' : 'rgba(239, 68, 68, 0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}
                             >
-                                <Pause size={20} color={theme.text} />
+                                <PhoneOff size={20} color="#ef4444" />
                             </TouchableOpacity>
                         </>
                     )}
