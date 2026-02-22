@@ -1770,18 +1770,18 @@ const METADATA_SEPARATOR = "\n\n--- METADATA ---\n\n";
 
 // NEW: Fallback models for dictionary definitions (Faster models preferred)
 const DICTIONARY_MODELS_FALLBACK = {
-    "English": "gemini-1.5-flash",
-    "Hindi": "gemini-1.5-flash",
-    "Spanish": "gemini-1.5-flash",
-    "French": "gemini-1.5-flash",
-    "German": "gemini-1.5-flash",
-    "Italian": "gemini-1.5-flash",
-    "Japanese": "gemini-1.5-flash",
-    "Korean": "gemini-1.5-flash",
-    "Chinese": "gemini-1.5-flash",
-    "Russian": "gemini-1.5-flash",
-    "Portuguese": "gemini-1.5-flash",
-    "Arabic": "gemini-1.5-flash"
+    "English": "gemini-2.5-flash-lite",
+    "Hindi": "gemini-2.5-flash-lite",
+    "Spanish": "gemini-2.5-flash-lite",
+    "French": "gemini-2.5-flash-lite",
+    "German": "gemini-2.5-flash-lite",
+    "Italian": "gemini-2.5-flash-lite",
+    "Japanese": "gemini-2.5-flash-lite",
+    "Korean": "gemini-2.5-flash-lite",
+    "Chinese": "gemini-2.5-flash-lite",
+    "Russian": "gemini-2.5-flash-lite",
+    "Portuguese": "gemini-2.5-flash-lite",
+    "Arabic": "gemini-2.5-flash-lite"
 };
 
 // NEW: Certificate HTML Generator (Updated Layout)
@@ -5756,6 +5756,15 @@ export default function App() {
     // NEW: State to prevent onboarding flash (Race Condition Fix)
     const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
+    // NEW: Dynamic Image Aspect Ratio for Reader Mode
+    const [coverAspectRatio, setCoverAspectRatio] = useState<any>(1.5); // Default
+    const [ttsFinishedNaturally, setTtsFinishedNaturally] = useState<any>(0);
+    const autoPlayRef = useRef<any>(false);
+    const [speechRange, setSpeechRange] = useState<any>(null);
+    const [ttsStatus, setTtsStatus] = useState<any>("stopped");
+    const [playingMeta, setPlayingMeta] = useState<any>(null);
+    const [isTtsDownloading, setIsTtsDownloading] = useState<any>(false);
+
     // --- CHATBOT VOICE AUTOMATION EFFECT ---
     useEffect(() => {
         let interval: any = null;
@@ -5769,8 +5778,8 @@ export default function App() {
                         if (volume < -50) {
                             if (!chatbotSilenceTimer.current) {
                                 chatbotSilenceTimer.current = setTimeout(() => {
-                                    handleChatbotVoiceToggle(); // Auto-send on 4s silence
-                                }, 4000);
+                                    handleChatbotVoiceToggle(); // Auto-send on silence
+                                }, 2000); // Reduced to 2s for better response
                             }
                         } else {
                             // Sound detected, reset silence timer
@@ -5799,15 +5808,18 @@ export default function App() {
 
     // --- AUTO-HOLD EFFECT ---
     useEffect(() => {
-        if (isChatbotMode && !isChatbotHeld && chatbotMessages.length > 0) {
+        // Only trigger if no one is speaking/active
+        const isAnyoneActive = isRecording || isChatbotTyping || ttsStatus === 'playing';
+
+        if (isChatbotMode && !isChatbotHeld && chatbotMessages.length > 0 && !isAnyoneActive) {
             chatbotHoldTimer.current = setTimeout(() => {
                 setIsChatbotHeld(true);
-            }, 20000); // 20s auto-hold
+            }, 60000); // 60s auto-hold
         }
         return () => {
             if (chatbotHoldTimer.current) clearTimeout(chatbotHoldTimer.current);
         };
-    }, [isChatbotMode, isChatbotHeld, chatbotMessages.length]);
+    }, [isChatbotMode, isChatbotHeld, chatbotMessages.length, isRecording, isChatbotTyping, ttsStatus]);
 
     useEffect(() => {
         // Load custom audio mappings
@@ -5827,14 +5839,6 @@ export default function App() {
         };
     }, []);
 
-    // NEW: Dynamic Image Aspect Ratio for Reader Mode
-    const [coverAspectRatio, setCoverAspectRatio] = useState<any>(1.5); // Default
-    const [ttsFinishedNaturally, setTtsFinishedNaturally] = useState<any>(0);
-    const autoPlayRef = useRef<any>(false);
-    const [speechRange, setSpeechRange] = useState<any>(null);
-    const [ttsStatus, setTtsStatus] = useState<any>("stopped");
-    const [playingMeta, setPlayingMeta] = useState<any>(null);
-    const [isTtsDownloading, setIsTtsDownloading] = useState<any>(false);
     const persistSession = async (newSession: any) => {
         if (newSession.image && newSession.image.startsWith('data:')) {
             newSession.image = await ensureImageIsSavedToFile(newSession.image);
@@ -22952,6 +22956,13 @@ RULES:
                             {activeTab === 'home' && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                     <TouchableOpacity
+                                        onPress={handleDownloadDictionary}
+                                        style={{ padding: 4, marginLeft: 2 }}
+                                    >
+                                        <DownloadCloud size={18} color={headerIconColor} />
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
                                         onPress={() => {
                                             if (isChatbotMode) {
                                                 endChatbotSession();
@@ -22972,17 +22983,10 @@ RULES:
                                             borderColor: isChatbotMode ? 'rgba(255,255,255,0.3)' : 'transparent'
                                         }}
                                     >
-                                        <Bot size={20} color={headerIconColor} />
+                                        <Bot size={24} color={headerIconColor} />
                                         {isChatbotMode && (
                                             <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>Chatbot</Text>
                                         )}
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={handleDownloadDictionary}
-                                        style={{ padding: 4, marginLeft: 2 }}
-                                    >
-                                        <DownloadCloud size={18} color={headerIconColor} />
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -25814,7 +25818,7 @@ RULES:
         // Show player if TTS is active AND:
         // 1. We are NOT in Reader mode (browsing library/home)
         // 2. OR We ARE in Reader mode, but reading a DIFFERENT chapter than what is playing
-        const showPlayer = ttsStatus !== 'stopped' && (appMode !== 'reader' || playingMeta?.id !== readingSession?.id);
+        const showPlayer = ttsStatus !== 'stopped' && !isChatbotMode && (appMode !== 'reader' || playingMeta?.id !== readingSession?.id);
 
         if (!showPlayer) return null;
 
@@ -25991,24 +25995,49 @@ RULES:
         setIsChatbotTyping(true);
 
         try {
-            const geminiKey = customApiKey || apiKey;
-            const groqKey = displaySettings.groqApiKey;
-            const provider = displaySettings.llmProvider || 'gemini';
-            const key = provider === 'groq' ? groqKey : geminiKey;
+            const geminiKey = (customApiKey || apiKey)?.trim();
+            const groqKey = displaySettings.groqApiKey?.trim();
+
+            // PRIORITY: If Groq Key exists, use Groq. Otherwise use Gemini.
+            let providerToUse = 'gemini';
+            let keyToUse = geminiKey;
+
+            if (groqKey) {
+                providerToUse = 'groq';
+                keyToUse = groqKey;
+            }
 
             const contents = chatbotMessages.concat(userMsg).map(m => ({
                 role: m.role === 'assistant' ? 'model' : 'user',
                 parts: [{ text: m.content }]
             }));
 
-            const response = await callLLM_Internal(
-                contents,
-                activeChatbotChar.prompt,
-                false, // jsonMode
-                null, // modelOverride
-                provider,
-                key
-            );
+            let response;
+            try {
+                response = await callLLM_Internal(
+                    contents,
+                    activeChatbotChar.prompt,
+                    false, // jsonMode
+                    null, // modelOverride
+                    providerToUse,
+                    keyToUse
+                );
+            } catch (err) {
+                // If Groq failed and we have Gemini, fallback
+                if (providerToUse === 'groq' && geminiKey) {
+                    console.warn("Groq failed in chatbot, falling back to Gemini...");
+                    response = await callLLM_Internal(
+                        contents,
+                        activeChatbotChar.prompt,
+                        false,
+                        null,
+                        'gemini',
+                        geminiKey
+                    );
+                } else {
+                    throw err;
+                }
+            }
 
             const aiText = typeof response === 'string' ? response : (response?.text ?? "I'm sorry, I couldn't process that.");
 
@@ -26055,13 +26084,18 @@ RULES:
             await recorder.stop();
             const uri = recorder.uri;
             if (uri) {
-                // Transcription logic (Reusing existing STT logic from handleVoiceToggle)
-                // For brevity, I'll call a simplified version or the transcribed result
                 setIsTranscribing(true);
-                const text = await performSTT(uri); // I'll define this helper
-                setIsTranscribing(false);
-                if (text) {
-                    handleChatbotSend(text);
+                try {
+                    const text = await performSTT(uri);
+                    if (text) {
+                        handleChatbotSend(text);
+                    } else {
+                        console.warn("STT returned empty text");
+                    }
+                } catch (sttErr) {
+                    console.warn("Chatbot STT Processing Error", sttErr);
+                } finally {
+                    setIsTranscribing(false);
                 }
             }
         } else {
@@ -26083,42 +26117,82 @@ RULES:
 
     // Helper for STT in chatbot context
     const performSTT = async (uri: string) => {
-        // This is a condensed version of the logic in handleVoiceToggle
         const geminiKey = customApiKey || apiKey;
         const groqKey = displaySettings.groqApiKey;
-        const provider = displaySettings.llmProvider || 'gemini';
 
-        const base64 = await fs.readAsStringAsync(uri, { encoding: fs.EncodingType.Base64 });
-        const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+        // PRIORITY 1: Groq Whisper (much faster and more reliable)
+        if (groqKey && groqKey.trim()) {
+            try {
+                const formData = new FormData();
+                formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
+                formData.append('model', 'whisper-large-v3-turbo');
+                formData.append('response_format', 'json');
 
-        // Simplified: use Gemini for STT by default in chatbot
-        try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{
-                        role: "user",
-                        parts: [
-                            { text: "Transcribe the following audio precisely. Return ONLY the text." },
-                            { inlineData: { mimeType: mimeType, data: base64 } }
-                        ]
-                    }]
-                })
-            });
-            const data = await response.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        } catch (e) {
-            console.warn("STT Error", e);
-            return null;
+                const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${groqKey}` },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const text = data?.text?.trim();
+                    if (text) {
+                        console.log("Chatbot STT (Groq) Result:", text);
+                        return text;
+                    }
+                } else {
+                    console.warn("Groq STT failed in chatbot, falling back...", await response.text());
+                }
+            } catch (e) {
+                console.warn("Groq STT Chatbot Error:", e);
+            }
         }
+
+        // PRIORITY 2: Gemini STT
+        if (geminiKey && geminiKey.trim()) {
+            try {
+                const base64 = await fs.readAsStringAsync(uri, { encoding: fs.EncodingType.Base64 });
+                const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiKey}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{
+                            role: "user",
+                            parts: [
+                                { text: "Transcribe the following audio precisely. Return ONLY the text." },
+                                { inlineData: { mimeType: mimeType, data: base64 } }
+                            ]
+                        }]
+                    })
+                });
+                const data = await response.json();
+                if (data.error) {
+                    console.warn("Gemini STT API Error:", data.error.message);
+                    return null;
+                }
+                const transcript = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                console.log("Chatbot STT (Gemini) Result:", transcript);
+                return transcript || null;
+            } catch (e) {
+                console.warn("Gemini STT Chatbot Error", e);
+            }
+        }
+
+        return null;
     };
 
     const renderChatbotMessaging = () => {
         if (!activeChatbotChar) return null;
 
         return (
-            <View style={{ flex: 1, backgroundColor: theme.bg }}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1, backgroundColor: theme.bg }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
+            >
                 {/* Scrollable Conversation */}
                 <ScrollView
                     ref={chatbotScrollRef}
@@ -26212,6 +26286,7 @@ RULES:
                                 value={chatbotInput}
                                 onChangeText={setChatbotInput}
                                 onSubmitEditing={() => handleChatbotSend(chatbotInput)}
+                                multiline={false}
                             />
                             <TouchableOpacity onPress={() => handleChatbotSend(chatbotInput)}>
                                 <ArrowRight size={20} color={primaryColor} />
@@ -26258,7 +26333,7 @@ RULES:
                         </>
                     )}
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         );
     };
 
