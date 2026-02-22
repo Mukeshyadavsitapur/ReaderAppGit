@@ -26061,7 +26061,12 @@ RULES:
 
             // Automated TTS response (FORCED OFFLINE for flow)
             if (aiText) {
-                const cleaned = cleanTextForDisplay(aiText);
+                let textToSpeak = aiText;
+                // Refinement: If Trans-O-Bot, strip the "Tricky parts explained" from AUDIO
+                if (activeChatbotChar?.id === 'trans_o_bot') {
+                    textToSpeak = aiText.replace(/Tricky parts explained[\s\S]*?(?=Try saying|Would you like|$)/i, '');
+                }
+                const cleaned = cleanTextForDisplay(textToSpeak);
                 speak(cleaned, 0, true, false, null, true); // forceOffline = true
             }
 
@@ -26289,15 +26294,51 @@ Review the following raw transcribed text:
                             shadowRadius: 2,
                             elevation: 1
                         }}>
-                            <InteractiveText
-                                rawText={msg.content}
-                                theme={theme}
-                                onWordPress={handleWordLookup}
-                                style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 16, lineHeight: 22 }}
-                            />
+                            {activeChatbotChar?.id === 'trans_o_bot' && msg.role === 'assistant' && msg.content.toLowerCase().includes('tricky parts explained') ? (
+                                (() => {
+                                    const parts = msg.content.split(/Tricky parts explained/i);
+                                    const before = parts[0];
+                                    const rest = parts[1] || "";
+
+                                    const explanationEndIndex = rest.search(/Try saying|Would you like/i);
+                                    const explanation = explanationEndIndex !== -1 ? rest.substring(0, explanationEndIndex) : rest;
+                                    const finalPart = explanationEndIndex !== -1 ? rest.substring(explanationEndIndex) : "";
+
+                                    return (
+                                        <View>
+                                            <InteractiveText rawText={before} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
+                                            <View style={{
+                                                backgroundColor: theme.id === 'day' ? 'rgba(139, 92, 246, 0.05)' : 'rgba(139, 92, 246, 0.1)',
+                                                padding: 12,
+                                                borderRadius: 12,
+                                                marginVertical: 10,
+                                                borderLeftWidth: 3,
+                                                borderLeftColor: '#8b5cf6'
+                                            }}>
+                                                <Text style={{ color: '#8b5cf6', fontWeight: 'bold', marginBottom: 5 }}>Tricky parts explained</Text>
+                                                <InteractiveText rawText={explanation.trim()} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 14, lineHeight: 20 }} />
+                                            </View>
+                                            <InteractiveText rawText={finalPart} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
+                                        </View>
+                                    );
+                                })()
+                            ) : (
+                                <InteractiveText
+                                    rawText={msg.content}
+                                    theme={theme}
+                                    onWordPress={handleWordLookup}
+                                    style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 16, lineHeight: 22 }}
+                                />
+                            )}
                             {msg.role === 'assistant' && (
                                 <TouchableOpacity
-                                    onPress={() => speak(msg.content, 0, false, false, null, true)}
+                                    onPress={() => {
+                                        let textToSpeak = msg.content;
+                                        if (activeChatbotChar?.id === 'trans_o_bot') {
+                                            textToSpeak = msg.content.replace(/Tricky parts explained[\s\S]*?(?=Try saying|Would you like|$)/i, '');
+                                        }
+                                        speak(textToSpeak, 0, false, false, null, true);
+                                    }}
                                     style={{ alignSelf: 'flex-end', marginTop: 8 }}
                                 >
                                     <Volume2 size={16} color={theme.secondary} />
@@ -26323,6 +26364,13 @@ Review the following raw transcribed text:
                                 style={{ backgroundColor: primaryColor, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16 }}
                             >
                                 <Text style={{ color: 'white', fontWeight: 'bold' }}>Resume Call</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={endChatbotSession}
+                                style={{ backgroundColor: theme.id === 'day' ? '#fee2e2' : 'rgba(239, 68, 68, 0.1)', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16, borderWidth: 1, borderColor: '#ef4444' }}
+                            >
+                                <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>End Call</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
