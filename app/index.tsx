@@ -12934,7 +12934,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         // Originally injected speaker names for context. Now obsolete.
 
         // UPDATED: Destructure new state properties including speakerNames and lastSpeaker
-        const { chunks, index, offsets, isActive, id, title } = speechState.current;
+        const { chunks, index, offsets, isActive, id, title, forceOffline } = speechState.current;
 
         // Check if this execution belongs to the active session
         if (!isActive || id !== currentSessionId) return;
@@ -12955,102 +12955,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         const originalChunk = chunks[index];
         const globalChunkOffset = offsets[index]; // Start of this chunk in full text
         const resumeOffset = speechState.current.resumeOffsetInChunk || 0;
-
-        if (!originalChunk || !originalChunk.trim()) {
-            speechState.current.index += 1;
-            speechState.current.resumeOffsetInChunk = 0;
-            speakNextChunk();
-            return;
-        }
-
-        const langCode = displaySettings.offlineTtsLanguage || LANGUAGE_CODES[displaySettings.language] || 'en-GB';
-        const key = customApiKey || apiKey;
-        const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-
-        let textForTts = originalChunk;
-
-
-
-        // --- HELPER DEFINITIONS (Moved Up) ---
-
-        // Helper to recursively prefetch subsequent chunks in background
-        const triggerPrefetchChain = async (startIndex: number) => {
-            // Stop if reached end or session changed
-            const { chunks } = speechState.current;
-            if (startIndex >= chunks.length) return;
-            if (speechSessionId.current !== currentSessionId) return;
-
-            const chunk = chunks[startIndex];
-            if (!chunk || !chunk.trim()) {
-                // Skip empty, go next
-                await triggerPrefetchChain(startIndex + 1);
-                return;
-            }
-
-            // FIXED: Match hash logic with playback (Text + Voice only)
-            // Note: Ideally we predict context here too, but simple hash is safer for now.
-            // If context injection changes the hash significantly, playback will just miss cache and regen.
-            const hash = simpleHash(chunk + (displaySettings.voice || "Kore"));
-            const safeTitle = getSafeFileName(title);
-
-            // Try new format first
-            let uri = `${docDir}tts_${hash}_${safeTitle}.wav`;
-
-            // Prevent duplicate downloads for same file across chains
-            if (speechState.current.pendingDownloads.has(uri)) {
-                await triggerPrefetchChain(startIndex + 1);
-                return;
-            }
-
-            try {
-                // Check new format
-                let info = await fs.getInfoAsync(uri);
-
-                // Check old format if new doesn't exist
-                if (!info.exists) {
-                    const oldUri = `${docDir}tts_${hash}.wav`;
-                    info = await fs.getInfoAsync(oldUri);
-                }
-
-                if (!info.exists) {
-                    // Added check for onlineTtsEnabled to prevent background downloads when in offline mode
-                    const groqKey = displaySettings.groqApiKey;
-                    if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current && displaySettings.onlineTtsEnabled) {
-                        speechState.current.pendingDownloads.add(uri);
-
-                        // Increased delay to 4000ms to stay within rate limits (15 RPM) while prefetching smaller chunks
-                        await new Promise(r => setTimeout(r, 4000));
-
-                        if (speechSessionId.current !== currentSessionId) {
-                            speechState.current.pendingDownloads.delete(uri);
-                            return;
-                        }
-
-                        try {
-                            const pcm = await generateGeminiTTS(chunk, null);
-                            const wav = pcmToWav(pcm);
-                            await fs.writeAsStringAsync(uri, wav, { encoding: fs.EncodingType.Base64 });
-                        } catch (err) {
-                            console.warn("Prefetch gen failed", err);
-                            // If one fails, cleanup and stop chain to prevent error loop
-                            speechState.current.pendingDownloads.delete(uri);
-                            return;
-                        }
-
-                        speechState.current.pendingDownloads.delete(uri);
-
-                        // Successfully downloaded, trigger next
-                        await triggerPrefetchChain(startIndex + 1);
-                    }
-                } else {
-                    // Already exists, check next immediately
-                    await triggerPrefetchChain(startIndex + 1);
-                }
-            } catch (e) {
-                console.warn("Prefetch chain error", e);
-                if (speechState.current.pendingDownloads) speechState.current.pendingDownloads.delete(uri);
-            }
-        };
 
         const fallbackToOffline = async () => {
             if (speechSessionId.current !== currentSessionId) return;
@@ -13163,6 +13067,109 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 }
             });
         };
+
+        if (forceOffline) {
+            fallbackToOffline();
+            return;
+        }
+
+        if (!originalChunk || !originalChunk.trim()) {
+            speechState.current.index += 1;
+            speechState.current.resumeOffsetInChunk = 0;
+            speakNextChunk();
+            return;
+        }
+
+        const langCode = displaySettings.offlineTtsLanguage || LANGUAGE_CODES[displaySettings.language] || 'en-GB';
+        const key = customApiKey || apiKey;
+        const docDir = fs.documentDirectory || FileSystem.documentDirectory;
+
+        let textForTts = originalChunk;
+
+
+
+        // --- HELPER DEFINITIONS (Moved Up) ---
+
+        // Helper to recursively prefetch subsequent chunks in background
+        const triggerPrefetchChain = async (startIndex: number) => {
+            // Stop if reached end or session changed
+            const { chunks } = speechState.current;
+            if (startIndex >= chunks.length) return;
+            if (speechSessionId.current !== currentSessionId) return;
+
+            const chunk = chunks[startIndex];
+            if (!chunk || !chunk.trim()) {
+                // Skip empty, go next
+                await triggerPrefetchChain(startIndex + 1);
+                return;
+            }
+
+            // FIXED: Match hash logic with playback (Text + Voice only)
+            // Note: Ideally we predict context here too, but simple hash is safer for now.
+            // If context injection changes the hash significantly, playback will just miss cache and regen.
+            const hash = simpleHash(chunk + (displaySettings.voice || "Kore"));
+            const safeTitle = getSafeFileName(title);
+
+            // Try new format first
+            let uri = `${docDir}tts_${hash}_${safeTitle}.wav`;
+
+            // Prevent duplicate downloads for same file across chains
+            if (speechState.current.pendingDownloads.has(uri)) {
+                await triggerPrefetchChain(startIndex + 1);
+                return;
+            }
+
+            try {
+                // Check new format
+                let info = await fs.getInfoAsync(uri);
+
+                // Check old format if new doesn't exist
+                if (!info.exists) {
+                    const oldUri = `${docDir}tts_${hash}.wav`;
+                    info = await fs.getInfoAsync(oldUri);
+                }
+
+                if (!info.exists) {
+                    // Added check for onlineTtsEnabled to prevent background downloads when in offline mode
+                    const groqKey = displaySettings.groqApiKey;
+                    if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current && displaySettings.onlineTtsEnabled) {
+                        speechState.current.pendingDownloads.add(uri);
+
+                        // Increased delay to 4000ms to stay within rate limits (15 RPM) while prefetching smaller chunks
+                        await new Promise(r => setTimeout(r, 4000));
+
+                        if (speechSessionId.current !== currentSessionId) {
+                            speechState.current.pendingDownloads.delete(uri);
+                            return;
+                        }
+
+                        try {
+                            const pcm = await generateGeminiTTS(chunk, null);
+                            const wav = pcmToWav(pcm);
+                            await fs.writeAsStringAsync(uri, wav, { encoding: fs.EncodingType.Base64 });
+                        } catch (err) {
+                            console.warn("Prefetch gen failed", err);
+                            // If one fails, cleanup and stop chain to prevent error loop
+                            speechState.current.pendingDownloads.delete(uri);
+                            return;
+                        }
+
+                        speechState.current.pendingDownloads.delete(uri);
+
+                        // Successfully downloaded, trigger next
+                        await triggerPrefetchChain(startIndex + 1);
+                    }
+                } else {
+                    // Already exists, check next immediately
+                    await triggerPrefetchChain(startIndex + 1);
+                }
+            } catch (e) {
+                console.warn("Prefetch chain error", e);
+                if (speechState.current.pendingDownloads) speechState.current.pendingDownloads.delete(uri);
+            }
+        };
+
+
 
         const playAudioFile = async (uri: string) => {
             try {
@@ -13346,7 +13353,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     }, [displaySettings.ttsRate, displaySettings.language, displaySettings.voice, customApiKey, isRateLimited, displaySettings.onlineTtsEnabled, displaySettings.offlineTtsLanguage, displaySettings.offlineVoice, availableVoices]);
 
-    const speak = async (text: string, startOffset = 0, isAlreadyClean = false, forcePlay = false, customTitle: string | null = null) => {
+    const speak = async (text: string, startOffset = 0, isAlreadyClean = false, forcePlay = false, customTitle: string | null = null, forceOffline = false) => {
         if (!text) return;
 
         // Always use full text for chunking to maintain consistency
@@ -13459,7 +13466,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 baseOffset: 0,
                 title: customTitle || (readingSession ? readingSession.title : "Audio"),
                 pendingDownloads: new Set(),
-                lastSpeaker: "Narrator" // Default
+                lastSpeaker: "Narrator", // Default
+                forceOffline: forceOffline
             };
 
             setTtsStatus('playing');
@@ -26051,14 +26059,10 @@ RULES:
             setChatbotMessages(prev => [...prev, aiMsg]);
             setIsChatbotTyping(false);
 
-            // Automated TTS response
+            // Automated TTS response (FORCED OFFLINE for flow)
             if (aiText) {
-                if (displaySettings.onlineTtsEnabled) {
-                    speak(aiText);
-                } else {
-                    const cleaned = cleanTextForDisplay(aiText);
-                    speak(cleaned);
-                }
+                const cleaned = cleanTextForDisplay(aiText);
+                speak(cleaned, 0, true, false, null, true); // forceOffline = true
             }
 
             // Restart hold timer after response
@@ -26119,6 +26123,7 @@ RULES:
     const performSTT = async (uri: string) => {
         const geminiKey = customApiKey || apiKey;
         const groqKey = displaySettings.groqApiKey;
+        let rawTranscript = "";
 
         // PRIORITY 1: Groq Whisper (much faster and more reliable)
         if (groqKey && groqKey.trim()) {
@@ -26138,8 +26143,8 @@ RULES:
                     const data = await response.json();
                     const text = data?.text?.trim();
                     if (text) {
-                        console.log("Chatbot STT (Groq) Result:", text);
-                        return text;
+                        console.log("Chatbot STT (Groq) Raw Result:", text);
+                        rawTranscript = text;
                     }
                 } else {
                     console.warn("Groq STT failed in chatbot, falling back...", await response.text());
@@ -26171,17 +26176,81 @@ RULES:
                 const data = await response.json();
                 if (data.error) {
                     console.warn("Gemini STT API Error:", data.error.message);
-                    return null;
+                } else {
+                    const transcript = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                    if (transcript) {
+                        console.log("Chatbot STT (Gemini) Raw Result:", transcript);
+                        rawTranscript = transcript;
+                    }
                 }
-                const transcript = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                console.log("Chatbot STT (Gemini) Result:", transcript);
-                return transcript || null;
             } catch (e) {
                 console.warn("Gemini STT Chatbot Error", e);
             }
         }
 
-        return null;
+        if (!rawTranscript) return null;
+
+        // --- SECONDARY STEP: LLM REFINEMENT (Synced with main app logic but NO TRANSLATION) ---
+        // This fixes grammar, punctuation, and "stuttering" while PRESERVING the original language.
+        try {
+            const refinementPrompt = `You are an expert transcription assistant.
+Review the following raw transcribed text:
+1. Fix grammar, punctuation, and capitalization.
+2. Remove filler words (ums, ahs, repeating words) and stuttering.
+3. CRITICAL: DO NOT translate the text. Keep it in its ORIGINAL language.
+4. Return ONLY the polished final text. Do not add explanations.`;
+
+            if (groqKey) {
+                const groqModel = displaySettings.groqModel || 'llama-3.3-70b-versatile';
+                const refineRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${groqKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: groqModel,
+                        messages: [
+                            { role: 'system', content: refinementPrompt },
+                            { role: 'user', content: `Raw transcript:\n${rawTranscript}` }
+                        ],
+                        temperature: 0.1,
+                        max_tokens: 1024
+                    })
+                });
+
+                if (refineRes.ok) {
+                    const refineData = await refineRes.json();
+                    const refinedText = refineData.choices?.[0]?.message?.content?.trim();
+                    if (refinedText) {
+                        console.log("Chatbot STT (Groq Refined) Result:", refinedText);
+                        return refinedText;
+                    }
+                }
+            } else if (geminiKey) {
+                // Fallback to Gemini for refinement
+                const refineRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiKey}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{
+                            role: "user",
+                            parts: [{ text: `${refinementPrompt}\n\nRaw transcript:\n${rawTranscript}` }]
+                        }]
+                    })
+                });
+                const refineData = await refineRes.json();
+                const refinedText = refineData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                if (refinedText) {
+                    console.log("Chatbot STT (Gemini Refined) Result:", refinedText);
+                    return refinedText;
+                }
+            }
+        } catch (err) {
+            console.warn("Chatbot STT Refinement failed, using raw:", err);
+        }
+
+        return rawTranscript;
     };
 
     const renderChatbotMessaging = () => {
@@ -26228,7 +26297,7 @@ RULES:
                             />
                             {msg.role === 'assistant' && (
                                 <TouchableOpacity
-                                    onPress={() => speak(msg.content)}
+                                    onPress={() => speak(msg.content, 0, false, false, null, true)}
                                     style={{ alignSelf: 'flex-end', marginTop: 8 }}
                                 >
                                     <Volume2 size={16} color={theme.secondary} />
