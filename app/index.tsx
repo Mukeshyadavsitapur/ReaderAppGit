@@ -26154,7 +26154,8 @@ RULES:
 
                 // Refinement: If Trans-O-Bot, strip the "Tricky parts explained" from AUDIO
                 if (activeChatbotChar?.id === 'trans_o_bot') {
-                    textToSpeak = textToSpeak.replace(/Tricky parts explained[\s\S]*?(?=Try saying|Would you like|$)/i, '');
+                    // Stronger regex to catch bolded/formatted titles and everything until follow-up or end
+                    textToSpeak = textToSpeak.replace(/\**Tricky parts explained\**[\s\S]*?(?=Try saying|Would you like|$)/gi, '');
                 }
 
                 // Refinement: Remove IPA phonetic strings (text between slashes /.../)
@@ -26389,31 +26390,36 @@ Review the following raw transcribed text:
                             shadowRadius: 2,
                             elevation: 1
                         }}>
-                            {activeChatbotChar?.id === 'trans_o_bot' && msg.role === 'assistant' && msg.content.toLowerCase().includes('tricky parts explained') ? (
+                            {activeChatbotChar?.id === 'trans_o_bot' && msg.role === 'assistant' && msg.content.toLowerCase().match(/\**tricky parts explained\**/) ? (
                                 (() => {
-                                    const parts = msg.content.split(/Tricky parts explained/i);
-                                    const before = parts[0];
+                                    const parts = msg.content.split(/\**Tricky parts explained\**/i);
+                                    let before = parts[0];
                                     const rest = parts[1] || "";
 
                                     const explanationEndIndex = rest.search(/Try saying|Would you like/i);
                                     const explanation = explanationEndIndex !== -1 ? rest.substring(0, explanationEndIndex) : rest;
                                     const finalPart = explanationEndIndex !== -1 ? rest.substring(explanationEndIndex) : "";
 
+                                    // Clean up any stray asterisks or trailing separators from common markdown structures
+                                    before = before.replace(/\s*\**\s*$/, '');
+
                                     return (
                                         <View>
                                             <InteractiveText rawText={before} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
                                             <View style={{
-                                                backgroundColor: theme.id === 'day' ? 'rgba(139, 92, 246, 0.05)' : 'rgba(139, 92, 246, 0.1)',
-                                                padding: 12,
-                                                borderRadius: 12,
-                                                marginVertical: 10,
-                                                borderLeftWidth: 3,
+                                                backgroundColor: theme.id === 'day' ? '#f5f3ff' : 'rgba(139, 92, 246, 0.08)',
+                                                padding: 14,
+                                                borderRadius: 16,
+                                                marginVertical: 12,
+                                                borderWidth: 1,
+                                                borderColor: theme.id === 'day' ? '#ddd6fe' : 'rgba(139, 92, 246, 0.3)',
+                                                borderLeftWidth: 4,
                                                 borderLeftColor: '#8b5cf6'
                                             }}>
-                                                <Text style={{ color: '#8b5cf6', fontWeight: 'bold', marginBottom: 5 }}>Tricky parts explained</Text>
+                                                <Text style={{ color: '#8b5cf6', fontWeight: '900', marginBottom: 8, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Tricky parts explained</Text>
                                                 <InteractiveText rawText={explanation.trim()} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 14, lineHeight: 20 }} />
                                             </View>
-                                            <InteractiveText rawText={finalPart} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
+                                            <InteractiveText rawText={finalPart.trim()} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
                                         </View>
                                     );
                                 })()
@@ -26430,7 +26436,7 @@ Review the following raw transcribed text:
                                     onPress={() => {
                                         let textToSpeak = msg.content;
                                         if (activeChatbotChar?.id === 'trans_o_bot') {
-                                            textToSpeak = msg.content.replace(/Tricky parts explained[\s\S]*?(?=Try saying|Would you like|$)/i, '');
+                                            textToSpeak = msg.content.replace(/\**Tricky parts explained\**[\s\S]*?(?=Try saying|Would you like|$)/gi, '');
                                         }
                                         speak(textToSpeak, 0, false, false, null, true);
                                     }}
