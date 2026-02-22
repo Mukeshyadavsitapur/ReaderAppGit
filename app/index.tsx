@@ -2158,7 +2158,7 @@ const CHATBOT_CHARACTERS: any[] = [
         id: 'trans_o_bot',
         title: 'Trans-O-Bot (Translator)',
         role: 'Translation Assistant',
-        prompt: 'You are Trans-O-Bot, a highly efficient translation assistant. Your primary job is to translate what the user says into their target language and explain any tricky parts. Always encourage the user to try repeating the translation. Always end with a question. Be precise and concise.',
+        prompt: 'You are Trans-O-Bot, a highly efficient translation assistant. Your primary job is to translate what the user says into their target language and explain any tricky parts. Use the heading "### Tricky parts explained" for your explanations. Always encourage the user to try repeating the translation. Always end with a question. Be precise and concise.',
         iconName: 'Languages',
         color: ['#06b6d4', '#0891b2'], // Cyan
         greeting: "Beep boop! I am Trans-O-Bot. I can help you translate anything! What should we translate first?"
@@ -26154,8 +26154,8 @@ RULES:
 
                 // Refinement: If Trans-O-Bot, strip the "Tricky parts explained" from AUDIO
                 if (activeChatbotChar?.id === 'trans_o_bot') {
-                    // Stronger regex to catch bolded/formatted titles and everything until follow-up or end
-                    textToSpeak = textToSpeak.replace(/\**Tricky parts explained\**[\s\S]*?(?=Try saying|Would you like|$)/gi, '');
+                    // Robust regex to catch headers, bolding, colons and everything until follow-up or end
+                    textToSpeak = textToSpeak.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
                 }
 
                 // Refinement: Remove IPA phonetic strings (text between slashes /.../)
@@ -26390,9 +26390,9 @@ Review the following raw transcribed text:
                             shadowRadius: 2,
                             elevation: 1
                         }}>
-                            {activeChatbotChar?.id === 'trans_o_bot' && msg.role === 'assistant' && msg.content.toLowerCase().match(/\**tricky parts explained\**/) ? (
+                            {activeChatbotChar?.id === 'trans_o_bot' && msg.role === 'assistant' && msg.content.toLowerCase().match(/(?:^|\n)\s*(?:#+\s*|\**)\s*tricky parts explained\s*[:\*\-\s]*/) ? (
                                 (() => {
-                                    const parts = msg.content.split(/\**Tricky parts explained\**/i);
+                                    const parts = msg.content.split(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*/i);
                                     let before = parts[0];
                                     const rest = parts[1] || "";
 
@@ -26400,8 +26400,8 @@ Review the following raw transcribed text:
                                     const explanation = explanationEndIndex !== -1 ? rest.substring(0, explanationEndIndex) : rest;
                                     const finalPart = explanationEndIndex !== -1 ? rest.substring(explanationEndIndex) : "";
 
-                                    // Clean up any stray asterisks or trailing separators from common markdown structures
-                                    before = before.replace(/\s*\**\s*$/, '');
+                                    // Clean up any stray asterisks, headers or trailing separators
+                                    before = before.replace(/\s*[#\*\s\-:]+$/, '');
 
                                     return (
                                         <View>
@@ -26436,9 +26436,11 @@ Review the following raw transcribed text:
                                     onPress={() => {
                                         let textToSpeak = msg.content;
                                         if (activeChatbotChar?.id === 'trans_o_bot') {
-                                            textToSpeak = msg.content.replace(/\**Tricky parts explained\**[\s\S]*?(?=Try saying|Would you like|$)/gi, '');
+                                            textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
                                         }
-                                        speak(textToSpeak, 0, false, false, null, true);
+                                        // Always clean Markdown for manual audio playback
+                                        const cleaned = cleanTextForDisplay(textToSpeak);
+                                        speak(cleaned, 0, false, false, null, true);
                                     }}
                                     style={{ alignSelf: 'flex-end', marginTop: 8 }}
                                 >
