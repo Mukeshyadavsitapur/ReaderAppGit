@@ -23008,20 +23008,27 @@ RULES:
                                         }}
                                         style={{
                                             padding: 6,
-                                            paddingHorizontal: 10,
-                                            backgroundColor: isChatbotMode ? 'rgba(255,255,255,0.25)' : 'transparent',
-                                            borderRadius: 16,
+                                            paddingHorizontal: 12,
+                                            backgroundColor: isDay
+                                                ? 'rgba(255,255,255,0.2)'
+                                                : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight),
+                                            borderRadius: 20,
                                             flexDirection: 'row',
                                             alignItems: 'center',
-                                            gap: 6,
+                                            gap: 8,
                                             borderWidth: 1,
-                                            borderColor: isChatbotMode ? 'rgba(255,255,255,0.3)' : 'transparent'
+                                            borderColor: isDay ? 'rgba(255,255,255,0.3)' : theme.border
                                         }}
                                     >
-                                        <Bot size={24} color={headerIconColor} />
-                                        {isChatbotMode && (
-                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>Chatbot</Text>
-                                        )}
+                                        <Bot size={20} color={headerIconColor} />
+                                        <Text style={{
+                                            color: headerTextColor,
+                                            fontWeight: 'bold',
+                                            fontSize: 13,
+                                            letterSpacing: 0.5
+                                        }}>
+                                            {isChatbotMode ? "Chatbot" : "Reader"}
+                                        </Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -23083,12 +23090,28 @@ RULES:
     const renderChatbotHome = () => {
         return (
             <View style={{ flex: 1, padding: 20 }}>
-                <Text style={{ fontSize: 24, fontWeight: 'bold', color: theme.text, marginBottom: 10 }}>
-                    Pick a Character
-                </Text>
-                <Text style={{ fontSize: 14, color: theme.secondary, marginBottom: 25 }}>
-                    Select a companion to help you practice your language skills.
-                </Text>
+                <View style={{ alignItems: 'center', marginBottom: 32, marginTop: 10 }}>
+                    <Text style={{
+                        fontSize: 28,
+                        fontWeight: '900',
+                        color: theme.text,
+                        marginBottom: 8,
+                        letterSpacing: 0.5,
+                        textAlign: 'center'
+                    }}>
+                        Pick a Character
+                    </Text>
+                    <View style={{ height: 4, width: 40, backgroundColor: theme.primary, borderRadius: 2, marginBottom: 12 }} />
+                    <Text style={{
+                        fontSize: 15,
+                        color: theme.secondary,
+                        textAlign: 'center',
+                        maxWidth: '90%',
+                        lineHeight: 22
+                    }}>
+                        Select a companion to help you practice your language skills.
+                    </Text>
+                </View>
 
                 <ScrollView showsVerticalScrollIndicator={false}>
                     <View style={{ gap: 16 }}>
