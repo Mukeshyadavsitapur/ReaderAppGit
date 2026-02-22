@@ -5608,6 +5608,7 @@ export default function App() {
 
     // --- OFFLINE STT (via expo-speech-recognition) ---
     const [offlineTranscript, setOfflineTranscript] = useState("");
+    const latestOfflineTranscriptRef = useRef("");
     const offlineSTTResolver = useRef<((text: string | null) => void) | null>(null);
 
     const [isOfflineRecognizing, setIsOfflineRecognizing] = useState(false);
@@ -5617,16 +5618,17 @@ export default function App() {
         setOfflineTranscript("");
     });
     useSpeechRecognitionEvent("end", () => {
-        console.log("Offline STT Ended. Final transcript:", offlineTranscript);
+        console.log("Offline STT Ended. Final transcript:", latestOfflineTranscriptRef.current);
         setIsOfflineRecognizing(false);
         if (offlineSTTResolver.current) {
-            offlineSTTResolver.current(offlineTranscript);
+            offlineSTTResolver.current(latestOfflineTranscriptRef.current);
             offlineSTTResolver.current = null;
         }
     });
     useSpeechRecognitionEvent("result", (event: any) => {
         const text = event.results[0]?.transcript || "";
         setOfflineTranscript(text);
+        latestOfflineTranscriptRef.current = text;
     });
     useSpeechRecognitionEvent("error", (event: any) => {
         console.warn("Offline STT Error:", event.error, event.message);
@@ -5639,6 +5641,11 @@ export default function App() {
 
     const getOfflineSTT = (): Promise<string | null> => {
         return new Promise((resolve) => {
+            if (!ExpoSpeechRecognitionModule) {
+                showToast("⚠️ Speech Recognition module not found. Rebuild may be required.");
+                resolve(null);
+                return;
+            }
             offlineSTTResolver.current = resolve;
             ExpoSpeechRecognitionModule.start({
                 lang: displaySettings.offlineTtsLanguage || "en-US",
