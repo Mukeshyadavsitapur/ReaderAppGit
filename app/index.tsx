@@ -5612,10 +5612,14 @@ export default function App() {
     const offlineSTTResolver = useRef<((text: string | null) => void) | null>(null);
 
     const [isOfflineRecognizing, setIsOfflineRecognizing] = useState(false);
+    // NEW: Ref to keep chunks of STT to build consecutive utterances over time without losing the previous
+    const accumulatedOfflineTranscriptRef = useRef("");
+
     useSpeechRecognitionEvent("start", () => {
         console.log("Offline STT Started");
         setIsOfflineRecognizing(true);
         setOfflineTranscript("");
+        accumulatedOfflineTranscriptRef.current = "";
     });
     useSpeechRecognitionEvent("end", () => {
         console.log("Offline STT Ended. Final transcript:", latestOfflineTranscriptRef.current);
@@ -5626,9 +5630,39 @@ export default function App() {
         }
     });
     useSpeechRecognitionEvent("result", (event: any) => {
-        const text = event.results[0]?.transcript || "";
-        setOfflineTranscript(text);
-        latestOfflineTranscriptRef.current = text;
+        // In continuous mode, some engines (like Android's) keep appending to event.results
+        // each time they identify a new word or phrase, instead of clearing it.
+        // Therefore, we just take the entire combined event.results transcript
+        // as the single source of truth for the *current* session.
+        let fullTranscript = "";
+        for (const result of event.results) {
+            fullTranscript += result.transcript + " ";
+        }
+        fullTranscript = fullTranscript.trim();
+
+        // If your engine happens to clear event.results on isFinal, 
+        // we append it to our accumulator instead.
+        // However, we only append to the accumulator if the engine *actually* cleared
+        // the results array (event.results.length === 1 and it's a new utterance).
+        // A safer universal approach is to test if the new transcript already contains the accumulator.
+        let finalDisplayTranscript = fullTranscript;
+
+        if (accumulatedOfflineTranscriptRef.current) {
+            if (fullTranscript.startsWith(accumulatedOfflineTranscriptRef.current)) {
+                // The engine is natively accumulating everything (Android behavior)
+                finalDisplayTranscript = fullTranscript;
+            } else {
+                // The engine cleared its memory and started fresh (iOS behavior or partial)
+                finalDisplayTranscript = (accumulatedOfflineTranscriptRef.current + " " + fullTranscript).trim();
+            }
+        }
+
+        setOfflineTranscript(finalDisplayTranscript);
+        latestOfflineTranscriptRef.current = finalDisplayTranscript;
+
+        if (event.isFinal) {
+            accumulatedOfflineTranscriptRef.current = finalDisplayTranscript;
+        }
     });
     useSpeechRecognitionEvent("error", (event: any) => {
         console.warn("Offline STT Error:", event.error, event.message);
@@ -5665,7 +5699,7 @@ export default function App() {
             ExpoSpeechRecognitionModule.start({
                 lang: displaySettings.offlineTtsLanguage || "en-US",
                 interimResults: true,
-                continuous: false,
+                continuous: true, // Auto-stop removed, user must tap again
             });
         });
     };
@@ -5861,20 +5895,8 @@ export default function App() {
                     const status = await recorder.getStatus();
                     if (status.metering !== undefined) {
                         const volume = status.metering;
-                        // Sensitivity threshold (Depends on expo-audio metering scale: usually -160 to 0)
-                        if (volume < -50) {
-                            if (!chatbotSilenceTimer.current) {
-                                chatbotSilenceTimer.current = setTimeout(() => {
-                                    handleChatbotVoiceToggle(); // Auto-send on silence
-                                }, 2000); // Reduced to 2s for better response
-                            }
-                        } else {
-                            // Sound detected, reset silence timer
-                            if (chatbotSilenceTimer.current) {
-                                clearTimeout(chatbotSilenceTimer.current);
-                                chatbotSilenceTimer.current = null;
-                            }
-                        }
+                        // Auto-send on silence has been disabled as per user request. 
+                        // The user must click to send manually.
                     }
                 } catch (e) {
                     console.warn("Metering error", e);
