@@ -26665,54 +26665,58 @@ Review the following raw transcribed text:
                                     style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 16, lineHeight: 22 }}
                                 />
                             )}
-                            {msg.role === 'assistant' && (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8, gap: 10 }}>
-                                    {/* Language Switch Button */}
-                                    <TouchableOpacity
-                                        onPress={() => switchChatBubbleLanguage(msg)}
-                                        disabled={chatbotTranslatingMsgId === msg.id}
-                                        style={{
-                                            width: 28, height: 28, borderRadius: 14,
-                                            alignItems: 'center', justifyContent: 'center',
-                                            borderWidth: 1, borderColor: theme.border,
-                                            backgroundColor: theme.uiBg
-                                        }}
-                                    >
-                                        {chatbotTranslatingMsgId === msg.id ? (
-                                            <ActivityIndicator size="small" color={theme.secondary} />
-                                        ) : (
-                                            <Text style={{ color: theme.secondary, fontWeight: '900', fontSize: 9 }}>
-                                                {(chatbotMsgLanguages[msg.id] || displaySettings.language || 'EN').substring(0, 2).toUpperCase()}
-                                            </Text>
-                                        )}
-                                    </TouchableOpacity>
 
-                                    {/* Speaker / Stop Button */}
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            // If THIS bubble is already playing, act as a stop button
-                                            if (chatbotSpeakingMsgId === msg.id) {
-                                                stopTTS();
-                                                setChatbotSpeakingMsgId(null);
-                                                return;
-                                            }
-                                            let textToSpeak = msg.content;
-                                            if (activeChatbotChar?.id === 'trans_o_bot') {
-                                                textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
-                                            }
-                                            // Always clean Markdown for manual audio playback
-                                            const cleaned = cleanTextForDisplay(textToSpeak);
-                                            // Mark this bubble as the active speaker, then start playing
-                                            setChatbotSpeakingMsgId(msg.id);
-                                            speak(cleaned, 0, false, true, null, true);
-                                        }}
-                                    >
-                                        {chatbotSpeakingMsgId === msg.id ? (
-                                            <Square size={16} color={'#ef4444'} fill={'#ef4444'} />
-                                        ) : (
-                                            <Volume2 size={16} color={theme.secondary} />
-                                        )}
-                                    </TouchableOpacity>
+                            {msg.role === 'assistant' && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                                    <Text style={{ color: theme.secondary, fontSize: 10, opacity: 0.55, fontStyle: 'italic' }}>tap any word to define</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        {/* Language Switch Button */}
+                                        <TouchableOpacity
+                                            onPress={() => switchChatBubbleLanguage(msg)}
+                                            disabled={chatbotTranslatingMsgId === msg.id}
+                                            style={{
+                                                width: 28, height: 28, borderRadius: 14,
+                                                alignItems: 'center', justifyContent: 'center',
+                                                borderWidth: 1, borderColor: theme.border,
+                                                backgroundColor: theme.uiBg
+                                            }}
+                                        >
+                                            {chatbotTranslatingMsgId === msg.id ? (
+                                                <ActivityIndicator size="small" color={theme.secondary} />
+                                            ) : (
+                                                <Text style={{ color: theme.secondary, fontWeight: '900', fontSize: 9 }}>
+                                                    {(chatbotMsgLanguages[msg.id] || displaySettings.language || 'EN').substring(0, 2).toUpperCase()}
+                                                </Text>
+                                            )}
+                                        </TouchableOpacity>
+
+                                        {/* Speaker / Stop Button */}
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                // If THIS bubble is already playing, act as a stop button
+                                                if (chatbotSpeakingMsgId === msg.id) {
+                                                    stopTTS();
+                                                    setChatbotSpeakingMsgId(null);
+                                                    return;
+                                                }
+                                                let textToSpeak = msg.content;
+                                                if (activeChatbotChar?.id === 'trans_o_bot') {
+                                                    textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
+                                                }
+                                                // Always clean Markdown for manual audio playback
+                                                const cleaned = cleanTextForDisplay(textToSpeak);
+                                                // Mark this bubble as the active speaker, then start playing
+                                                setChatbotSpeakingMsgId(msg.id);
+                                                speak(cleaned, 0, false, true, null, true);
+                                            }}
+                                        >
+                                            {chatbotSpeakingMsgId === msg.id ? (
+                                                <Square size={16} color={'#ef4444'} fill={'#ef4444'} />
+                                            ) : (
+                                                <Volume2 size={16} color={theme.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             )}
                         </View>
