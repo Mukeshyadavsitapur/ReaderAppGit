@@ -1634,13 +1634,10 @@ const IMAGE_MODELS = [
     "imagen-3.0-generate-001"
 ];
 
-// Gemini TTS Models - ordered by preference (quality → speed → scale)
 const TTS_MODELS = [
-    "gemini-2.5-flash-preview-tts", // Confirmed working; fastest/low-latency
-    "gemini-2.5-pro-tts",           // High-fidelity, best for audiobooks/long content
-    "gemini-2.5-flash-tts",         // Workhorse: optimized for everyday low-latency
-    "gemini-2.5-flash-lite-tts",    // Budget-friendly, high-volume simple tasks
+    "gemini-2.5-flash-preview-tts", // Only confirmed-working model as of Feb 2026
 ];
+
 
 // Groq TTS Models - Prioritized
 const GROQ_TTS_MODELS = [
@@ -13484,10 +13481,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 setIsTtsDownloading(true);
                 setTtsDownloadProgress(0);
 
-                // --- 21s SEQUENTIAL TIMER ---
-                // nextTtsRequestAllowedAt is set to (sendTime + 21s) each time a request goes out.
+                // --- 7s SEQUENTIAL TIMER ---
+                // nextTtsRequestAllowedAt is set to (sendTime + 7s) each time a request goes out.
                 // Before the NEXT request, we wait here until that deadline passes.
-                // This guarantees sends are always ≥ 21s apart, measured from send time.
+                // This guarantees sends are always ≥ 7s apart, measured from send time.
                 const waitBeforeSend = Math.max(0, nextTtsRequestAllowedAt.current - Date.now());
                 if (waitBeforeSend > 0) {
                     console.log(`[TTS] Sequential limit: waiting ${Math.ceil(waitBeforeSend / 1000)}s before next request...`);
@@ -13499,9 +13496,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     }
                 }
 
-                // Mark the send moment — next request must wait until this + 21s
-                nextTtsRequestAllowedAt.current = Date.now() + 21000;
-                console.log(`[TTS] Request sent. Next request allowed in 21s.`);
+                // Mark the send moment — next request must wait until this + 7s
+                nextTtsRequestAllowedAt.current = Date.now() + 7000;
+                console.log(`[TTS] Request sent. Next request allowed in 7s.`);
 
                 // Generate FULL chunk to ensure cache reusability
                 const { pcmData, switched } = await generateGeminiTTS(textForTts, null);
