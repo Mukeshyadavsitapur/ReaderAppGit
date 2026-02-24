@@ -13164,46 +13164,60 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
             let lastBoundaryUpdate = 0;
 
-            Speech.speak(textToSpeak, {
-                rate: displaySettings.ttsRate,
-                language: languageToUse,
-                voice: voiceIdentifier, // Force specific voice
-                onStart: () => { },
-                onDone: () => {
-                    if (speechState.current.isActive && speechSessionId.current === currentSessionId) {
-                        speechState.current.index += 1;
-                        speechState.current.resumeOffsetInChunk = 0;
-                        speakNextChunk();
-                    }
-                },
-                onStopped: () => {
-                    if (!speechState.current.isActive && !speechState.current.isPaused) {
+            try {
+                // GUARD: Android native crash prevention
+                if (Platform.OS === 'android' && availableVoices.length === 0) {
+                    console.warn("TTS: No voices available. Speech canceled to prevent crash.");
+                    setTtsStatus('stopped');
+                    setChatbotSpeakingMsgId(null);
+                    return;
+                }
+
+                Speech.speak(textToSpeak, {
+                    rate: displaySettings.ttsRate,
+                    language: languageToUse,
+                    voice: voiceIdentifier, // Force specific voice
+                    onStart: () => { },
+                    onDone: () => {
+                        if (speechState.current.isActive && speechSessionId.current === currentSessionId) {
+                            speechState.current.index += 1;
+                            speechState.current.resumeOffsetInChunk = 0;
+                            speakNextChunk();
+                        }
+                    },
+                    onStopped: () => {
+                        if (!speechState.current.isActive && !speechState.current.isPaused) {
+                            setTtsStatus('stopped');
+                            setSpeechRange(null);
+                            setChatbotSpeakingMsgId(null);
+                        }
+                    },
+                    onError: (e) => {
+                        console.log("TTS Error", e);
                         setTtsStatus('stopped');
                         setSpeechRange(null);
                         setChatbotSpeakingMsgId(null);
-                    }
-                },
-                onError: (e) => {
-                    console.log("TTS Error", e);
-                    setTtsStatus('stopped');
-                    setSpeechRange(null);
-                    setChatbotSpeakingMsgId(null);
-                    speechState.current.isActive = false;
-                },
-                onBoundary: (event: any) => {
-                    if (event.charIndex !== undefined && speechState.current.isActive && speechSessionId.current === currentSessionId) {
-                        const now = Date.now();
-                        if (now - lastBoundaryUpdate < 500) return;
-                        lastBoundaryUpdate = now;
+                        speechState.current.isActive = false;
+                    },
+                    onBoundary: (event: any) => {
+                        if (event.charIndex !== undefined && speechState.current.isActive && speechSessionId.current === currentSessionId) {
+                            const now = Date.now();
+                            if (now - lastBoundaryUpdate < 500) return;
+                            lastBoundaryUpdate = now;
 
-                        const currentBase = speechState.current.baseOffset || 0;
-                        setSpeechRange({
-                            start: currentBase + globalChunkOffset + resumeOffset + event.charIndex,
-                            length: event.charLength
-                        });
+                            const currentBase = speechState.current.baseOffset || 0;
+                            setSpeechRange({
+                                start: currentBase + globalChunkOffset + resumeOffset + event.charIndex,
+                                length: event.charLength
+                            });
+                        }
                     }
-                }
-            });
+                });
+            } catch (speakErr) {
+                console.error("Speech.speak failed", speakErr);
+                setTtsStatus('stopped');
+                setChatbotSpeakingMsgId(null);
+            }
         };
 
         if (forceOffline) {
@@ -15424,58 +15438,67 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (textToSpeak) {
                     flashcardTTSPlaying = true;
-                    Speech.speak(textToSpeak, {
-                        language: displaySettings.primaryLanguage || 'en',
-                        pitch: 1.0,
-                        rate: 0.9,
-                        onDone: () => {
+                    try {
+                        if (Platform.OS === 'android' && availableVoices.length === 0) {
                             flashcardTTSPlaying = false;
-                            if (!flashcardAutoPlay) {
-                                setFlashcardSession((prev: any) => ({ ...prev }));
-                                return;
-                            }
+                            return;
+                        }
+                        Speech.speak(textToSpeak, {
+                            language: displaySettings.primaryLanguage || 'en',
+                            pitch: 1.0,
+                            rate: 0.9,
+                            onDone: () => {
+                                flashcardTTSPlaying = false;
+                                if (!flashcardAutoPlay) {
+                                    setFlashcardSession((prev: any) => ({ ...prev }));
+                                    return;
+                                }
 
-                            // Wait 1 second, then flip or move to next
-                            autoPlayTimer = setTimeout(() => {
-                                if (!flashcardAutoPlay) return;
+                                // Wait 1 second, then flip or move to next
+                                autoPlayTimer = setTimeout(() => {
+                                    if (!flashcardAutoPlay) return;
 
-                                setFlashcardSession((prev: any) => {
-                                    if (!prev.flipped) {
-                                        // Flip to back
-                                        const newState = { ...prev, flipped: true };
-                                        // Continue playing after flip
-                                        setTimeout(() => playCurrentCard(), 100);
-                                        return newState;
-                                    } else {
-                                        // Move to next card
-                                        if (prev.currentIndex < prev.items.length - 1) {
-                                            const newState = {
-                                                ...prev,
-                                                currentIndex: prev.currentIndex + 1,
-                                                flipped: false
-                                            };
-                                            // Continue playing next card
+                                    setFlashcardSession((prev: any) => {
+                                        if (!prev.flipped) {
+                                            // Flip to back
+                                            const newState = { ...prev, flipped: true };
+                                            // Continue playing after flip
                                             setTimeout(() => playCurrentCard(), 100);
                                             return newState;
                                         } else {
-                                            // Reached the end
-                                            stopAutoPlay();
-                                            Alert.alert("Auto-Play Complete", "You've reached the end of the deck.");
-                                            return prev;
+                                            // Move to next card
+                                            if (prev.currentIndex < prev.items.length - 1) {
+                                                const newState = {
+                                                    ...prev,
+                                                    currentIndex: prev.currentIndex + 1,
+                                                    flipped: false
+                                                };
+                                                // Continue playing next card
+                                                setTimeout(() => playCurrentCard(), 100);
+                                                return newState;
+                                            } else {
+                                                // Reached the end
+                                                stopAutoPlay();
+                                                Alert.alert("Auto-Play Complete", "You've reached the end of the deck.");
+                                                return prev;
+                                            }
                                         }
-                                    }
-                                });
-                            }, 1000);
-                        },
-                        onStopped: () => {
-                            flashcardTTSPlaying = false;
-                            setFlashcardSession((prev: any) => ({ ...prev }));
-                        },
-                        onError: () => {
-                            flashcardTTSPlaying = false;
-                            setFlashcardSession((prev: any) => ({ ...prev }));
-                        }
-                    });
+                                    });
+                                }, 1000);
+                            },
+                            onStopped: () => {
+                                flashcardTTSPlaying = false;
+                                setFlashcardSession((prev: any) => ({ ...prev }));
+                            },
+                            onError: () => {
+                                flashcardTTSPlaying = false;
+                                setFlashcardSession((prev: any) => ({ ...prev }));
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Flashcard TTS Error", e);
+                        flashcardTTSPlaying = false;
+                    }
                 }
 
                 // Return unchanged state (we only read from it)
@@ -15771,23 +15794,34 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         if (textToSpeak) {
                                             flashcardTTSPlaying = true;
                                             setFlashcardSession((prev: any) => ({ ...prev }));
-                                            Speech.speak(textToSpeak, {
-                                                language: displaySettings.primaryLanguage || 'en',
-                                                pitch: 1.0,
-                                                rate: 0.9,
-                                                onDone: () => {
+                                            try {
+                                                if (Platform.OS === 'android' && availableVoices.length === 0) {
                                                     flashcardTTSPlaying = false;
                                                     setFlashcardSession((prev: any) => ({ ...prev }));
-                                                },
-                                                onStopped: () => {
-                                                    flashcardTTSPlaying = false;
-                                                    setFlashcardSession((prev: any) => ({ ...prev }));
-                                                },
-                                                onError: () => {
-                                                    flashcardTTSPlaying = false;
-                                                    setFlashcardSession((prev: any) => ({ ...prev }));
+                                                    return;
                                                 }
-                                            });
+                                                Speech.speak(textToSpeak, {
+                                                    language: displaySettings.primaryLanguage || 'en',
+                                                    pitch: 1.0,
+                                                    rate: 0.9,
+                                                    onDone: () => {
+                                                        flashcardTTSPlaying = false;
+                                                        setFlashcardSession((prev: any) => ({ ...prev }));
+                                                    },
+                                                    onStopped: () => {
+                                                        flashcardTTSPlaying = false;
+                                                        setFlashcardSession((prev: any) => ({ ...prev }));
+                                                    },
+                                                    onError: () => {
+                                                        flashcardTTSPlaying = false;
+                                                        setFlashcardSession((prev: any) => ({ ...prev }));
+                                                    }
+                                                });
+                                            } catch (e) {
+                                                console.error("Flashcard manual TTS Error", e);
+                                                flashcardTTSPlaying = false;
+                                                setFlashcardSession((prev: any) => ({ ...prev }));
+                                            }
                                         }
                                     }
                                 }}
@@ -25640,11 +25674,16 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     // NEW: Play preview on selection
                                     Speech.stop();
                                     if (voice) {
-                                        const sampleText = `Hello, this is ${voice.label || 'your voice'}.`;
-                                        Speech.speak(sampleText, {
-                                            voice: identifier,
-                                            rate: displaySettings.ttsRate || 1.0,
-                                        });
+                                        try {
+                                            if (Platform.OS === 'android' && availableVoices.length === 0) return;
+                                            const sampleText = `Hello, this is ${voice.label || 'your voice'}.`;
+                                            Speech.speak(sampleText, {
+                                                voice: identifier,
+                                                rate: displaySettings.ttsRate || 1.0,
+                                            });
+                                        } catch (e) {
+                                            console.warn("Settings preview speak failed", e);
+                                        }
                                     }
                                 }}
                                 theme={theme}
