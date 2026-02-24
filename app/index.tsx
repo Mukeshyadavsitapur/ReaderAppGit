@@ -5775,6 +5775,12 @@ export default function App() {
     const [chatbotInput, setChatbotInput] = useState("");
     const [isChatScrolling, setIsChatScrolling] = useState(false);
     const [chatbotSpeakingMsgId, setChatbotSpeakingMsgId] = useState<string | null>(null);
+    // Per-bubble translation caches: { [msgId]: { [lang]: translatedText } }
+    const [chatbotMsgTranslations, setChatbotMsgTranslations] = useState<Record<string, Record<string, string>>>({});
+    // Current displayed language per bubble (null = original)
+    const [chatbotMsgLanguages, setChatbotMsgLanguages] = useState<Record<string, string>>({});
+    // Which message bubble is currently being translated
+    const [chatbotTranslatingMsgId, setChatbotTranslatingMsgId] = useState<string | null>(null);
     const chatbotScrollRef = useRef<ScrollView>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
@@ -8805,12 +8811,6 @@ export default function App() {
         return () => { isMounted = false; };
     }, [displaySettings.preventSleep]);
 
-    // Clear chatbot speaking bubble ID when TTS stops naturally
-    useEffect(() => {
-        if (ttsStatus === 'stopped') {
-            setChatbotSpeakingMsgId(null);
-        }
-    }, [ttsStatus]);
 
     // Reset online TTS failure flag when reading session changes (New Chapter / Content)
     useEffect(() => {
@@ -13055,6 +13055,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             setTtsStatus('stopped');
             setSpeechRange(null);
             speechState.current.isActive = false;
+            setChatbotSpeakingMsgId(null); // reset speaker icon on natural end
 
             // FIX: Only trigger auto-advance if this was a Story/Article playback
             // Word pronunciations use title "Word Pronunciation" or similar
@@ -13156,12 +13157,14 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     if (!speechState.current.isActive && !speechState.current.isPaused) {
                         setTtsStatus('stopped');
                         setSpeechRange(null);
+                        setChatbotSpeakingMsgId(null);
                     }
                 },
                 onError: (e) => {
                     console.log("TTS Error", e);
                     setTtsStatus('stopped');
                     setSpeechRange(null);
+                    setChatbotSpeakingMsgId(null);
                     speechState.current.isActive = false;
                 },
                 onBoundary: (event: any) => {
@@ -13625,6 +13628,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         setChatbotMessages([]);
         setActiveChatbotChar(null);
         setIsChatbotTyping(false);
+        // Clear per-bubble translation caches
+        setChatbotMsgTranslations({});
+        setChatbotMsgLanguages({});
+        setChatbotTranslatingMsgId(null);
+        setChatbotSpeakingMsgId(null);
     };
 
     const handleTTSSeek = async (val: number) => {
@@ -26228,6 +26236,121 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
     };
 
+    const switchChatBubbleLanguage = async (msg: Message) => {
+        const langs = displaySettings.availableLanguages;
+        if (!langs || langs.length < 2) {
+            Alert.alert("Language", "Add more languages in Settings to switch.");
+            return;
+        }
+
+        const originalContent = msg.content;
+        const msgId = msg.id;
+
+        // Determine current language for this bubble, defaulting to global language
+        const currentLang = chatbotMsgLanguages[msgId] || displaySettings.language || 'English';
+
+        // Cycle to next language
+        let currentIndex = langs.indexOf(currentLang);
+        if (currentIndex === -1) currentIndex = 0;
+        const nextIndex = (currentIndex + 1) % langs.length;
+        const targetLang = langs[nextIndex];
+
+        // Stop TTS if this bubble was speaking
+        if (chatbotSpeakingMsgId === msgId) {
+            stopTTS();
+            setChatbotSpeakingMsgId(null);
+        }
+
+        // Initialize translations cache for this message if missing
+        const msgCache = chatbotMsgTranslations[msgId] || {};
+        if (Object.keys(msgCache).length === 0) {
+            // Seed cache with original content under the original language
+            const origLang = displaySettings.language || 'English';
+            msgCache[origLang] = originalContent;
+        }
+
+        // If cached, switch instantly
+        if (msgCache[targetLang]) {
+            setChatbotMsgTranslations(prev => ({
+                ...prev,
+                [msgId]: { ...msgCache, [targetLang]: msgCache[targetLang] }
+            }));
+            setChatbotMsgLanguages(prev => ({ ...prev, [msgId]: targetLang }));
+            // Update the message content in chatbotMessages
+            setChatbotMessages(prev =>
+                prev.map(m => m.id === msgId ? { ...m, content: msgCache[targetLang] } : m)
+            );
+            return;
+        }
+
+        // Otherwise call LLM to translate
+        setChatbotTranslatingMsgId(msgId);
+        try {
+            const sourceText = msgCache['English'] || originalContent;
+
+            const prompt = `
+                    Role: Expert Translator.
+
+                    Input Text:
+                    """
+                    ${sourceText}
+                    """
+
+                    Context:
+                    - The user wants to switch the language of this text.
+                    - Intended Target: ${targetLang}
+                    - Alternative Target: ${currentLang}
+
+                    Logic:
+                    1. Detect the language of the Input Text.
+                    2. If the Input Text is ALREADY in ${targetLang} (or very similar), translate it to ${currentLang} instead.
+                    3. Otherwise, translate it to ${targetLang}.
+                    4. Maintain all Markdown formatting (headers, bold, bullet points) exactly as is.
+
+                    Output strictly valid JSON:
+                    {
+                        "targetLanguage": "The name of the language you translated TO (e.g. 'English', 'Hindi')",
+                        "detectedInputLanguage": "The name of the language of the INPUT text (e.g. 'English', 'Hindi')",
+                        "content": "The full translated text"
+                    }
+                    `;
+
+            const rawResponse = await callLLM(prompt, "Expert Translator", true);
+
+            if (!rawResponse.startsWith("Error")) {
+                let parsed;
+                try {
+                    parsed = JSON.parse(extractJSON(rawResponse));
+                } catch (e: any) {
+                    parsed = { targetLanguage: targetLang, content: rawResponse, detectedInputLanguage: currentLang };
+                }
+
+                const finalLang = parsed.targetLanguage || targetLang;
+                const translatedText = parsed.content;
+                const detectedSourceLang = parsed.detectedInputLanguage;
+
+                const updatedCache = { ...msgCache };
+                if (detectedSourceLang && sourceText) {
+                    updatedCache[detectedSourceLang] = sourceText;
+                }
+                updatedCache[finalLang] = translatedText;
+
+                setChatbotMsgTranslations(prev => ({ ...prev, [msgId]: updatedCache }));
+                setChatbotMsgLanguages(prev => ({ ...prev, [msgId]: finalLang }));
+                setChatbotMessages(prev =>
+                    prev.map(m => m.id === msgId ? { ...m, content: translatedText } : m)
+                );
+            } else {
+                Alert.alert("Translation Failed", rawResponse);
+            }
+        } catch (e: any) {
+            console.error("Chat bubble translation error", e);
+            Alert.alert("Error", "Translation failed.");
+        } finally {
+            setChatbotTranslatingMsgId(null);
+        }
+    };
+
     const handleChatbotVoiceToggle = async () => {
         // Instant stop TTS if microphone is clicked
         if (ttsStatus === 'playing') {
@@ -26543,32 +26666,54 @@ Review the following raw transcribed text:
                                 />
                             )}
                             {msg.role === 'assistant' && (
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        // If THIS bubble is already playing, act as a stop button
-                                        if (chatbotSpeakingMsgId === msg.id) {
-                                            stopTTS();
-                                            setChatbotSpeakingMsgId(null);
-                                            return;
-                                        }
-                                        let textToSpeak = msg.content;
-                                        if (activeChatbotChar?.id === 'trans_o_bot') {
-                                            textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
-                                        }
-                                        // Always clean Markdown for manual audio playback
-                                        const cleaned = cleanTextForDisplay(textToSpeak);
-                                        // Mark this bubble as the active speaker, then start playing
-                                        setChatbotSpeakingMsgId(msg.id);
-                                        speak(cleaned, 0, false, true, null, true);
-                                    }}
-                                    style={{ alignSelf: 'flex-end', marginTop: 8 }}
-                                >
-                                    {chatbotSpeakingMsgId === msg.id ? (
-                                        <Square size={16} color={'#ef4444'} fill={'#ef4444'} />
-                                    ) : (
-                                        <Volume2 size={16} color={theme.secondary} />
-                                    )}
-                                </TouchableOpacity>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8, gap: 10 }}>
+                                    {/* Language Switch Button */}
+                                    <TouchableOpacity
+                                        onPress={() => switchChatBubbleLanguage(msg)}
+                                        disabled={chatbotTranslatingMsgId === msg.id}
+                                        style={{
+                                            width: 28, height: 28, borderRadius: 14,
+                                            alignItems: 'center', justifyContent: 'center',
+                                            borderWidth: 1, borderColor: theme.border,
+                                            backgroundColor: theme.uiBg
+                                        }}
+                                    >
+                                        {chatbotTranslatingMsgId === msg.id ? (
+                                            <ActivityIndicator size="small" color={theme.secondary} />
+                                        ) : (
+                                            <Text style={{ color: theme.secondary, fontWeight: '900', fontSize: 9 }}>
+                                                {(chatbotMsgLanguages[msg.id] || displaySettings.language || 'EN').substring(0, 2).toUpperCase()}
+                                            </Text>
+                                        )}
+                                    </TouchableOpacity>
+
+                                    {/* Speaker / Stop Button */}
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            // If THIS bubble is already playing, act as a stop button
+                                            if (chatbotSpeakingMsgId === msg.id) {
+                                                stopTTS();
+                                                setChatbotSpeakingMsgId(null);
+                                                return;
+                                            }
+                                            let textToSpeak = msg.content;
+                                            if (activeChatbotChar?.id === 'trans_o_bot') {
+                                                textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
+                                            }
+                                            // Always clean Markdown for manual audio playback
+                                            const cleaned = cleanTextForDisplay(textToSpeak);
+                                            // Mark this bubble as the active speaker, then start playing
+                                            setChatbotSpeakingMsgId(msg.id);
+                                            speak(cleaned, 0, false, true, null, true);
+                                        }}
+                                    >
+                                        {chatbotSpeakingMsgId === msg.id ? (
+                                            <Square size={16} color={'#ef4444'} fill={'#ef4444'} />
+                                        ) : (
+                                            <Volume2 size={16} color={theme.secondary} />
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
                             )}
                         </View>
                     ))}
