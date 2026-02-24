@@ -5781,6 +5781,9 @@ export default function App() {
     const [chatbotMsgLanguages, setChatbotMsgLanguages] = useState<Record<string, string>>({});
     // Which message bubble is currently being translated
     const [chatbotTranslatingMsgId, setChatbotTranslatingMsgId] = useState<string | null>(null);
+    // Brainstorm: which bubble is loading, and cached hint per bubble
+    const [chatbotBrainstormingMsgId, setChatbotBrainstormingMsgId] = useState<string | null>(null);
+    const [chatbotBrainstormHints, setChatbotBrainstormHints] = useState<Record<string, string>>({});
     const chatbotScrollRef = useRef<ScrollView>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
@@ -26351,6 +26354,59 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
     };
 
+    const handleBrainstorm = async (msg: Message) => {
+        const msgId = msg.id;
+
+        // Toggle off if hint already exists and is showing
+        if (chatbotBrainstormHints[msgId]) {
+            setChatbotBrainstormHints(prev => {
+                const next = { ...prev };
+                delete next[msgId];
+                return next;
+            });
+            return;
+        }
+
+        if (chatbotBrainstormingMsgId === msgId) return; // already loading
+        setChatbotBrainstormingMsgId(msgId);
+
+        try {
+            const geminiKey = (customApiKey || apiKey)?.trim();
+            const groqKey = displaySettings.groqApiKey?.trim();
+            const providerToUse = groqKey ? 'groq' : 'gemini';
+            const keyToUse = groqKey || geminiKey;
+
+            const systemPrompt = `You are a helpful conversation coach. 
+The user is chatting with an AI character and needs quick reply ideas or help answering the AI's question.
+Give exactly 2-3 short, natural reply suggestions (each on a new line starting with "•").
+Keep each suggestion under 15 words. Be direct and practical.`;
+
+            const userPrompt = `The AI just said:\n"${msg.content.substring(0, 400)}"\n\nGive me 2-3 short reply ideas or ways to answer this.`;
+
+            const contents = [{ role: 'user', parts: [{ text: userPrompt }] }];
+
+            let response;
+            try {
+                response = await callLLM_Internal(contents, systemPrompt, false, null, providerToUse, keyToUse);
+            } catch (err) {
+                if (providerToUse === 'groq' && geminiKey) {
+                    response = await callLLM_Internal(contents, systemPrompt, false, null, 'gemini', geminiKey);
+                } else {
+                    throw err;
+                }
+            }
+
+            const hint = typeof response === 'string' ? response : (response?.text ?? '');
+            if (hint.trim()) {
+                setChatbotBrainstormHints(prev => ({ ...prev, [msgId]: hint.trim() }));
+            }
+        } catch (e: any) {
+            console.error('Brainstorm error', e);
+        } finally {
+            setChatbotBrainstormingMsgId(null);
+        }
+    };
+
     const handleChatbotVoiceToggle = async () => {
         // Instant stop TTS if microphone is clicked
         if (ttsStatus === 'playing') {
@@ -26670,6 +26726,22 @@ Review the following raw transcribed text:
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
                                     <Text style={{ color: theme.secondary, fontSize: 10, opacity: 0.55, fontStyle: 'italic' }}>tap any word to define</Text>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        {/* Brainstorm / Reply-Hint Button */}
+                                        <TouchableOpacity
+                                            onPress={() => handleBrainstorm(msg)}
+                                            disabled={chatbotBrainstormingMsgId === msg.id}
+                                        >
+                                            {chatbotBrainstormingMsgId === msg.id ? (
+                                                <ActivityIndicator size="small" color={'#f59e0b'} />
+                                            ) : (
+                                                <Lightbulb
+                                                    size={16}
+                                                    color={chatbotBrainstormHints[msg.id] ? '#f59e0b' : theme.secondary}
+                                                    fill={chatbotBrainstormHints[msg.id] ? '#f59e0b' : 'none'}
+                                                />
+                                            )}
+                                        </TouchableOpacity>
+
                                         {/* Language Switch Button */}
                                         <TouchableOpacity
                                             onPress={() => switchChatBubbleLanguage(msg)}
@@ -26717,6 +26789,26 @@ Review the following raw transcribed text:
                                             )}
                                         </TouchableOpacity>
                                     </View>
+                                </View>
+                            )}
+                            {/* Brainstorm hint card */}
+                            {chatbotBrainstormHints[msg.id] && (
+                                <View style={{
+                                    marginTop: 8,
+                                    padding: 10,
+                                    backgroundColor: 'rgba(245,158,11,0.10)',
+                                    borderRadius: 10,
+                                    borderLeftWidth: 3,
+                                    borderLeftColor: '#f59e0b',
+                                }}>
+                                    <Text style={{ color: '#f59e0b', fontSize: 10, fontWeight: '700', marginBottom: 4 }}>💡 Reply ideas</Text>
+                                    <Text style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>{chatbotBrainstormHints[msg.id]}</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setChatbotBrainstormHints(prev => { const n = { ...prev }; delete n[msg.id]; return n; })}
+                                        style={{ alignSelf: 'flex-end', marginTop: 6 }}
+                                    >
+                                        <Text style={{ color: '#f59e0b', fontSize: 11 }}>dismiss</Text>
+                                    </TouchableOpacity>
                                 </View>
                             )}
                         </View>
