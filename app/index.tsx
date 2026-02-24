@@ -5774,6 +5774,7 @@ export default function App() {
     const [isChatbotInputExpanded, setIsChatbotInputExpanded] = useState(false);
     const [chatbotInput, setChatbotInput] = useState("");
     const [isChatScrolling, setIsChatScrolling] = useState(false);
+    const [chatbotSpeakingMsgId, setChatbotSpeakingMsgId] = useState<string | null>(null);
     const chatbotScrollRef = useRef<ScrollView>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
@@ -8803,6 +8804,13 @@ export default function App() {
         manageKeepAwake();
         return () => { isMounted = false; };
     }, [displaySettings.preventSleep]);
+
+    // Clear chatbot speaking bubble ID when TTS stops naturally
+    useEffect(() => {
+        if (ttsStatus === 'stopped') {
+            setChatbotSpeakingMsgId(null);
+        }
+    }, [ttsStatus]);
 
     // Reset online TTS failure flag when reading session changes (New Chapter / Content)
     useEffect(() => {
@@ -26206,7 +26214,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 textToSpeak = textToSpeak.replace(/\/[^\/]+\//g, '');
 
                 const cleaned = cleanTextForDisplay(textToSpeak);
-                speak(cleaned, 0, true, false, null, true); // forceOffline = true
+                // Mark this bubble as the active speaker for the toggle UI
+                setChatbotSpeakingMsgId(aiMsg.id);
+                // FIX: Use forcePlay=true so TTS always starts immediately after a new response,
+                // even if push-to-talk was used mid-playback and TTS is in any state.
+                speak(cleaned, 0, true, true, null, true); // forcePlay=true, forceOffline=true
             }
 
 
@@ -26533,17 +26545,29 @@ Review the following raw transcribed text:
                             {msg.role === 'assistant' && (
                                 <TouchableOpacity
                                     onPress={() => {
+                                        // If THIS bubble is already playing, act as a stop button
+                                        if (chatbotSpeakingMsgId === msg.id) {
+                                            stopTTS();
+                                            setChatbotSpeakingMsgId(null);
+                                            return;
+                                        }
                                         let textToSpeak = msg.content;
                                         if (activeChatbotChar?.id === 'trans_o_bot') {
                                             textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
                                         }
                                         // Always clean Markdown for manual audio playback
                                         const cleaned = cleanTextForDisplay(textToSpeak);
-                                        speak(cleaned, 0, false, false, null, true);
+                                        // Mark this bubble as the active speaker, then start playing
+                                        setChatbotSpeakingMsgId(msg.id);
+                                        speak(cleaned, 0, false, true, null, true);
                                     }}
                                     style={{ alignSelf: 'flex-end', marginTop: 8 }}
                                 >
-                                    <Volume2 size={16} color={theme.secondary} />
+                                    {chatbotSpeakingMsgId === msg.id ? (
+                                        <Square size={16} color={'#ef4444'} fill={'#ef4444'} />
+                                    ) : (
+                                        <Volume2 size={16} color={theme.secondary} />
+                                    )}
                                 </TouchableOpacity>
                             )}
                         </View>
