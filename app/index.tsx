@@ -1634,12 +1634,12 @@ const IMAGE_MODELS = [
     "imagen-3.0-generate-001"
 ];
 
-// Cleaned TTS Models List - Removed unavailable 'pro' model to fix 404 errors
-// Cleaned TTS Models List - 'gemini-2.0-flash' does not support audio generation
+// Gemini TTS Models - ordered by preference (quality → speed → scale)
 const TTS_MODELS = [
-    "gemini-2.5-flash-preview-tts", // Working confirmed
-    "gemini-2.5-pro-tts",
-    "gemini-2.0-flash-exp"
+    "gemini-2.5-flash-preview-tts", // Confirmed working; fastest/low-latency
+    "gemini-2.5-pro-tts",           // High-fidelity, best for audiobooks/long content
+    "gemini-2.5-flash-tts",         // Workhorse: optimized for everyday low-latency
+    "gemini-2.5-flash-lite-tts",    // Budget-friendly, high-volume simple tasks
 ];
 
 // Groq TTS Models - Prioritized
@@ -7194,7 +7194,8 @@ export default function App() {
     const [redoStack, setRedoStack] = useState<string[]>([]);
     const historyTimeout = useRef<any>(null);
     const lastHistoryState = useRef("");
-    const lastOnlineTtsRequestTime = useRef<number>(0);
+    // Tracks when the next online TTS request is allowed to be sent (T = last_send + 35s)
+    const nextTtsRequestAllowedAt = useRef<number>(0);
 
     const resetHistory = (initialContent = "") => {
         setUndoStack([]);
@@ -13480,8 +13481,27 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         const groqKey = displaySettings.groqApiKey;
         if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current) {
             try {
-                // Record request time for the 35s sequential timer
-                const requestSentAt = Date.now();
+                setIsTtsDownloading(true);
+                setTtsDownloadProgress(0);
+
+                // --- 21s SEQUENTIAL TIMER ---
+                // nextTtsRequestAllowedAt is set to (sendTime + 21s) each time a request goes out.
+                // Before the NEXT request, we wait here until that deadline passes.
+                // This guarantees sends are always ≥ 21s apart, measured from send time.
+                const waitBeforeSend = Math.max(0, nextTtsRequestAllowedAt.current - Date.now());
+                if (waitBeforeSend > 0) {
+                    console.log(`[TTS] Sequential limit: waiting ${Math.ceil(waitBeforeSend / 1000)}s before next request...`);
+                    await new Promise(r => setTimeout(r, waitBeforeSend));
+                    // Session may have been cancelled during the wait
+                    if (!speechState.current.isActive || speechSessionId.current !== currentSessionId) {
+                        setIsTtsDownloading(false);
+                        return;
+                    }
+                }
+
+                // Mark the send moment — next request must wait until this + 21s
+                nextTtsRequestAllowedAt.current = Date.now() + 21000;
+                console.log(`[TTS] Request sent. Next request allowed in 21s.`);
 
                 // Generate FULL chunk to ensure cache reusability
                 const { pcmData, switched } = await generateGeminiTTS(textForTts, null);
@@ -13493,24 +13513,13 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 const wavBase64 = pcmToWav(pcmData);
 
-                // Save to file 
+                // Save to file
                 fileUri = `${docDir}tts_${chunkHash}_${safeTitle}.wav`;
                 await fs.writeAsStringAsync(fileUri, wavBase64, { encoding: fs.EncodingType.Base64 });
 
-                // --- 35s SEQUENTIAL TIMER ---
-                // "after making a call for online TTs application wait for 35 sec"
-                // "set a timer for 35s at the time when request is send not from request received"
-                const elapsedSinceSend = Date.now() - requestSentAt;
-                const remainingWait = Math.max(0, 35000 - elapsedSinceSend);
-
-                if (remainingWait > 0) {
-                    console.log(`[TTS] Waiting ${remainingWait}ms for sequential 35s limit...`);
-                    await new Promise(r => setTimeout(r, remainingWait));
-                }
-
                 setIsTtsDownloading(false);
 
-                // Play from file
+                // Play immediately — no delay after audio is ready
                 await playAudioFile(fileUri);
                 return;
 
