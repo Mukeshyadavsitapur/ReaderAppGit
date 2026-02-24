@@ -7194,6 +7194,7 @@ export default function App() {
     const [redoStack, setRedoStack] = useState<string[]>([]);
     const historyTimeout = useRef<any>(null);
     const lastHistoryState = useRef("");
+    const lastOnlineTtsRequestTime = useRef<number>(0);
 
     const resetHistory = (initialContent = "") => {
         setUndoStack([]);
@@ -12554,30 +12555,28 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     // UPDATED: Added voiceOverride parameter to support previews
     // UPDATED: Removed multiSpeakerConfig support as it is now obsolete
-    const generateGeminiTTS = async (text: string, voiceOverride: string | null = null) => {
+    // UPDATED: Added voiceOverride parameter to support previews
+    // UPDATED: Returns { pcmData: string, switched: boolean } to support toast notifications
+    const generateGeminiTTS = async (text: string, voiceOverride: string | null = null): Promise<{ pcmData: string, switched: boolean }> => {
         const geminiKey = customApiKey || apiKey;
         const groqKey = displaySettings.groqApiKey;
+        const preferredProvider = displaySettings.llmProvider || "groq"; // Default to Groq
         let lastError: any = null;
 
-        // --- STEP 1: Try Groq TTS (High Priority) ---
-        if (groqKey) {
+        const tryGroq = async () => {
+            if (!groqKey) return null;
             for (const modelId of GROQ_TTS_MODELS) {
                 try {
                     console.log(`[TTS] Attempting Groq TTS: ${modelId}`);
-                    // Note: Orpheus models default to WAV.
-                    // Voice Mapping for Groq (Translate Gemini voices to Orpheus personas)
                     let groqVoice = voiceOverride || displaySettings.voice || "Hannah";
                     if (modelId.includes("arabic")) {
-                        // Arabic mapping
                         const isMale = MALE_VOICES.includes(groqVoice);
                         groqVoice = isMale ? "fahad" : "noura";
                     } else {
-                        // English mapping
                         const isMale = MALE_VOICES.includes(groqVoice);
                         if (groqVoice === "Kore" || !isMale) groqVoice = "hannah";
                         else if (groqVoice === "Fenrir" || isMale) groqVoice = "daniel";
                     }
-
                     const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
                         method: "POST",
                         headers: {
@@ -12591,7 +12590,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             response_format: "wav"
                         })
                     });
-
                     if (response.ok) {
                         const blob = await response.blob();
                         const reader = new FileReader();
@@ -12613,65 +12611,68 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     lastError = e;
                 }
             }
-        }
+            return null;
+        };
 
-        // --- STEP 2: Fallback to Gemini TTS ---
-        if (!geminiKey) {
-            if (lastError) throw lastError;
-            throw new Error("No API Key available for TTS (Groq or Gemini)");
-        }
-
-        let rateLimitHit = false;
-
-        for (const modelId of TTS_MODELS) {
-            try {
-                console.log(`[TTS] Attempting Gemini TTS: ${modelId}`);
-
-                const payload = {
-                    contents: [{ parts: [{ text: text }] }],
-                    generationConfig: {
-                        responseModalities: ["AUDIO"],
-                        speechConfig: {
-                            voiceConfig: {
-                                prebuiltVoiceConfig: {
-                                    voiceName: voiceOverride || displaySettings.voice || "Kore"
+        const tryGemini = async () => {
+            if (!geminiKey) return null;
+            let rateLimitHit = false;
+            for (const modelId of TTS_MODELS) {
+                try {
+                    console.log(`[TTS] Attempting Gemini TTS: ${modelId}`);
+                    const payload = {
+                        contents: [{ parts: [{ text: text }] }],
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: {
+                                voiceConfig: {
+                                    prebuiltVoiceConfig: {
+                                        voiceName: voiceOverride || displaySettings.voice || "Kore"
+                                    }
                                 }
                             }
                         }
+                    };
+                    let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${geminiKey}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.status === 429) {
+                        console.warn(`Gemini TTS Model ${modelId} rate limited.`);
+                        rateLimitHit = true;
+                        continue;
                     }
-                };
-
-                let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${geminiKey}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-
-                if (response.status === 429) {
-                    console.warn(`Gemini TTS Model ${modelId} rate limited.`);
-                    rateLimitHit = true;
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        console.warn(`Gemini TTS Model ${modelId} failed: ${response.status}`);
+                        continue;
+                    }
+                    const data = await response.json();
+                    const pcmData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                    if (pcmData) return pcmData;
+                } catch (e) {
+                    console.warn(`Gemini TTS Error on ${modelId}:`, e);
                     continue;
                 }
-
-                if (!response.ok) {
-                    const errText = await response.text();
-                    console.warn(`Gemini TTS Model ${modelId} failed: ${response.status}`);
-                    continue;
-                }
-
-                const data = await response.json();
-                const pcmData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-
-                if (pcmData) {
-                    return pcmData;
-                }
-            } catch (e) {
-                console.warn(`Gemini TTS Error on ${modelId}:`, e);
-                continue;
             }
+            if (rateLimitHit) throw new Error("API_LIMIT_REACHED");
+            return null;
+        };
+
+        // --- EXECUTION FLOW ---
+        if (preferredProvider === "groq") {
+            const groqPcm = await tryGroq();
+            if (groqPcm) return { pcmData: groqPcm, switched: false };
+            const geminiPcm = await tryGemini();
+            if (geminiPcm) return { pcmData: geminiPcm, switched: true };
+        } else {
+            const geminiPcm = await tryGemini();
+            if (geminiPcm) return { pcmData: geminiPcm, switched: false };
+            const groqPcm = await tryGroq();
+            if (groqPcm) return { pcmData: groqPcm, switched: true };
         }
 
-        if (rateLimitHit) throw new Error("API_LIMIT_REACHED");
         throw new Error(lastError ? lastError.message : "All TTS models failed to generate audio.");
     };
 
@@ -12707,7 +12708,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 // 3. Generate short sample using the specific voice override
                 const sampleText = `Hello! I am ${voiceName}. I can read your stories and notes.`;
-                const pcm = await generateGeminiTTS(sampleText, voiceName);
+                const { pcmData: pcm } = await generateGeminiTTS(sampleText, voiceName);
 
                 // 4. Save to cache
                 const wav = pcmToWav(pcm);
@@ -12731,66 +12732,51 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     // --- TTS Helper ---
     // Chunking logic separated to ensure consistency between Play and Download
+    // Chunking logic separated to ensure consistency between Play and Download
     const getChunks = useCallback((text: string) => {
         if (!text) return { chunks: [], offsets: [] };
 
         const cleanText = cleanTextForDisplay(text);
+        const CHUNK_LIMIT = 850;
+        const CHUNK_MIN = 850; // Requested: force minimum length if more text available
 
-        // FIXED: Reduced Limit for Groq (1000) vs Gemini (3000) to prevent TPM/length errors
-        const groqKey = displaySettings.groqApiKey;
-        const CHUNK_LIMIT = groqKey ? 1000 : 3000;
-
-        const chunks = [];
-        const offsets = [];
-
+        let initialChunks: { text: string; offset: number }[] = [];
         let currentChunk = "";
         let chunkStartOffset = 0;
 
-        // Split by logical lines (paragraphs) first to maintain flow
-        // cleanTextForDisplay ensures lines are non-empty and trimmed
         const lines = cleanText.split('\n');
 
         for (let i = 0; i < lines.length; i++) {
-            // Re-attach newline for accurate offset calculation, except for the absolute last line
             const isLast = i === lines.length - 1;
             const lineBlock = lines[i] + (isLast ? "" : "\n");
 
             if ((currentChunk + lineBlock).length <= CHUNK_LIMIT) {
                 currentChunk += lineBlock;
             } else {
-                // Current chunk is full, push it
                 if (currentChunk.length > 0) {
-                    chunks.push(currentChunk);
-                    offsets.push(chunkStartOffset);
+                    initialChunks.push({ text: currentChunk, offset: chunkStartOffset });
                     chunkStartOffset += currentChunk.length;
                     currentChunk = "";
                 }
 
-                // If the single line fits in a new chunk, use it
                 if (lineBlock.length <= CHUNK_LIMIT) {
                     currentChunk = lineBlock;
                 } else {
-                    // Line is massive (rare), split by sentences
                     const sentences = lineBlock.match(/[^.!?\n]+[.!?\n]+|[^.!?\n]+$/g) || [lineBlock];
-
                     for (const sentence of sentences) {
                         if ((currentChunk + sentence).length <= CHUNK_LIMIT) {
                             currentChunk += sentence;
                         } else {
                             if (currentChunk.length > 0) {
-                                chunks.push(currentChunk);
-                                offsets.push(chunkStartOffset);
+                                initialChunks.push({ text: currentChunk, offset: chunkStartOffset });
                                 chunkStartOffset += currentChunk.length;
                                 currentChunk = "";
                             }
-
-                            // Handle giant sentence (fallback)
                             if (sentence.length > CHUNK_LIMIT) {
                                 let temp = sentence;
                                 while (temp.length > 0) {
                                     const part = temp.substring(0, CHUNK_LIMIT);
-                                    chunks.push(part);
-                                    offsets.push(chunkStartOffset);
+                                    initialChunks.push({ text: part, offset: chunkStartOffset });
                                     chunkStartOffset += part.length;
                                     temp = temp.substring(CHUNK_LIMIT);
                                 }
@@ -12802,15 +12788,34 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 }
             }
         }
-
-        // Push remaining
         if (currentChunk.length > 0) {
-            chunks.push(currentChunk);
-            offsets.push(chunkStartOffset);
+            initialChunks.push({ text: currentChunk, offset: chunkStartOffset });
         }
 
-        return { chunks, offsets };
-    }, [displaySettings.groqApiKey]);
+        // --- MERGE PASS to satisfy CHUNK_MIN ---
+        const finalChunks: string[] = [];
+        const finalOffsets: number[] = [];
+
+        for (let i = 0; i < initialChunks.length; i++) {
+            let chunk = initialChunks[i].text;
+            let offset = initialChunks[i].offset;
+
+            // If this chunk is small and there is a next chunk, merge them
+            while (chunk.length < CHUNK_MIN && i + 1 < initialChunks.length) {
+                const next = initialChunks[i + 1];
+                // GUARD: Only merge if the combined chunk stays within CHUNK_LIMIT.
+                // Without this guard, merging can exceed 850 chars → 1514+ tokens → Groq 413 error.
+                if (chunk.length + next.text.length > CHUNK_LIMIT) break;
+                chunk += next.text;
+                i++;
+            }
+
+            finalChunks.push(chunk);
+            finalOffsets.push(offset);
+        }
+
+        return { chunks: finalChunks, offsets: finalOffsets };
+    }, []);
 
     const handleDownloadAudio = async () => {
         if (!readingSession) return;
@@ -12871,7 +12876,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     }
 
                     try {
-                        const pcmBase64 = await generateGeminiTTS(chunk, null);
+                        const { pcmData: pcmBase64 } = await generateGeminiTTS(chunk, null);
                         const pcmBytes = decodeBase64(pcmBase64);
 
                         let rawBytes = pcmBytes;
@@ -13300,7 +13305,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         }
 
                         try {
-                            const pcm = await generateGeminiTTS(chunk, null);
+                            const { pcmData: pcm } = await generateGeminiTTS(chunk, null);
                             const wav = pcmToWav(pcm);
                             await fs.writeAsStringAsync(uri, wav, { encoding: fs.EncodingType.Base64 });
                         } catch (err) {
@@ -13421,7 +13426,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     }
 
                     player.play();
-                    triggerPrefetchChain(index + 1);
                 }
             } catch (e) {
                 console.warn("Playback failed", e);
@@ -13476,18 +13480,33 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         const groqKey = displaySettings.groqApiKey;
         if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current) {
             try {
-                setIsTtsDownloading(true);
-                setTtsDownloadProgress(0);
+                // Record request time for the 35s sequential timer
+                const requestSentAt = Date.now();
 
                 // Generate FULL chunk to ensure cache reusability
-                // UPDATED: Single speaker generation
-                const pcmData = await generateGeminiTTS(textForTts, null);
+                const { pcmData, switched } = await generateGeminiTTS(textForTts, null);
+
+                if (switched) {
+                    const fallbackProvider = displaySettings.llmProvider === "groq" ? "Gemini" : "Groq";
+                    showToast(`⚠️ Switching to ${fallbackProvider} TTS (Primary failed)`);
+                }
 
                 const wavBase64 = pcmToWav(pcmData);
 
                 // Save to file 
                 fileUri = `${docDir}tts_${chunkHash}_${safeTitle}.wav`;
                 await fs.writeAsStringAsync(fileUri, wavBase64, { encoding: fs.EncodingType.Base64 });
+
+                // --- 35s SEQUENTIAL TIMER ---
+                // "after making a call for online TTs application wait for 35 sec"
+                // "set a timer for 35s at the time when request is send not from request received"
+                const elapsedSinceSend = Date.now() - requestSentAt;
+                const remainingWait = Math.max(0, 35000 - elapsedSinceSend);
+
+                if (remainingWait > 0) {
+                    console.log(`[TTS] Waiting ${remainingWait}ms for sequential 35s limit...`);
+                    await new Promise(r => setTimeout(r, remainingWait));
+                }
 
                 setIsTtsDownloading(false);
 
