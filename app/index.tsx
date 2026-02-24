@@ -5639,21 +5639,14 @@ export default function App() {
         }
     });
     useSpeechRecognitionEvent("result", (event: any) => {
-        // In continuous mode, some engines (like Android's) keep appending to event.results
-        // each time they identify a new word or phrase, instead of clearing it.
-        // Therefore, we just take the entire combined event.results transcript
-        // as the single source of truth for the *current* session.
-        let fullTranscript = "";
-        for (const result of event.results) {
-            fullTranscript += result.transcript + " ";
-        }
-        fullTranscript = fullTranscript.trim();
+        // BUG FIX: Android STT returns multiple alternative "guesses" in event.results[].
+        // The old code concatenated ALL of them, producing duplicated text like:
+        //   "Ram eats food, Ram eats food ramesh goes to market, food ramesh goes to market"
+        // Fix: Only use results[0] — the highest-confidence transcript.
+        const fullTranscript = (event.results?.[0]?.transcript ?? "").trim();
 
-        // If your engine happens to clear event.results on isFinal, 
-        // we append it to our accumulator instead.
-        // However, we only append to the accumulator if the engine *actually* cleared
-        // the results array (event.results.length === 1 and it's a new utterance).
-        // A safer universal approach is to test if the new transcript already contains the accumulator.
+        // Build the final display transcript by combining with the accumulator.
+        // The accumulator holds confirmed speech from previous isFinal events.
         let finalDisplayTranscript = fullTranscript;
 
         if (accumulatedOfflineTranscriptRef.current) {
