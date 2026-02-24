@@ -5621,7 +5621,9 @@ export default function App() {
     const offlineSTTResolver = useRef<((text: string | null) => void) | null>(null);
 
     const [isOfflineRecognizing, setIsOfflineRecognizing] = useState(false);
-    // NEW: Ref to keep chunks of STT to build consecutive utterances over time without losing the previous
+    // PERF FIX: Cache the mic permission result after first grant to avoid ~1s OS round-trip on every tap
+    const sttPermissionGranted = useRef(false);
+    // Ref to keep chunks of STT to build consecutive utterances over time without losing the previous
     const accumulatedOfflineTranscriptRef = useRef("");
 
     useSpeechRecognitionEvent("start", () => {
@@ -5683,18 +5685,23 @@ export default function App() {
                 return;
             }
 
-            try {
-                const permResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-                if (!permResult.granted) {
-                    showToast("⚠️ Microphone permission is required for speech recognition.");
+            // PERF FIX: Only call requestPermissionsAsync once — cache the result in a ref.
+            // This avoids a ~1s OS permission round-trip on every single mic button tap.
+            if (!sttPermissionGranted.current) {
+                try {
+                    const permResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+                    if (!permResult.granted) {
+                        showToast("⚠️ Microphone permission is required for speech recognition.");
+                        resolve(null);
+                        return;
+                    }
+                    sttPermissionGranted.current = true; // Cache the grant so we skip this next time
+                } catch (e) {
+                    console.warn("Offline STT Permission request failed", e);
+                    showToast("⚠️ Failed to request microphone permission.");
                     resolve(null);
                     return;
                 }
-            } catch (e) {
-                console.warn("Offline STT Permission request failed", e);
-                showToast("⚠️ Failed to request microphone permission.");
-                resolve(null);
-                return;
             }
 
             offlineSTTResolver.current = resolve;
@@ -5704,6 +5711,26 @@ export default function App() {
                 continuous: true, // Auto-stop removed, user must tap again
             });
         });
+    };
+
+    // PERF FIX: Immediate stop with optimistic UI update.
+    // The OS fires the 'end' event asynchronously (can take 2-3s after .stop() is called).
+    // This function instantly flips the mic button state so the UI feels responsive,
+    // and the 'end' event handler will then resolve the promise with the final transcript.
+    const stopOfflineSTT = () => {
+        if (!ExpoSpeechRecognitionModule) return;
+        // Optimistic UI update — button unlocks immediately
+        setIsOfflineRecognizing(false);
+        try {
+            ExpoSpeechRecognitionModule.stop();
+        } catch (e) {
+            console.warn("Offline STT stop error", e);
+            // If stop() throws, manually resolve the promise with current transcript
+            if (offlineSTTResolver.current) {
+                offlineSTTResolver.current(latestOfflineTranscriptRef.current);
+                offlineSTTResolver.current = null;
+            }
+        }
     };
 
     const recorder = useAudioRecorder(SPEECH_RECORDING_OPTIONS);
@@ -13793,7 +13820,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         // --- OFFLINE STT BRANCH (Manual or Automatic fallback if keys missing) ---
         if (displaySettings.offlineSttEnabled || (!hasGemini && !hasGroq)) {
             if (isOfflineRecognizing) {
-                ExpoSpeechRecognitionModule.stop();
+                stopOfflineSTT();
             } else {
                 setVoiceTarget(target);
                 try {
@@ -26412,7 +26439,7 @@ Keep each suggestion under 15 words. Be direct and practical.`;
         // --- OFFLINE STT BRANCH ---
         if (displaySettings.offlineSttEnabled || (!hasGroq && !hasGemini)) {
             if (isOfflineRecognizing) {
-                ExpoSpeechRecognitionModule.stop();
+                stopOfflineSTT();
             } else {
                 try {
                     const text = await getOfflineSTT();
