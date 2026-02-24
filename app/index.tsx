@@ -12064,33 +12064,43 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         const geminiKey = customApiKey || apiKey;
         const groqKey = displaySettings.groqApiKey;
 
-        // NEW: Prioritize Groq if both keys are available
-        const hasBothKeys = (geminiKey && geminiKey.trim() !== '') && (groqKey && groqKey.trim() !== '');
+        const primaryProvider = displaySettings.llmProvider || 'gemini';
+        const secondaryProvider = primaryProvider === 'groq' ? 'gemini' : 'groq';
 
-        if (hasBothKeys) {
-            console.log(`[LLM] Priority: Both keys detected. Forcing Groq priority.`);
-            const groqResult = await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, 'groq', groqKey);
-            if (!groqResult.startsWith("Error")) {
-                return groqResult;
+        const primaryKey = primaryProvider === 'groq' ? groqKey : geminiKey;
+        const secondaryKey = secondaryProvider === 'groq' ? groqKey : geminiKey;
+
+        if (primaryKey && primaryKey.trim() !== '') {
+            console.log(`[LLM] Primary Provider: ${primaryProvider}`);
+            const result = await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, primaryProvider, primaryKey);
+
+            // If success OR it's a specific JSON error we should return immediately
+            if (!result.startsWith("Error")) {
+                return result;
             }
-            console.warn(`[LLM] Groq priority failed, falling back to Gemini...`);
-            return await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, 'gemini', geminiKey);
+
+            // Fallback if secondary key exists and it's not a missing key error (which we handled above)
+            if (secondaryKey && secondaryKey.trim() !== '') {
+                console.warn(`[LLM] ${primaryProvider} failed, falling back to ${secondaryProvider}...`);
+                showToast(`Switching to ${secondaryProvider === 'groq' ? 'Groq' : 'Gemini'}...`);
+                return await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, secondaryProvider, secondaryKey);
+            }
+
+            return result; // Return primary error if no fallback available
         }
 
-        const provider = displaySettings.llmProvider || 'gemini';
-        const effectiveProvider = provider;
-        const effectiveKey = effectiveProvider === 'groq' ? groqKey : geminiKey;
-
-        if (!effectiveKey) {
-            if (jsonMode) {
-                return JSON.stringify({ error: "API Key Required", isMissingKey: true });
-            }
-            if (effectiveProvider === 'groq') return "Error: Please add your Groq API Key in Settings to use online features.";
-            if (effectiveProvider === 'hf') return "Error: Please add your Hugging Face Token in Settings to use online features.";
-            return API_KEY_HELP_MARKDOWN.trim();
+        // If primary key is missing, try secondary before erroring
+        if (secondaryKey && secondaryKey.trim() !== '') {
+            console.log(`[LLM] Primary key missing, trying Secondary Provider: ${secondaryProvider}`);
+            return await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, secondaryProvider, secondaryKey);
         }
 
-        return await callLLM_Internal(contents, systemInstruction, jsonMode, modelOverride, effectiveProvider, effectiveKey);
+        // Neither key is available or primary is missing and no secondary
+        if (jsonMode) {
+            return JSON.stringify({ error: "API Key Required", isMissingKey: true });
+        }
+        if (primaryProvider === 'groq') return "Error: Please add your Groq API Key in Settings to use online features.";
+        return API_KEY_HELP_MARKDOWN.trim();
     };
 
     // Helper to avoid recursion and handle actual calls
@@ -12168,12 +12178,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
             // NEW: Ignore Gemini model overrides when routing to Groq
             let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...GROQ_MODELS];
-
-            // NEW: If images are present, we MUST use a vision model for Groq
-            if (hasVisionParts) {
-                // Groq official Multimodal models with fallback
-                groqModelsToTry = ["meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"];
-            }
 
             let lastGroqError: any = null;
             for (const groqModel of groqModelsToTry) {
