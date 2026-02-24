@@ -2156,6 +2156,15 @@ const CHATBOT_CHARACTERS: any[] = [
         greeting: "Hey there! I'm Buddy. Great to see you! How's your day going?"
     },
     {
+        id: 'nara_storyteller',
+        title: 'Nara (Storyteller)',
+        role: 'Interactive Story Companion',
+        prompt: 'Act as Nara, a master storyteller inspired by great authors like Charles Dickens, Leo Tolstoy, Mark Twain, and Rabindranath Tagore. Your goal is to tell rich, immersive stories from famous books in a collaborative way.\n\nTone: Literary, descriptive, and immersive.\n\nStory Rules:\n- Write 7–8 lines per story segment with vivid scenes, strong characters, and real emotion.\n- After each segment, Ask the user a thought-provoking question about the story to spark curiosity or continue to story.\n- If the user provides a book name, retell it faithfully in an engaging style. If the user does not know a book, suggest 3–5 famous books and let them choose.\n\nVocabulary Control: Use CEFR A1–B2 levels. Do not use special characters or emoji.\n\nConstraint: Responses must stay under 800 characters.',
+        iconName: 'BookOpen',
+        color: ['#f97316', '#ea580c'], // Orange
+        greeting: "Hello! I am Nara, your personal storyteller. I can bring famous books to life for you, one chapter at a time. Which book would you like to hear? You can name a book, or if you are not sure, I can suggest some great ones like Oliver Twist, The Old Man and the Sea, or The Gift of the Magi. What would you like?"
+    },
+    {
         id: 'trans_o_bot',
         title: 'Trans-O-Bot (Translator)',
         role: 'Translation Assistant',
@@ -2246,7 +2255,7 @@ const STATIC_TEXT: { [key: string]: any } = {
         searchOnline: "Ask me anything...",
         searchNotes: "Search saved notes...",
         dictTitle: "Recent Words Flashcards",
-        dictSub: "words in history",
+        dictSub: "words available offline",
         shortcuts: "Shortcuts"
     },
     dictionary: {
@@ -22998,7 +23007,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                             fontSize: 13,
                                             letterSpacing: 0.5
                                         }}>
-                                            {isChatbotMode ? "Chatbot" : "Reader"}
+                                            {isChatbotMode ? "Reader" : "Chatbot"}
                                         </Text>
                                     </TouchableOpacity>
                                 </View>
@@ -28824,7 +28833,7 @@ Review the following raw transcribed text:
                                                         <View style={{ marginBottom: 20 }}>
                                                             <View style={{ marginBottom: 12 }}>
                                                                 <Text style={{ fontSize: 22, fontWeight: 'bold', color: theme.text }}>Recent Words Flashcards</Text>
-                                                                <Text style={{ fontSize: 13, color: theme.secondary }}>{recentSearches.length} words in history</Text>
+                                                                <Text style={{ fontSize: 13, color: theme.secondary }}>{recentSearches.length} words available offline</Text>
                                                             </View>
 
                                                             <View style={{ flexDirection: 'row', gap: 10 }}>
