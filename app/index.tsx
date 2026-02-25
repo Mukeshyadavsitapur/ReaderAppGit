@@ -5801,9 +5801,11 @@ export default function App() {
     const [chatbotMsgLanguages, setChatbotMsgLanguages] = useState<Record<string, string>>({});
     // Which message bubble is currently being translated
     const [chatbotTranslatingMsgId, setChatbotTranslatingMsgId] = useState<string | null>(null);
-    // Brainstorm: which bubble is loading, and cached hint per bubble
+    // Brainstorm & Grammar: which bubble is loading, and cached hint per bubble
     const [chatbotBrainstormingMsgId, setChatbotBrainstormingMsgId] = useState<string | null>(null);
     const [chatbotBrainstormHints, setChatbotBrainstormHints] = useState<Record<string, string>>({});
+    const [chatbotGrammarCheckingMsgId, setChatbotGrammarCheckingMsgId] = useState<string | null>(null);
+    const [chatbotGrammarHints, setChatbotGrammarHints] = useState<Record<string, string>>({});
     const chatbotScrollRef = useRef<ScrollView>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
@@ -26569,6 +26571,64 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
     };
 
+    const handleGrammarCheck = async (msg: Message) => {
+        const msgId = msg.id;
+
+        // Toggle off if hint already exists and is showing
+        if (chatbotGrammarHints[msgId]) {
+            setChatbotGrammarHints(prev => {
+                const next = { ...prev };
+                delete next[msgId];
+                return next;
+            });
+            return;
+        }
+
+        if (chatbotGrammarCheckingMsgId === msgId) return; // already loading
+        setChatbotGrammarCheckingMsgId(msgId);
+
+        try {
+            const geminiKey = (customApiKey || apiKey)?.trim();
+            const groqKey = displaySettings.groqApiKey?.trim();
+            const providerToUse = groqKey ? 'groq' : 'gemini';
+            const keyToUse = groqKey || geminiKey;
+
+            const systemPrompt = `You are an expert language teacher. The user has sent a message. Analyze it for grammatical correctness.
+
+Constraints:
+1. Provide the corrected version of the user's sentence.
+2. Provide ONE concise "quick tip" explaining the primary grammar rule they violated or how to improve it.
+3. Keep it extremely brief (under 30 words total).
+4. Format:
+Corrected: [sentence]
+Quick Tip: [explanation]`;
+
+            const userPrompt = `User's message:\n"${msg.content.substring(0, 400)}"`;
+
+            const contents = [{ role: 'user', parts: [{ text: userPrompt }] }];
+
+            let response;
+            try {
+                response = await callLLM_Internal(contents, systemPrompt, false, null, providerToUse, keyToUse);
+            } catch (err) {
+                if (providerToUse === 'groq' && geminiKey) {
+                    response = await callLLM_Internal(contents, systemPrompt, false, null, 'gemini', geminiKey);
+                } else {
+                    throw err;
+                }
+            }
+
+            const hint = typeof response === 'string' ? response : (response?.text ?? '');
+            if (hint.trim()) {
+                setChatbotGrammarHints(prev => ({ ...prev, [msgId]: hint.trim() }));
+            }
+        } catch (e: any) {
+            console.error('Grammar check error', e);
+        } finally {
+            setChatbotGrammarCheckingMsgId(null);
+        }
+    };
+
     const handleChatbotVoiceToggle = async () => {
         // Instant stop TTS if microphone is clicked
         if (ttsStatus === 'playing') {
@@ -26953,6 +27013,31 @@ Review the following raw transcribed text:
                                     </View>
                                 </View>
                             )}
+
+                            {msg.role === 'user' && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        {/* Grammar Check Button */}
+                                        <TouchableOpacity
+                                            onPress={() => handleGrammarCheck(msg)}
+                                            disabled={chatbotGrammarCheckingMsgId === msg.id}
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+                                        >
+                                            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontStyle: 'italic' }}>check grammar</Text>
+                                            {chatbotGrammarCheckingMsgId === msg.id ? (
+                                                <ActivityIndicator size="small" color={'#10b981'} />
+                                            ) : (
+                                                <CheckCircle
+                                                    size={16}
+                                                    color={chatbotGrammarHints[msg.id] ? '#10b981' : 'rgba(255,255,255,0.6)'}
+                                                    fill={chatbotGrammarHints[msg.id] ? '#10b981' : 'none'}
+                                                />
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+
                             {/* Brainstorm hint card */}
                             {chatbotBrainstormHints[msg.id] && (
                                 <View style={{
@@ -26970,6 +27055,27 @@ Review the following raw transcribed text:
                                         style={{ alignSelf: 'flex-end', marginTop: 6 }}
                                     >
                                         <Text style={{ color: '#f59e0b', fontSize: 11 }}>dismiss</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {/* Grammar Check hint card */}
+                            {chatbotGrammarHints[msg.id] && (
+                                <View style={{
+                                    marginTop: 8,
+                                    padding: 10,
+                                    backgroundColor: 'rgba(16,185,129,0.10)',
+                                    borderRadius: 10,
+                                    borderRightWidth: 3,
+                                    borderRightColor: '#10b981',
+                                }}>
+                                    <Text style={{ color: '#10b981', fontSize: 10, fontWeight: '700', marginBottom: 4, textAlign: 'right' }}>📝 Grammar Check</Text>
+                                    <InteractiveText rawText={chatbotGrammarHints[msg.id]} theme={{...theme, text: msg.role === 'user' ? 'white' : theme.text}} onWordPress={handleWordLookup} style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 13, lineHeight: 19 }} />
+                                    <TouchableOpacity
+                                        onPress={() => setChatbotGrammarHints(prev => { const n = { ...prev }; delete n[msg.id]; return n; })}
+                                        style={{ alignSelf: 'flex-start', marginTop: 6 }}
+                                    >
+                                        <Text style={{ color: '#10b981', fontSize: 11 }}>dismiss</Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
