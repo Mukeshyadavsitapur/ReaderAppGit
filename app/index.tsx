@@ -103,6 +103,7 @@ import {
     Camera,
     Check,
     CheckCircle,
+    CheckCircle2,
     CheckSquare,
     ChevronDown,
     ChevronLeft,
@@ -147,10 +148,10 @@ import {
     Layers,
     LayoutGrid,
     Leaf,
-    Keyboard as LucideKeyboard,
     Library,
     Lightbulb,
     List,
+    Keyboard as LucideKeyboard,
     Mail,
     Maximize2,
     Megaphone,
@@ -5626,6 +5627,12 @@ export default function App() {
     // Ref to keep chunks of STT to build consecutive utterances over time without losing the previous
     const accumulatedOfflineTranscriptRef = useRef("");
 
+    // NEW: Ref to access live settings in events without stale closures
+    const liveChatbotSettingsRef = useRef({
+        isLiveChatbotMode: false,
+        silenceTimeoutMs: 3000
+    });
+
     useSpeechRecognitionEvent("start", () => {
         console.log("Offline STT Started");
         setIsOfflineRecognizing(true);
@@ -5635,6 +5642,10 @@ export default function App() {
     useSpeechRecognitionEvent("end", () => {
         console.log("Offline STT Ended. Final transcript:", latestOfflineTranscriptRef.current);
         setIsOfflineRecognizing(false);
+        if (chatbotSilenceTimer.current) {
+            clearTimeout(chatbotSilenceTimer.current);
+            chatbotSilenceTimer.current = null;
+        }
         if (offlineSTTResolver.current) {
             offlineSTTResolver.current(latestOfflineTranscriptRef.current);
             offlineSTTResolver.current = null;
@@ -5671,9 +5682,38 @@ export default function App() {
     useSpeechRecognitionEvent("error", (event: any) => {
         console.warn("Offline STT Error:", event.error, event.message);
         setIsOfflineRecognizing(false);
+        if (chatbotSilenceTimer.current) {
+            clearTimeout(chatbotSilenceTimer.current);
+            chatbotSilenceTimer.current = null;
+        }
         if (offlineSTTResolver.current) {
             offlineSTTResolver.current(null);
             offlineSTTResolver.current = null;
+        }
+    });
+
+    // NEW: Handle volume change for Offline STT silence detection
+    useSpeechRecognitionEvent("volumechange", (event: any) => {
+        if (!liveChatbotSettingsRef.current.isLiveChatbotMode) return;
+
+        const volume = event.value; // iOS: -2 to 10. Android: varies, but user logs show -2 to 10 range.
+
+        // Through empirical testing, user's quiet environment registers between -2 and 3.5.
+        // Active speaking registers between 6 and 10.
+        // Threshold set to < 4.5 to safely act as "silence" without cutting off trailing speech.
+        if (volume < 4.5) {
+            if (!chatbotSilenceTimer.current) {
+                chatbotSilenceTimer.current = setTimeout(() => {
+                    console.log("Offline STT: Silence timeout hit, auto-stopping mic.");
+                    try { ExpoSpeechRecognitionModule.stop(); } catch (e) { }
+                    chatbotSilenceTimer.current = null;
+                }, liveChatbotSettingsRef.current.silenceTimeoutMs);
+            }
+        } else {
+            if (chatbotSilenceTimer.current) {
+                clearTimeout(chatbotSilenceTimer.current);
+                chatbotSilenceTimer.current = null;
+            }
         }
     });
 
@@ -5708,7 +5748,8 @@ export default function App() {
             ExpoSpeechRecognitionModule.start({
                 lang: displaySettings.offlineTtsLanguage || "en-US",
                 interimResults: true,
-                continuous: !isLiveChatbotMode, // Auto-stop in live mode
+                continuous: true, // Prevent OS from auto-stopping after 2s of silence. Controlled by our silence timer.
+                volumeChangeEventOptions: { enabled: true, intervalMillis: 500 } // NEW: Enable volume tracking for Live Chatbot
             });
         });
     };
@@ -5929,6 +5970,14 @@ export default function App() {
     const [playingMeta, setPlayingMeta] = useState<any>(null);
     const [isTtsDownloading, setIsTtsDownloading] = useState<any>(false);
 
+    // NEW: Adjustable Silence Timeout
+    const [silenceTimeoutMs, setSilenceTimeoutMs] = useState<number>(3000);
+    const [showSilencePicker, setShowSilencePicker] = useState<boolean>(false);
+
+    useEffect(() => {
+        liveChatbotSettingsRef.current = { isLiveChatbotMode, silenceTimeoutMs };
+    }, [isLiveChatbotMode, silenceTimeoutMs]);
+
     // --- CHATBOT VOICE AUTOMATION EFFECT ---
     useEffect(() => {
         let interval: any = null;
@@ -5944,13 +5993,13 @@ export default function App() {
                         const volume = status.metering;
 
                         if (isLiveChatbotMode) {
-                            if (volume < -35) {
+                            if (volume < -20) {
                                 if (!chatbotSilenceTimer.current) {
                                     chatbotSilenceTimer.current = setTimeout(() => {
-                                        // 3 seconds of silence - auto send
+                                        // Auto send after selected silence timeout
                                         handleChatbotVoiceToggle();
                                         chatbotSilenceTimer.current = null;
-                                    }, 3000);
+                                    }, silenceTimeoutMs);
                                 }
                             } else {
                                 if (chatbotSilenceTimer.current) {
@@ -23170,27 +23219,51 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                                     {/* NEW: Live Chatbot Mode Toggle (Only visible in Chatbot Mode) */}
                                     {isChatbotMode && (
-                                        <TouchableOpacity
-                                            onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
-                                            style={{
-                                                padding: 6,
-                                                paddingHorizontal: 12,
-                                                backgroundColor: isLiveChatbotMode
-                                                    ? 'rgba(34, 197, 94, 0.2)'
-                                                    : (isDay ? 'rgba(255,255,255,0.2)' : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight)),
-                                                borderRadius: 20,
-                                                borderWidth: 1,
-                                                borderColor: isLiveChatbotMode
-                                                    ? '#22c55e'
-                                                    : (isDay ? 'rgba(255,255,255,0.3)' : theme.border),
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: 8,
-                                            }}
-                                        >
-                                            <PhoneCall size={20} color={isLiveChatbotMode ? '#22c55e' : headerIconColor} />
-                                        </TouchableOpacity>
+                                        <>
+                                            {isLiveChatbotMode && (
+                                                <TouchableOpacity
+                                                    onPress={() => setShowSilencePicker(true)}
+                                                    style={{
+                                                        padding: 6,
+                                                        paddingHorizontal: 12,
+                                                        backgroundColor: isDay ? 'rgba(255,255,255,0.2)' : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight),
+                                                        borderRadius: 20,
+                                                        borderWidth: 1,
+                                                        borderColor: isDay ? 'rgba(255,255,255,0.3)' : theme.border,
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: 4,
+                                                    }}
+                                                >
+                                                    <Clock size={16} color={headerIconColor} />
+                                                    <Text style={{ color: headerTextColor, fontSize: 13, fontWeight: 'bold' }}>
+                                                        {silenceTimeoutMs / 1000}s
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            <TouchableOpacity
+                                                onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
+                                                style={{
+                                                    padding: 6,
+                                                    paddingHorizontal: 12,
+                                                    backgroundColor: isLiveChatbotMode
+                                                        ? 'rgba(34, 197, 94, 0.2)'
+                                                        : (isDay ? 'rgba(255,255,255,0.2)' : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight)),
+                                                    borderRadius: 20,
+                                                    borderWidth: 1,
+                                                    borderColor: isLiveChatbotMode
+                                                        ? '#22c55e'
+                                                        : (isDay ? 'rgba(255,255,255,0.3)' : theme.border),
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 8,
+                                                }}
+                                            >
+                                                <PhoneCall size={20} color={isLiveChatbotMode ? '#22c55e' : headerIconColor} />
+                                            </TouchableOpacity>
+                                        </>
                                     )}
                                 </View>
                             )}
@@ -27072,7 +27145,7 @@ Review the following raw transcribed text:
                                     borderRightColor: '#10b981',
                                 }}>
                                     <Text style={{ color: '#10b981', fontSize: 10, fontWeight: '700', marginBottom: 4, textAlign: 'right' }}>📝 Grammar Check</Text>
-                                    <InteractiveText rawText={chatbotGrammarHints[msg.id]} theme={{...theme, text: msg.role === 'user' ? 'white' : theme.text}} onWordPress={handleWordLookup} style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 13, lineHeight: 19 }} />
+                                    <InteractiveText rawText={chatbotGrammarHints[msg.id]} theme={{ ...theme, text: msg.role === 'user' ? 'white' : theme.text }} onWordPress={handleWordLookup} style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 13, lineHeight: 19 }} />
                                     <TouchableOpacity
                                         onPress={() => setChatbotGrammarHints(prev => { const n = { ...prev }; delete n[msg.id]; return n; })}
                                         style={{ alignSelf: 'flex-start', marginTop: 6 }}
@@ -34345,6 +34418,57 @@ Review the following raw transcribed text:
                     });
                 }}
             />
+
+            {/* Silence Timeout Picker Modal */}
+            <Modal visible={showSilencePicker} transparent animationType="fade" onRequestClose={() => setShowSilencePicker(false)}>
+                <TouchableOpacity
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+                    activeOpacity={1}
+                    onPress={() => setShowSilencePicker(false)}
+                >
+                    <View style={{ width: '80%', backgroundColor: theme.overlay, borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 }}>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text, marginBottom: 5 }}>Adjust Silence Timeout</Text>
+                        <Text style={{ fontSize: 14, color: theme.secondary, marginBottom: 20 }}>Wait time before auto-sending the voice message while Live Chatbot is active.</Text>
+
+                        <View style={{ gap: 10 }}>
+                            {[2, 3, 4, 5, 7, 10].map(seconds => (
+                                <TouchableOpacity
+                                    key={seconds}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: 15,
+                                        borderRadius: 12,
+                                        backgroundColor: silenceTimeoutMs === seconds * 1000 ? (theme.id === 'day' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(96, 165, 250, 0.2)') : theme.uiBg,
+                                        borderWidth: 1,
+                                        borderColor: silenceTimeoutMs === seconds * 1000 ? primaryColor : theme.border
+                                    }}
+                                    onPress={() => {
+                                        setSilenceTimeoutMs(seconds * 1000);
+                                        setShowSilencePicker(false);
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        <Clock size={18} color={silenceTimeoutMs === seconds * 1000 ? primaryColor : theme.secondary} />
+                                        <Text style={{ fontSize: 16, color: silenceTimeoutMs === seconds * 1000 ? primaryColor : theme.text, fontWeight: silenceTimeoutMs === seconds * 1000 ? 'bold' : 'normal' }}>
+                                            {seconds} Seconds
+                                        </Text>
+                                    </View>
+                                    {silenceTimeoutMs === seconds * 1000 && <CheckCircle2 size={20} color={primaryColor} />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={() => setShowSilencePicker(false)}
+                            style={{ marginTop: 20, padding: 15, borderRadius: 12, alignItems: 'center', backgroundColor: theme.uiBg, borderWidth: 1, borderColor: theme.border }}
+                        >
+                            <Text style={{ color: theme.text, fontWeight: 'bold' }}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaProvider >
     );
 }
