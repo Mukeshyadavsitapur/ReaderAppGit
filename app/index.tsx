@@ -165,6 +165,7 @@ import {
     Palette,
     Pause,
     PenLine,
+    PhoneCall,
     PhoneOff,
     Pin,
     Plane,
@@ -2156,7 +2157,7 @@ const CHATBOT_CHARACTERS: any[] = [
         id: 'nara_storyteller',
         title: 'Nara (Storyteller)',
         role: 'Interactive Story Companion',
-        prompt: 'Act as Nara, a master storyteller inspired by great authors like Charles Dickens, Leo Tolstoy, Mark Twain, and Rabindranath Tagore. Your goal is to tell rich, immersive stories from famous books in a collaborative way.\n\nTone: Literary, descriptive, and immersive.\n\nStory Rules:\n- Write 7–8 lines per story segment with vivid scenes, strong characters, and real emotion.\n- After each segment, Ask the user a thought-provoking question about the story to spark curiosity or continue to story.\n- If the user provides a book name, retell it faithfully in an engaging style. If the user does not know a book, suggest 3–5 famous books and let them choose.\n\nVocabulary Control: Use CEFR A1–B2 levels. Do not use special characters or emoji.\n\nConstraint: Responses must stay under 800 characters.',
+        prompt: 'Act as Nara, a master storyteller inspired by great authors like Charles Dickens, Leo Tolstoy, Mark Twain, and Rabindranath Tagore. Your goal is to tell rich, immersive stories from famous books in a collaborative way.\n\nTone: Literary, descriptive, and immersive.\n\nStory Rules:\n- Write 7–8 lines per story segment with vivid scenes, strong characters, and real emotion.\n- After each segment, Ask the user a thought-provoking question about the story to spark curiosity or continue to story.\n- If the user provides a book name, retell it faithfully in an engaging style. If the user does not know a book, suggest 3–5 famous books and let them choose.\n\nVocabulary Control: Use CEFR A1–B2 levels. Do not use special characters or emoji.\n\nConstraint: Responses must stay under 600 characters.',
         iconName: 'BookOpen',
         color: ['#f97316', '#ea580c'], // Orange
         greeting: "Hello! I am Nara, your personal storyteller. I can bring famous books to life for you, one chapter at a time. Which book would you like to hear? You can name a book, or if you are not sure, I can suggest some great ones like Oliver Twist, The Old Man and the Sea, or The Gift of the Magi. What would you like?"
@@ -5384,13 +5385,13 @@ const OnboardingPreviewFooter = ({
                     onPress={() => setProvider('groq')}
                     style={{ flex: 1, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: isGroq ? '#4f46e5' : theme.border, backgroundColor: isGroq ? '#4f46e520' : theme.inputBg, alignItems: 'center' }}
                 >
-                    <Text style={{ color: isGroq ? '#4f46e5' : theme.secondary, fontWeight: isGroq ? 'bold' : 'normal', fontSize: 13 }}>Groq (Recommended)</Text>
+                    <Text style={{ color: isGroq ? '#4f46e5' : theme.secondary, fontWeight: isGroq ? 'bold' : 'normal', fontSize: 13 }}>Groq (speed)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     onPress={() => setProvider('gemini')}
                     style={{ flex: 1, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: !isGroq ? '#4f46e5' : theme.border, backgroundColor: !isGroq ? '#4f46e520' : theme.inputBg, alignItems: 'center' }}
                 >
-                    <Text style={{ color: !isGroq ? '#4f46e5' : theme.secondary, fontWeight: !isGroq ? 'bold' : 'normal', fontSize: 13 }}>Gemini</Text>
+                    <Text style={{ color: !isGroq ? '#4f46e5' : theme.secondary, fontWeight: !isGroq ? 'bold' : 'normal', fontSize: 13 }}>Gemini(quality)</Text>
                 </TouchableOpacity>
             </View>
 
@@ -5783,6 +5784,7 @@ export default function App() {
 
     // --- CHATBOT MODE STATE ---
     const [isChatbotMode, setIsChatbotMode] = useState(false);
+    const [isLiveChatbotMode, setIsLiveChatbotMode] = useState(false);
     const [chatbotMessages, setChatbotMessages] = useState<Message[]>([]);
     const [activeChatbotChar, setActiveChatbotChar] = useState<any>(null);
     const chatbotSilenceTimer = useRef<any>(null);
@@ -5925,14 +5927,33 @@ export default function App() {
     // --- CHATBOT VOICE AUTOMATION EFFECT ---
     useEffect(() => {
         let interval: any = null;
-        if (isChatbotMode && isRecording) {
+        // Continue monitoring if in chatbot mode OR live chatbot mode
+        if ((isChatbotMode || isLiveChatbotMode) && isRecording) {
             interval = setInterval(async () => {
                 try {
                     const status = await recorder.getStatus();
                     if (status.metering !== undefined) {
                         const volume = status.metering;
-                        // Auto-send on silence has been disabled as per user request. 
-                        // The user must click to send manually.
+
+                        if (isLiveChatbotMode) {
+                            if (volume < -35) {
+                                if (!chatbotSilenceTimer.current) {
+                                    chatbotSilenceTimer.current = setTimeout(() => {
+                                        // 3 seconds of silence - auto send
+                                        handleChatbotVoiceToggle();
+                                        chatbotSilenceTimer.current = null;
+                                    }, 3000);
+                                }
+                            } else {
+                                if (chatbotSilenceTimer.current) {
+                                    clearTimeout(chatbotSilenceTimer.current);
+                                    chatbotSilenceTimer.current = null;
+                                }
+                            }
+                        } else {
+                            // Auto-send on silence has been disabled as per user request in normal mode. 
+                            // The user must click to send manually.
+                        }
                     }
                 } catch (e) {
                     console.warn("Metering error", e);
@@ -5949,7 +5970,7 @@ export default function App() {
             if (interval) clearInterval(interval);
             if (chatbotSilenceTimer.current) clearTimeout(chatbotSilenceTimer.current);
         };
-    }, [isChatbotMode, isRecording]);
+    }, [isChatbotMode, isLiveChatbotMode, isRecording]);
 
 
     useEffect(() => {
@@ -7387,8 +7408,17 @@ export default function App() {
             }
 
             setTtsFinishedNaturally(0);
+        } else if (ttsFinishedNaturally > 0 && isLiveChatbotMode && activeChatbotChar) {
+            // 3. LIVE CHATBOT MODE LOGIC
+            // Automatically start the microphone when TTS finishes speaking the assistant's response
+            setTimeout(() => {
+                if (isLiveChatbotMode && !isRecording && !isTranscribing) {
+                    handleChatbotVoiceToggle();
+                }
+            }, 500);
+            setTtsFinishedNaturally(0);
         }
-    }, [ttsFinishedNaturally]);
+    }, [ttsFinishedNaturally, isLiveChatbotMode, isRecording, isTranscribing, activeChatbotChar]);
 
     const [isExportingAudio, setIsExportingAudio] = useState(false);
     const [ttsDownloadProgress, setTtsDownloadProgress] = useState(0);
@@ -8373,7 +8403,10 @@ export default function App() {
                     readerListRef.current.scrollToIndex({
                         index: targetIndex,
                         animated: true,
-                        viewPosition: 0.2
+                        // Fix 3: Adjust viewPosition & viewOffset to prevent text from
+                        // hiding under the floating header during TTS auto-scroll.
+                        viewPosition: 0,
+                        viewOffset: 80 // Offset in pixels to account for the header padding
                     });
                 } catch (e: any) {
                 }
@@ -12734,7 +12767,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     const getChunks = useCallback((text: string) => {
         if (!text) return { chunks: [], offsets: [] };
 
-        const cleanText = cleanTextForDisplay(text);
+        // NOTE: Callers must pass already-cleaned text.
+        // Do NOT call cleanTextForDisplay here — doing so would double-clean
+        // when speak() has already cleaned, shifting offsets and skipping paragraphs.
+        const cleanText = text;
         const CHUNK_LIMIT = 850;
         const CHUNK_MIN = 850; // Requested: force minimum length if more text available
 
@@ -12849,7 +12885,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     return;
                 }
 
-                const { chunks } = getChunks(text);
+                const { chunks } = getChunks(cleanText); // Use pre-cleaned text so offsets match
                 let savedCount = 0;
                 const key = customApiKey || apiKey;
                 const groqKey = displaySettings.groqApiKey;
@@ -13341,7 +13377,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (speechSessionId.current !== currentSessionId) return;
 
-                setIsOnlinePlayback(true); // Disable highlights for online
+                // Keep isOnlinePlayback false so the highlight overlay works for online TTS too.
+                // speechRange is already updated via time-progress (lines below), so highlight data is available.
+                setIsOnlinePlayback(false); // Allow highlight for online TTS
 
                 // Load sound using expo-audio
                 const player = createAudioPlayer(uri);
@@ -13575,7 +13613,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     speak(text, startOffset, isAlreadyClean, true);
                     return;
                 }
-                setIsOnlinePlayback(true);
+                setIsOnlinePlayback(false); // Keep highlight active on resume
                 speechState.current.isActive = true;
                 speechState.current.isPaused = false;
                 setTtsStatus('playing');
@@ -23072,18 +23110,26 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             </Text>
                             {activeTab === 'home' && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                    <TouchableOpacity
-                                        onPress={handleDownloadDictionary}
-                                        style={{ padding: 4, marginLeft: 2 }}
-                                    >
-                                        <DownloadCloud size={18} color={headerIconColor} />
-                                    </TouchableOpacity>
+                                    {!isChatbotMode && (
+                                        <TouchableOpacity
+                                            onPress={handleDownloadDictionary}
+                                            style={{ padding: 4, marginLeft: 2 }}
+                                        >
+                                            <DownloadCloud size={18} color={headerIconColor} />
+                                        </TouchableOpacity>
+                                    )}
 
                                     <TouchableOpacity
                                         onPress={() => {
                                             if (isChatbotMode) {
-                                                endChatbotSession();
-                                                setIsChatbotMode(false);
+                                                if (isLiveChatbotMode) {
+                                                    // In live mode, we don't end the session when switching back to reader.
+                                                    // It keeps running in the background.
+                                                    setIsChatbotMode(false);
+                                                } else {
+                                                    endChatbotSession();
+                                                    setIsChatbotMode(false);
+                                                }
                                             } else {
                                                 setIsChatbotMode(true);
                                             }
@@ -23112,6 +23158,31 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                             {isChatbotMode ? "Reader" : "Chatbot"}
                                         </Text>
                                     </TouchableOpacity>
+
+                                    {/* NEW: Live Chatbot Mode Toggle (Only visible in Chatbot Mode) */}
+                                    {isChatbotMode && (
+                                        <TouchableOpacity
+                                            onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
+                                            style={{
+                                                padding: 6,
+                                                paddingHorizontal: 12,
+                                                backgroundColor: isLiveChatbotMode
+                                                    ? 'rgba(34, 197, 94, 0.2)'
+                                                    : (isDay ? 'rgba(255,255,255,0.2)' : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight)),
+                                                borderRadius: 20,
+                                                borderWidth: 1,
+                                                borderColor: isLiveChatbotMode
+                                                    ? '#22c55e'
+                                                    : (isDay ? 'rgba(255,255,255,0.3)' : theme.border),
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 8,
+                                            }}
+                                        >
+                                            <PhoneCall size={20} color={isLiveChatbotMode ? '#22c55e' : headerIconColor} />
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             )}
                         </View>
@@ -26464,12 +26535,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             const providerToUse = groqKey ? 'groq' : 'gemini';
             const keyToUse = groqKey || geminiKey;
 
-            const systemPrompt = `You are a helpful conversation coach. 
-The user is chatting with an AI character and needs quick reply ideas or help answering the AI's question.
-Give exactly 2-3 short, natural reply suggestions (each on a new line starting with "•").
-Keep each suggestion under 15 words. Be direct and practical.`;
+            const systemPrompt = `You are a helpful conversation coach. The user is chatting with an AI character. Provide the single best, most natural reply to the AI's last message.\n\nConstraints: Give only one response.\n\n Keep it under 25 words.\n\n Ensure it sounds practical and helps move the conversation forward.`;
 
-            const userPrompt = `The AI just said:\n"${msg.content.substring(0, 400)}"\n\nGive me 2-3 short reply ideas or ways to answer this.`;
+            const userPrompt = `The AI just said:\n"${msg.content.substring(0, 400)}"\n\n Provide the single best, most natural reply to the AI's last message.\n\nConstraints: Give only one response.\n\n Keep it under 25 words.\n\n Ensure it sounds practical and helps move the conversation forward.`;
 
             const contents = [{ role: 'user', parts: [{ text: userPrompt }] }];
 
