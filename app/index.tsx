@@ -2075,6 +2075,7 @@ const generateCertificateHtml = (userName: string, title: string, score: number,
 
 const SPEECH_RECORDING_OPTIONS: any = {
     extension: '.m4a',
+    isMeteringEnabled: true,
     sampleRate: 44100,
     numberOfChannels: 1,
     bitRate: 128000,
@@ -5706,7 +5707,7 @@ export default function App() {
             ExpoSpeechRecognitionModule.start({
                 lang: displaySettings.offlineTtsLanguage || "en-US",
                 interimResults: true,
-                continuous: true, // Auto-stop removed, user must tap again
+                continuous: !isLiveChatbotMode, // Auto-stop in live mode
             });
         });
     };
@@ -5932,6 +5933,9 @@ export default function App() {
             interval = setInterval(async () => {
                 try {
                     const status = await recorder.getStatus();
+                    // Log to help diagnose
+                    console.log("Chatbot Metering:", status.metering);
+
                     if (status.metering !== undefined) {
                         const volume = status.metering;
 
@@ -7412,7 +7416,7 @@ export default function App() {
             // 3. LIVE CHATBOT MODE LOGIC
             // Automatically start the microphone when TTS finishes speaking the assistant's response
             setTimeout(() => {
-                if (isLiveChatbotMode && !isRecording && !isTranscribing) {
+                if (isLiveChatbotMode && !isRecording && !isOfflineRecognizing && !isTranscribing) {
                     handleChatbotVoiceToggle();
                 }
             }, 500);
@@ -13708,6 +13712,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         Speech.stop();
         setSpeechRange(null);
         setTtsStatus('stopped');
+        setChatbotSpeakingMsgId(null); // FIX: Ensure chatbot speaker flag is cleared if naturally stopped by manual user action
         // Note: We don't clear playingMeta here to allow the UI to show "Last Played" info in Mini Player
     };
 
@@ -26117,7 +26122,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         // Show player if TTS is active AND:
         // 1. We are NOT in Reader mode (browsing library/home)
         // 2. OR We ARE in Reader mode, but reading a DIFFERENT chapter than what is playing
-        const showPlayer = ttsStatus !== 'stopped' && !isChatbotMode && (appMode !== 'reader' || playingMeta?.id !== readingSession?.id);
+        // 3. AND we are not currently playing Chatbot audio (safely checked via speechState ref)
+        const showPlayer = ttsStatus !== 'stopped' && !isChatbotMode && speechState.current?.title !== "Chatbot" && (appMode !== 'reader' || playingMeta?.id !== readingSession?.id);
 
         if (!showPlayer) return null;
 
@@ -26387,8 +26393,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 // Mark this bubble as the active speaker for the toggle UI
                 setChatbotSpeakingMsgId(aiMsg.id);
                 // FIX: Use forcePlay=true so TTS always starts immediately after a new response,
-                // even if push-to-talk was used mid-playback and TTS is in any state.
-                speak(cleaned, 0, true, true, null, true); // forcePlay=true, forceOffline=true
+                // Pass "Chatbot" as customTitle to correctly block the mini-player via speechState ref.
+                speak(cleaned, 0, true, true, "Chatbot", true); // forcePlay=true, forceOffline=true
             }
 
 
@@ -26935,7 +26941,7 @@ Review the following raw transcribed text:
                                                 const cleaned = cleanTextForDisplay(textToSpeak);
                                                 // Mark this bubble as the active speaker, then start playing
                                                 setChatbotSpeakingMsgId(msg.id);
-                                                speak(cleaned, 0, false, true, null, true);
+                                                speak(cleaned, 0, false, true, "Chatbot", true);
                                             }}
                                         >
                                             {chatbotSpeakingMsgId === msg.id ? (
