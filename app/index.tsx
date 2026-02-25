@@ -147,6 +147,7 @@ import {
     Layers,
     LayoutGrid,
     Leaf,
+    Keyboard as LucideKeyboard,
     Library,
     Lightbulb,
     List,
@@ -5807,6 +5808,7 @@ export default function App() {
     const [chatbotGrammarCheckingMsgId, setChatbotGrammarCheckingMsgId] = useState<string | null>(null);
     const [chatbotGrammarHints, setChatbotGrammarHints] = useState<Record<string, string>>({});
     const chatbotScrollRef = useRef<ScrollView>(null);
+    const chatbotInputRef = useRef<TextInput>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
     const [dictionaryInput, setDictionaryInput] = useState<any>("");
@@ -27101,15 +27103,24 @@ Review the following raw transcribed text:
                     gap: 15
                 }}>
                     <TouchableOpacity
-                        onPress={() => setIsChatbotInputExpanded(!isChatbotInputExpanded)}
+                        onPress={() => {
+                            const willExpand = !isChatbotInputExpanded;
+                            setIsChatbotInputExpanded(willExpand);
+                            if (willExpand) {
+                                setTimeout(() => {
+                                    chatbotInputRef.current?.focus();
+                                }, 100);
+                            }
+                        }}
                         style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.uiBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}
                     >
-                        {isChatbotInputExpanded ? <X size={20} color={theme.text} /> : <FileText size={20} color={theme.text} />}
+                        {isChatbotInputExpanded ? <X size={20} color={theme.text} /> : <LucideKeyboard size={20} color={theme.text} />}
                     </TouchableOpacity>
 
                     {isChatbotInputExpanded ? (
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.uiBg, borderRadius: 22, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 15 }}>
                             <TextInput
+                                ref={chatbotInputRef}
                                 style={{ flex: 1, height: 44, color: theme.text }}
                                 placeholder="Type a message..."
                                 placeholderTextColor={theme.secondary}
