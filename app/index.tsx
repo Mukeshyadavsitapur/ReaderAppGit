@@ -367,6 +367,13 @@ export interface DisplaySettings {
     quizTarget?: string;
     modeLocked?: boolean;
     isOnboarded?: boolean;
+    textModels?: string[]; // NEW
+    groqModels?: string[]; // NEW
+    imageModels?: string[]; // NEW
+    ttsModels?: string[]; // NEW
+    groqTtsModels?: string[]; // NEW
+    sttGroqModels?: string[]; // NEW
+    sttGeminiModels?: string[]; // NEW
 }
 
 export interface QuizState {
@@ -5572,6 +5579,13 @@ export default function App() {
         smartBio: "", // NEW: AI-generated summary
         offlineTtsLanguage: "en-GB", // NEW: Default to English (UK) as per user observation
         offlineVoice: "", // NEW: Specific voice identifier
+        textModels: [...TEXT_MODELS], // NEW: Initialize with defaults
+        groqModels: [...GROQ_MODELS], // NEW: Initialize with defaults
+        imageModels: [...IMAGE_MODELS], // NEW
+        ttsModels: [...TTS_MODELS], // NEW
+        groqTtsModels: [...GROQ_TTS_MODELS], // NEW
+        sttGroqModels: ['whisper-large-v3-turbo', 'whisper-large-v3'], // NEW
+        sttGeminiModels: ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'], // NEW
     });
 
     // NEW: Available Offline Voices (stored as objects)
@@ -5833,6 +5847,7 @@ export default function App() {
     const [chatbotInput, setChatbotInput] = useState("");
     const [isChatScrolling, setIsChatScrolling] = useState(false);
     const [chatbotSpeakingMsgId, setChatbotSpeakingMsgId] = useState<string | null>(null);
+    const [showModelManagement, setShowModelManagement] = useState(false); // NEW: Collapsible state
     // Per-bubble translation caches: { [msgId]: { [lang]: translatedText } }
     const [chatbotMsgTranslations, setChatbotMsgTranslations] = useState<Record<string, Record<string, string>>>({});
     // Current displayed language per bubble (null = original)
@@ -9698,6 +9713,13 @@ export default function App() {
                         onlineTtsEnabled: parsed.onlineTtsEnabled !== undefined ? parsed.onlineTtsEnabled : true,
                         imageGenerationEnabled: parsed.imageGenerationEnabled !== undefined ? parsed.imageGenerationEnabled : true,
                         tapToDefine: parsed.tapToDefine !== undefined ? parsed.tapToDefine : true,
+                        textModels: parsed.textModels || [...TEXT_MODELS],
+                        groqModels: parsed.groqModels || [...GROQ_MODELS],
+                        imageModels: parsed.imageModels || [...IMAGE_MODELS],
+                        ttsModels: parsed.ttsModels || [...TTS_MODELS],
+                        groqTtsModels: parsed.groqTtsModels || [...GROQ_TTS_MODELS],
+                        sttGroqModels: parsed.sttGroqModels || ['whisper-large-v3-turbo', 'whisper-large-v3'],
+                        sttGeminiModels: parsed.sttGeminiModels || ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
                         keepLabelsEnglish: parsed.keepLabelsEnglish !== undefined ? parsed.keepLabelsEnglish : false,
                         userName: parsed.userName || "",
                         userProfession: parsed.userProfession || "",
@@ -12262,7 +12284,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             }
 
             // NEW: Ignore Gemini model overrides when routing to Groq
-            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...GROQ_MODELS];
+            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...(displaySettings.groqModels || GROQ_MODELS)];
 
             let lastGroqError: any = null;
             for (const groqModel of groqModelsToTry) {
@@ -12335,7 +12357,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
 
         // Determine model order based on priority (Gemini Fallback)
-        let modelsToTry = [...TEXT_MODELS];
+        let modelsToTry = [...(displaySettings.textModels || TEXT_MODELS)];
 
         // NEW: Handle Model Override (High Priority)
         if (modelOverride) {
@@ -12449,7 +12471,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         }
 
         if (provider === 'groq') {
-            let groqTestModels = [...GROQ_MODELS];
+            let groqTestModels = [...(displaySettings.groqModels || GROQ_MODELS)];
 
             for (const groqModel of groqTestModels) {
                 try {
@@ -12482,7 +12504,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
 
         // Custom model first, otherwise try latest → oldest (TEXT_MODELS order)
-        let testModels = [...TEXT_MODELS];
+        let testModels = [...(displaySettings.textModels || TEXT_MODELS)];
 
         for (const testModel of testModels) {
             try {
@@ -12649,7 +12671,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         const tryGroq = async () => {
             if (!groqKey) return null;
-            for (const modelId of GROQ_TTS_MODELS) {
+            for (const modelId of (displaySettings.groqTtsModels || GROQ_TTS_MODELS)) {
                 try {
                     console.log(`[TTS] Attempting Groq TTS: ${modelId}`);
                     let groqVoice = voiceOverride || displaySettings.voice || "Hannah";
@@ -12701,7 +12723,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         const tryGemini = async () => {
             if (!geminiKey) return null;
             let rateLimitHit = false;
-            for (const modelId of TTS_MODELS) {
+            for (const modelId of (displaySettings.ttsModels || TTS_MODELS)) {
                 try {
                     console.log(`[TTS] Attempting Gemini TTS: ${modelId}`);
                     const payload = {
@@ -14153,7 +14175,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         // Retry configuration
         const MAX_RETRIES = 3;
 
-        for (const modelId of IMAGE_MODELS) {
+        for (const modelId of (displaySettings.imageModels || IMAGE_MODELS)) {
             let attempts = 0;
 
             while (attempts <= MAX_RETRIES) {
@@ -25640,6 +25662,159 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
 
 
+
+                    {/* NEW: Models Management */}
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => setShowModelManagement(!showModelManagement)}
+                        style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}
+                    >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: theme.secondary, textTransform: 'uppercase' }}>
+                            Manage LLM Models
+                        </Text>
+                        {showModelManagement ? (
+                            <ChevronUp size={16} color={theme.secondary} />
+                        ) : (
+                            <ChevronDown size={16} color={theme.secondary} />
+                        )}
+                    </TouchableOpacity>
+
+
+                    <Text style={{ fontSize: 11, color: '#f97316', marginBottom: 15, fontStyle: 'italic' }}>
+                        Tip: please update to latest model if see model not found related error
+                    </Text>
+
+                    {showModelManagement && (
+                        <>
+
+                            <EditableSelectionList
+                                label="GEMINI TEXT MODELS"
+                                items={displaySettings.textModels || [...TEXT_MODELS]}
+                                onSelect={() => { }} // Management only, no selection change here
+                                onAdd={(model: string) => {
+                                    const current = displaySettings.textModels || [...TEXT_MODELS];
+                                    if (!current.includes(model)) {
+                                        saveSettings({ textModels: [model, ...current] });
+                                    }
+                                }}
+                                onDelete={(model: string) => {
+                                    const current = displaySettings.textModels || [...TEXT_MODELS];
+                                    saveSettings({ textModels: current.filter((m: string) => m !== model) });
+                                }}
+                                theme={theme}
+                                placeholder="Add Gemini model id..."
+                            />
+
+                            <EditableSelectionList
+                                label="GROQ TEXT MODELS"
+                                items={displaySettings.groqModels || [...GROQ_MODELS]}
+                                onSelect={() => { }} // Management only
+                                onAdd={(model: string) => {
+                                    const current = displaySettings.groqModels || [...GROQ_MODELS];
+                                    if (!current.includes(model)) {
+                                        saveSettings({ groqModels: [model, ...current] });
+                                    }
+                                }}
+                                onDelete={(model: string) => {
+                                    const current = displaySettings.groqModels || [...GROQ_MODELS];
+                                    saveSettings({ groqModels: current.filter((m: string) => m !== model) });
+                                }}
+                                theme={theme}
+                                placeholder="Add Groq model id..."
+                            />
+
+                    <EditableSelectionList
+                        label="IMAGE GENERATION MODELS"
+                        items={displaySettings.imageModels || [...IMAGE_MODELS]}
+                        onSelect={() => { }}
+                        onAdd={(model: string) => {
+                            const current = displaySettings.imageModels || [...IMAGE_MODELS];
+                            if (!current.includes(model)) {
+                                saveSettings({ imageModels: [model, ...current] });
+                            }
+                        }}
+                        onDelete={(model: string) => {
+                            const current = displaySettings.imageModels || [...IMAGE_MODELS];
+                            saveSettings({ imageModels: current.filter((m: string) => m !== model) });
+                        }}
+                        theme={theme}
+                        placeholder="Add Image model id..."
+                    />
+
+                    <EditableSelectionList
+                        label="GEMINI TTS MODELS"
+                        items={displaySettings.ttsModels || [...TTS_MODELS]}
+                        onSelect={() => { }}
+                        onAdd={(model: string) => {
+                            const current = displaySettings.ttsModels || [...TTS_MODELS];
+                            if (!current.includes(model)) {
+                                saveSettings({ ttsModels: [model, ...current] });
+                            }
+                        }}
+                        onDelete={(model: string) => {
+                            const current = displaySettings.ttsModels || [...TTS_MODELS];
+                            saveSettings({ ttsModels: current.filter((m: string) => m !== model) });
+                        }}
+                        theme={theme}
+                        placeholder="Add Gemini TTS model id..."
+                    />
+
+                    <EditableSelectionList
+                        label="GROQ TTS MODELS"
+                        items={displaySettings.groqTtsModels || [...GROQ_TTS_MODELS]}
+                        onSelect={() => { }}
+                        onAdd={(model: string) => {
+                            const current = displaySettings.groqTtsModels || [...GROQ_TTS_MODELS];
+                            if (!current.includes(model)) {
+                                saveSettings({ groqTtsModels: [model, ...current] });
+                            }
+                        }}
+                        onDelete={(model: string) => {
+                            const current = displaySettings.groqTtsModels || [...GROQ_TTS_MODELS];
+                            saveSettings({ groqTtsModels: current.filter((m: string) => m !== model) });
+                        }}
+                        theme={theme}
+                        placeholder="Add Groq TTS model id..."
+                    />
+
+                    <EditableSelectionList
+                        label="GEMINI STT MODELS (CHATBOT)"
+                        items={displaySettings.sttGeminiModels || ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro']}
+                        onSelect={() => { }}
+                        onAdd={(model: string) => {
+                            const current = displaySettings.sttGeminiModels || ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
+                            if (!current.includes(model)) {
+                                saveSettings({ sttGeminiModels: [model, ...current] });
+                            }
+                        }}
+                        onDelete={(model: string) => {
+                            const current = displaySettings.sttGeminiModels || ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
+                            saveSettings({ sttGeminiModels: current.filter((m: string) => m !== model) });
+                        }}
+                        theme={theme}
+                        placeholder="Add Gemini STT model id..."
+                    />
+
+                    <EditableSelectionList
+                        label="GROQ STT MODELS (CHATBOT)"
+                        items={displaySettings.sttGroqModels || ['whisper-large-v3-turbo', 'whisper-large-v3']}
+                        onSelect={() => { }}
+                        onAdd={(model: string) => {
+                            const current = displaySettings.sttGroqModels || ['whisper-large-v3-turbo', 'whisper-large-v3'];
+                            if (!current.includes(model)) {
+                                saveSettings({ sttGroqModels: [model, ...current] });
+                            }
+                        }}
+                        onDelete={(model: string) => {
+                            const current = displaySettings.sttGroqModels || ['whisper-large-v3-turbo', 'whisper-large-v3'];
+                            saveSettings({ sttGroqModels: current.filter((m: string) => m !== model) });
+                        }}
+                        theme={theme}
+                        placeholder="Add Groq STT model id..."
+                    />
+
+                    <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 20 }} />
+
                     {/* Online TTS */}
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <View style={{ flex: 1, marginRight: 10 }}>
@@ -25786,6 +25961,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             )}
                         </TouchableOpacity>
                     </View>
+                        </>
+                    )}
 
 
                     <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 20 }} />
@@ -26775,36 +26952,40 @@ Quick Tip: [explanation]`;
 
         // PRIORITY 1: Groq Whisper (much faster and more reliable)
         if (groqKey && groqKey.trim()) {
-            try {
-                const formData = new FormData();
-                formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
-                formData.append('model', 'whisper-large-v3-turbo');
-                formData.append('response_format', 'json');
+            const whisperModels = displaySettings.sttGroqModels || ['whisper-large-v3-turbo', 'whisper-large-v3'];
+            for (const modelId of whisperModels) {
+                try {
+                    const formData = new FormData();
+                    formData.append('file', { uri, name: 'audio.m4a', type: 'audio/m4a' } as any);
+                    formData.append('model', modelId);
+                    formData.append('response_format', 'json');
 
-                const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${groqKey}` },
-                    body: formData
-                });
+                    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${groqKey}` },
+                        body: formData
+                    });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    const text = data?.text?.trim();
-                    if (text) {
-                        console.log("Chatbot STT (Groq) Raw Result:", text);
-                        rawTranscript = text;
+                    if (response.ok) {
+                        const data = await response.json();
+                        const text = data?.text?.trim();
+                        if (text) {
+                            console.log(`Chatbot STT (Groq ${modelId}) Raw Result:`, text);
+                            rawTranscript = text;
+                            break;
+                        }
+                    } else {
+                        console.warn(`Groq STT ${modelId} failed in chatbot, falling back...`, await response.text());
                     }
-                } else {
-                    console.warn("Groq STT failed in chatbot, falling back...", await response.text());
+                } catch (e) {
+                    console.warn(`Groq STT Chatbot Error (${modelId}):`, e);
                 }
-            } catch (e) {
-                console.warn("Groq STT Chatbot Error:", e);
             }
         }
 
         // PRIORITY 2: Gemini STT
         if (geminiKey && geminiKey.trim() && !rawTranscript) {
-            const sttFallbackModels = [
+            const sttFallbackModels = displaySettings.sttGeminiModels || [
                 'gemini-3-flash-preview',
                 'gemini-2.5-flash',
                 'gemini-2.5-flash-lite',
