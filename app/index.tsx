@@ -132,7 +132,8 @@ import {
     Wrench,
     X,
     XCircle,
-    Youtube
+    Youtube,
+    Menu
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -5587,6 +5588,26 @@ export default function App() {
         sttGroqModels: ['whisper-large-v3-turbo', 'whisper-large-v3'], // NEW
         sttGeminiModels: ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'], // NEW
     });
+
+    const [isSideMenuVisible, setIsSideMenuVisible] = useState(false);
+    const sideMenuAnim = useRef(new Animated.Value(-300)).current;
+
+    const toggleSideMenu = (show: boolean) => {
+        if (show) {
+            setIsSideMenuVisible(true);
+            Animated.timing(sideMenuAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        } else {
+            Animated.timing(sideMenuAnim, {
+                toValue: -300,
+                duration: 250,
+                useNativeDriver: true,
+            }).start(() => setIsSideMenuVisible(false));
+        }
+    };
 
     // NEW: Available Offline Voices (stored as objects)
     const [availableVoices, setAvailableVoices] = useState<{ code: string; label: string; identifier?: string }[]>([]);
@@ -23172,11 +23193,19 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity
-                                onPress={() => Linking.openURL('https://youtube.com/@rreaderapp?si=30Ms4Wi1hyJOaUDi')}
+                                onPress={() => toggleSideMenu(true)}
                                 activeOpacity={0.7}
-                                style={[styles.logoBox, { backgroundColor: logoBoxBg }]}
+                                style={{
+                                    width: 40,
+                                    height: 40,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginRight: 8,
+                                    borderRadius: 20,
+                                    backgroundColor: isDay ? 'rgba(255,255,255,0.1)' : 'transparent'
+                                }}
                             >
-                                <Text style={[styles.logoText, { color: logoTextColor }]}>R</Text>
+                                <Menu size={22} color={isDay ? "white" : theme.secondary} />
                             </TouchableOpacity>
                         )}
 
@@ -23292,6 +23321,217 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 <View style={appMode === 'reader' ? { flex: 1 } : { flexDirection: 'row', gap: 10 }}>
                     {rightAction}
                 </View>
+            </View>
+        );
+    };
+
+    const renderSideMenu = () => {
+        if (!isSideMenuVisible) return null;
+
+        const allSessions = Object.values(chatSessions || {})
+            .sort((a: any, b: any) => {
+                const timeB = new Date(b.lastOpened || b.timestamp).getTime();
+                const timeA = new Date(a.lastOpened || a.timestamp).getTime();
+                return timeB - timeA;
+            });
+
+        // Grouping logic
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const startOfYesterday = startOfToday - 86400000;
+        const sevenDaysAgo = startOfToday - (7 * 86400000);
+
+        const groups = {
+            today: allSessions.filter((s: any) => new Date(s.lastOpened || s.timestamp).getTime() >= startOfToday),
+            yesterday: allSessions.filter((s: any) => {
+                const t = new Date(s.lastOpened || s.timestamp).getTime();
+                return t >= startOfYesterday && t < startOfToday;
+            }),
+            previous7: allSessions.filter((s: any) => {
+                const t = new Date(s.lastOpened || s.timestamp).getTime();
+                return t >= sevenDaysAgo && t < startOfYesterday;
+            }),
+            older: allSessions.filter((s: any) => new Date(s.lastOpened || s.timestamp).getTime() < sevenDaysAgo)
+        };
+
+        const renderGroup = (label: string, sessions: any[]) => {
+            if (sessions.length === 0) return null;
+            return (
+                <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 8, paddingHorizontal: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+                    <View style={{ gap: 2 }}>
+                        {sessions.map((item: any) => {
+                            let Icon = MessageSquare;
+                            let color = theme.primary;
+                            if (item.toolId === 'ai_tutor') Icon = GraduationCap;
+                            else if (item.toolId === 'quiz_mode' || item.toolId === 'examiner') Icon = HelpCircle;
+                            else if (item.toolId === 'flashcards') Icon = Layers;
+                            else if (item.toolId === 'story_writer') Icon = BookOpen;
+                            else if (item.toolId === 'quick_notes') Icon = StickyNote;
+                            else if (item.toolId === 'audio_player') Icon = Headphones;
+
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    onPress={() => {
+                                        toggleSideMenu(false);
+                                        loadHistorySession(item);
+                                    }}
+                                    onLongPress={() => handleDeleteRecentActivity(item)}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 12,
+                                        borderRadius: 12,
+                                        gap: 12
+                                    }}
+                                >
+                                    <Icon size={18} color={theme.secondary} opacity={0.7} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 14, color: theme.text }} numberOfLines={1}>
+                                            {item.title || "Untitled"}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </View>
+            );
+        };
+
+        return (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 99999 }]} pointerEvents="box-none">
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => toggleSideMenu(false)}
+                    style={{
+                        position: 'absolute',
+                        top: 0, left: 0, bottom: 0, right: 0,
+                        backgroundColor: 'rgba(0,0,0,0.3)', // Minimalist backdrop
+                    }}
+                >
+                    <View style={{ flex: 1 }} />
+                </TouchableOpacity>
+
+                <Animated.View
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        left: 0,
+                        width: 280,
+                        backgroundColor: theme.bg,
+                        transform: [{ translateX: sideMenuAnim }],
+                        borderRightWidth: 1,
+                        borderColor: theme.border,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 4, height: 0 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 10,
+                        elevation: 10,
+                    }}
+                >
+                    <View style={{ paddingTop: 50, paddingBottom: 20 }}>
+                        {/* New Session Button */}
+                        <TouchableOpacity
+                            onPress={() => {
+                                toggleSideMenu(false);
+                                setAppMode('idle');
+                                setActiveTab('home');
+                            }}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 12,
+                                marginHorizontal: 16,
+                                padding: 12,
+                                backgroundColor: theme.buttonBg,
+                                borderRadius: 25,
+                                marginBottom: 20,
+                                borderWidth: 1,
+                                borderColor: theme.border
+                            }}
+                        >
+                            <Plus size={20} color={theme.primary} />
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>New Session</Text>
+                        </TouchableOpacity>
+
+                        <ScrollView style={{ paddingHorizontal: 4 }}>
+                            {renderGroup("Today", groups.today)}
+                            {renderGroup("Yesterday", groups.yesterday)}
+                            {renderGroup("Previous 7 Days", groups.previous7)}
+                            {renderGroup("Older", groups.older)}
+
+                            {/* Vocabulary Section (Streamlined) */}
+                            {recentSearches.length > 0 && (
+                                <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 16 }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 8, paddingHorizontal: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Vocabulary</Text>
+                                    <View style={{ gap: 2 }}>
+                                        {recentSearches.slice(0, 10).map((item: any, index: number) => {
+                                            const displayWord = typeof item === 'string' ? item : item.word;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={`word-${index}`}
+                                                    onPress={() => {
+                                                        toggleSideMenu(false);
+                                                        // Start Flashcards logic
+                                                        let count = 10;
+                                                        const configLength = parseInt(schoolConfig.length);
+                                                        if (!isNaN(configLength) && configLength > 0) count = configLength;
+                                                        else if (schoolConfig.length === 'Short') count = 5;
+                                                        else if (schoolConfig.length === 'Medium') count = 10;
+                                                        else if (schoolConfig.length === 'Large') count = 25;
+
+                                                        const subset = recentSearches.slice(index, index + count);
+                                                        const flashcardItems = subset.map((si: any) => {
+                                                            if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
+                                                            const d = si.data || {};
+                                                            return {
+                                                                ...d,
+                                                                id: d.id,
+                                                                word: d.word || si.word,
+                                                                definition: d.definition || d.simple?.definition || "No definition available",
+                                                                examples: d.examples || d.simple?.examples || []
+                                                            };
+                                                        });
+
+                                                        setFlashcardSession({
+                                                            items: flashcardItems,
+                                                            currentIndex: 0,
+                                                            flipped: false,
+                                                            type: 'word'
+                                                        });
+                                                        setAppMode('flashcards');
+                                                    }}
+                                                    onLongPress={() => deleteRecentSearch(displayWord)}
+                                                    style={{
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        paddingVertical: 10,
+                                                        paddingHorizontal: 12,
+                                                        borderRadius: 12,
+                                                        gap: 12
+                                                    }}
+                                                >
+                                                    <BookOpen size={16} color={theme.secondary} opacity={0.6} />
+                                                    <Text style={{ fontSize: 14, color: theme.text }}>{displayWord}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                        <TouchableOpacity
+                                            onPress={() => { toggleSideMenu(false); setActiveTab('dictionary'); }}
+                                            style={{ marginTop: 4, alignItems: 'center', padding: 12 }}
+                                        >
+                                            <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>Manage all words</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </Animated.View>
             </View>
         );
     };
@@ -27735,385 +27975,8 @@ Review the following raw transcribed text:
                                                             </View>
                                                         )}
 
-                                                        {/* UPDATED: Check displaySettings.showPersonalDictionary */}
-                                                        {displaySettings.showPersonalDictionary && recentSearches.length > 0 && (() => {
-                                                            // Handle load more on scroll
-                                                            const handleLoadMore = () => {
-                                                                if (visibleWordCount < recentSearches.length) {
-                                                                    setVisibleWordCount((prev: number) => Math.min(prev + 25, 200, recentSearches.length));
-                                                                }
-                                                            };
 
-                                                            const visibleWords = isDictionaryExpanded
-                                                                ? recentSearches.slice(1, visibleWordCount) // Skip first word (shown as preview)
-                                                                : [];
 
-                                                            // Get first word for preview
-                                                            const firstWord = recentSearches[0];
-                                                            const firstDisplayWord = typeof firstWord === 'string' ? firstWord : firstWord.word;
-                                                            const firstData = typeof firstWord === 'object' ? firstWord.data : null;
-                                                            const firstDisplayDef = firstData?.simple?.definition || firstData?.definition || "Tap to define";
-                                                            const firstDisplayPart = firstData?.partOfSpeech;
-
-                                                            return (
-                                                                <View style={{ marginBottom: 25, marginTop: 10 }}>
-                                                                    {/* Header with Word Count and Expand Button */}
-                                                                    <View style={{
-                                                                        flexDirection: 'row',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'space-between',
-                                                                        marginBottom: 10,
-                                                                        paddingHorizontal: 4
-                                                                    }}>
-                                                                        <Text style={{
-                                                                            color: theme.secondary,
-                                                                            fontWeight: '700',
-                                                                            fontSize: 12,
-                                                                            textTransform: 'uppercase'
-                                                                        }}>
-                                                                            {uiData.staticText?.home?.dictTitle || "Recent Words Flashcards"} ({recentSearches.length})
-                                                                        </Text>
-                                                                        <TouchableOpacity
-                                                                            onPress={() => setIsDictionaryExpanded(!isDictionaryExpanded)}
-                                                                            style={{
-                                                                                flexDirection: 'row',
-                                                                                alignItems: 'center',
-                                                                                gap: 6,
-                                                                                paddingVertical: 6,
-                                                                                paddingHorizontal: 12,
-                                                                                backgroundColor: theme.buttonBg,
-                                                                                borderRadius: 12,
-                                                                                borderWidth: 1,
-                                                                                borderColor: theme.border
-                                                                            }}
-                                                                        >
-                                                                            <Text style={{
-                                                                                fontSize: 12,
-                                                                                fontWeight: '600',
-                                                                                color: theme.text
-                                                                            }}>
-                                                                                {isDictionaryExpanded ? 'Collapse' : 'Expand'}
-                                                                            </Text>
-                                                                            {isDictionaryExpanded ? (
-                                                                                <ChevronUp size={16} color={theme.text} />
-                                                                            ) : (
-                                                                                <ChevronDown size={16} color={theme.text} />
-                                                                            )}
-                                                                        </TouchableOpacity>
-                                                                    </View>
-
-                                                                    {/* First Word Preview (Always Visible) */}
-                                                                    <TouchableOpacity
-                                                                        onPress={() => {
-                                                                            // Start Flashcards with dynamic count from schoolConfig.length
-                                                                            let count = 10;
-                                                                            const configLength = parseInt(schoolConfig.length);
-                                                                            if (!isNaN(configLength) && configLength > 0) {
-                                                                                count = configLength;
-                                                                            } else {
-                                                                                if (schoolConfig.length === 'Short') count = 5;
-                                                                                if (schoolConfig.length === 'Medium') count = 10;
-                                                                                if (schoolConfig.length === 'Large') count = 25;
-                                                                            }
-                                                                            const subset = recentSearches.slice(0, count);
-                                                                            const flashcardItems = subset.map((si: any) => {
-                                                                                if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
-                                                                                const d = si.data || {};
-                                                                                return {
-                                                                                    ...d,
-                                                                                    id: d.id,
-                                                                                    word: d.word || si.word,
-                                                                                    definition: d.definition || d.simple?.definition || "No definition available",
-                                                                                    examples: d.examples || d.simple?.examples || []
-                                                                                };
-                                                                            });
-
-                                                                            setFlashcardSession({
-                                                                                items: flashcardItems,
-                                                                                currentIndex: 0,
-                                                                                flipped: false,
-                                                                                type: 'word'
-                                                                            });
-                                                                            setAppMode('flashcards');
-                                                                        }}
-                                                                        onLongPress={() => deleteRecentSearch(firstDisplayWord)}
-                                                                        style={{
-                                                                            flexDirection: 'row',
-                                                                            alignItems: 'center',
-                                                                            padding: 16,
-                                                                            backgroundColor: theme.uiBg,
-                                                                            borderRadius: 20,
-                                                                            borderWidth: 1,
-                                                                            borderColor: theme.border,
-                                                                            shadowColor: "#000",
-                                                                            shadowOffset: { width: 0, height: 2 },
-                                                                            shadowOpacity: 0.05,
-                                                                            shadowRadius: 4,
-                                                                            elevation: 2,
-                                                                            marginBottom: isDictionaryExpanded ? 10 : 0
-                                                                        }}
-                                                                    >
-                                                                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'day' ? '#eff6ff' : theme.buttonBg, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                                                                            <BookOpen size={24} color={primaryColor} />
-                                                                        </View>
-
-                                                                        <View style={{ flex: 1 }}>
-                                                                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                                                                                <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-                                                                                    {firstDisplayWord}
-                                                                                </Text>
-                                                                                {firstDisplayPart && (
-                                                                                    <Text style={{ fontSize: 12, fontWeight: '600', color: theme.secondary, fontStyle: 'italic' }}>
-                                                                                        {firstDisplayPart}
-                                                                                    </Text>
-                                                                                )}
-                                                                            </View>
-                                                                            <Text style={{ fontSize: 13, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
-                                                                                {firstDisplayDef}
-                                                                            </Text>
-                                                                        </View>
-
-                                                                        <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                                    </TouchableOpacity>
-
-                                                                    {/* Expanded Vertical List (Independent Scrolling) */}
-                                                                    {isDictionaryExpanded && (
-                                                                        <ScrollView
-                                                                            style={{ maxHeight: 600 }}
-                                                                            nestedScrollEnabled={true}
-                                                                            onScroll={({ nativeEvent }) => {
-                                                                                const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-                                                                                const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
-                                                                                if (isCloseToBottom) {
-                                                                                    handleLoadMore();
-                                                                                }
-                                                                            }}
-                                                                            scrollEventThrottle={400}
-                                                                            showsVerticalScrollIndicator={true}
-                                                                        >
-                                                                            <View style={{ gap: 10 }}>
-                                                                                {visibleWords.map((item: any, index: number) => {
-                                                                                    const displayWord = typeof item === 'string' ? item : item.word;
-
-                                                                                    // Extract Simple/Beginner content
-                                                                                    const data = typeof item === 'object' ? item.data : null;
-                                                                                    const displayDef = data?.simple?.definition || data?.definition || "Tap to define";
-                                                                                    const displayExamples = data?.simple?.examples?.slice(0, 2) || [];
-                                                                                    const displayPart = data?.partOfSpeech;
-
-                                                                                    return (
-                                                                                        <TouchableOpacity
-                                                                                            key={index}
-                                                                                            onPress={() => {
-                                                                                                // Start Flashcards from this word with dynamic count
-                                                                                                let count = 10;
-                                                                                                const configLength = parseInt(schoolConfig.length);
-                                                                                                if (!isNaN(configLength) && configLength > 0) {
-                                                                                                    count = configLength;
-                                                                                                } else {
-                                                                                                    if (schoolConfig.length === 'Short') count = 5;
-                                                                                                    if (schoolConfig.length === 'Medium') count = 10;
-                                                                                                    if (schoolConfig.length === 'Large') count = 25;
-                                                                                                }
-                                                                                                const actualIndex = index + 1;
-                                                                                                const subset = recentSearches.slice(actualIndex, actualIndex + count);
-                                                                                                const flashcardItems = subset.map((si: any) => {
-                                                                                                    if (typeof si === 'string') return { word: si, definition: 'Tap to see details' };
-                                                                                                    const d = si.data || {};
-                                                                                                    return {
-                                                                                                        ...d,
-                                                                                                        id: d.id,
-                                                                                                        word: d.word || si.word,
-                                                                                                        definition: d.definition || d.simple?.definition || "No definition available",
-                                                                                                        examples: d.examples || d.simple?.examples || []
-                                                                                                    };
-                                                                                                });
-
-                                                                                                setFlashcardSession({
-                                                                                                    items: flashcardItems,
-                                                                                                    currentIndex: 0,
-                                                                                                    flipped: false,
-                                                                                                    type: 'word'
-                                                                                                });
-                                                                                                setAppMode('flashcards');
-                                                                                            }}
-                                                                                            onLongPress={() => deleteRecentSearch(displayWord)}
-                                                                                            style={{
-                                                                                                flexDirection: 'row',
-                                                                                                alignItems: 'center',
-                                                                                                padding: 16,
-                                                                                                backgroundColor: theme.uiBg,
-                                                                                                borderRadius: 20,
-                                                                                                borderWidth: 1,
-                                                                                                borderColor: theme.border,
-                                                                                                shadowColor: "#000",
-                                                                                                shadowOffset: { width: 0, height: 2 },
-                                                                                                shadowOpacity: 0.05,
-                                                                                                shadowRadius: 4,
-                                                                                                elevation: 2
-                                                                                            }}
-                                                                                        >
-                                                                                            <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: theme.id === 'day' ? '#eff6ff' : theme.buttonBg, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                                                                                                <BookOpen size={24} color={primaryColor} />
-                                                                                            </View>
-
-                                                                                            <View style={{ flex: 1 }}>
-                                                                                                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                                                                                                    <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-                                                                                                        {displayWord}
-                                                                                                    </Text>
-                                                                                                    {displayPart && (
-                                                                                                        <Text style={{ fontSize: 12, fontWeight: '600', color: theme.secondary, fontStyle: 'italic' }}>
-                                                                                                            {displayPart}
-                                                                                                        </Text>
-                                                                                                    )}
-                                                                                                </View>
-                                                                                                <Text style={{ fontSize: 13, color: theme.secondary, marginTop: 2 }} numberOfLines={1}>
-                                                                                                    {displayDef}
-                                                                                                </Text>
-                                                                                            </View>
-
-                                                                                            <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                                                        </TouchableOpacity>
-                                                                                    );
-                                                                                })}
-
-                                                                                {/* Load More Indicator */}
-                                                                                {visibleWordCount < Math.min(recentSearches.length, 200) && (
-                                                                                    <View style={{ padding: 20, alignItems: 'center' }}>
-                                                                                        <Text style={{ color: theme.secondary, fontSize: 12 }}>
-                                                                                            Scroll down and up to load more... ({visibleWordCount}/200)
-                                                                                        </Text>
-                                                                                    </View>
-                                                                                )}
-                                                                            </View>
-                                                                        </ScrollView>
-                                                                    )}
-                                                                </View>
-                                                            );
-                                                        })()}
-
-                                                        {/* NEW: Vertical Recent Activity List (High Priority) */}
-                                                        {(() => {
-                                                            // 1. Aggregate Recent Items (Sessions: AI, Quiz, Story, Notes)
-                                                            const recentSessions = Object.values(chatSessions || {})
-                                                                .sort((a: any, b: any) => {
-                                                                    const timeA = new Date(a.lastOpened || a.timestamp).getTime();
-                                                                    const timeB = new Date(b.lastOpened || b.timestamp).getTime();
-                                                                    return timeB - timeA;
-                                                                })
-                                                                .slice(0, 20); // Show Top 20
-
-                                                            if (recentSessions.length === 0) return null;
-
-                                                            return (
-                                                                <View style={{ marginBottom: 25, paddingHorizontal: 4 }}>
-                                                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 }}>
-                                                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 12, textTransform: 'uppercase' }}>
-                                                                            Recent Activity
-                                                                        </Text>
-                                                                        <TouchableOpacity onPress={() => setActiveTab('library')}>
-                                                                            <Text style={{ color: primaryColor, fontSize: 13, fontWeight: '600' }}>See All</Text>
-                                                                        </TouchableOpacity>
-                                                                    </View>
-
-                                                                    <View style={{ gap: 12 }}>
-                                                                        {recentSessions.map((item: any) => {
-                                                                            // Determine Icon & Color based on Tool ID
-                                                                            let Icon = MessageSquare;
-                                                                            let color = theme.primary;
-                                                                            let label = "Session";
-                                                                            let subLabel = new Date(item.timestamp).toLocaleDateString();
-
-                                                                            if (item.toolId === 'ai_tutor') {
-                                                                                Icon = GraduationCap;
-                                                                                color = "#8b5cf6"; // Purple
-                                                                                label = "Personal Assistant";
-                                                                            } else if (item.toolId === 'quiz_mode' || item.toolId === 'examiner') {
-                                                                                Icon = HelpCircle;
-                                                                                color = "#10b981"; // Emerald
-                                                                                label = "Quiz";
-                                                                            } else if (item.toolId === 'flashcards') {
-                                                                                Icon = Layers;
-                                                                                color = "#f59e0b"; // Amber
-                                                                                label = "Flashcards";
-                                                                            } else if (item.toolId === 'story_writer') {
-                                                                                Icon = BookOpen;
-                                                                                color = "#ec4899"; // Pink
-                                                                                label = "Story";
-                                                                            } else if (item.toolId === 'quick_notes') {
-                                                                                Icon = StickyNote;
-                                                                                color = "#eab308"; // Yellow
-                                                                                label = "Note";
-                                                                            } else if (item.toolId === 'visual_learner') {
-                                                                                Icon = Camera;
-                                                                                color = "#06b6d4"; // Cyan
-                                                                                label = "Vision";
-                                                                            } else if (item.toolId === 'writer') {
-                                                                                Icon = FileText;
-                                                                                color = "#6366f1"; // Indigo
-                                                                                label = "Document";
-                                                                            } else if (item.toolId === 'audio_player') {
-                                                                                Icon = Headphones;
-                                                                                color = "#f43f5e"; // Rose
-                                                                                label = "Audio";
-                                                                            }
-
-                                                                            return (
-                                                                                <TouchableOpacity
-                                                                                    key={item.id}
-                                                                                    onPress={() => loadHistorySession(item)}
-                                                                                    onLongPress={() => handleDeleteRecentActivity(item)}
-                                                                                    style={{
-                                                                                        flexDirection: 'row',
-                                                                                        alignItems: 'center',
-                                                                                        padding: 16,
-                                                                                        backgroundColor: theme.uiBg,
-                                                                                        borderRadius: 20,
-                                                                                        borderWidth: 1,
-                                                                                        borderColor: theme.border,
-                                                                                        gap: 16,
-                                                                                        shadowColor: "#000",
-                                                                                        shadowOffset: { width: 0, height: 2 },
-                                                                                        shadowOpacity: 0.05,
-                                                                                        shadowRadius: 4,
-                                                                                        elevation: 2
-                                                                                    }}
-                                                                                >
-                                                                                    <View style={{
-                                                                                        width: 48, height: 48,
-                                                                                        borderRadius: 14,
-                                                                                        backgroundColor: theme.id === 'day' ? `${color}15` : theme.buttonBg, // Light tint if day
-                                                                                        alignItems: 'center', justifyContent: 'center'
-                                                                                    }}>
-                                                                                        <Icon size={24} color={color} />
-                                                                                    </View>
-
-                                                                                    <View style={{ flex: 1 }}>
-                                                                                        <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 4 }} numberOfLines={1}>
-                                                                                            {item.title || "Untitled"}
-                                                                                        </Text>
-                                                                                        <Text style={{ fontSize: 13, color: theme.secondary }}>
-                                                                                            {label} • {(() => {
-                                                                                                const refTime = item.lastOpened || item.timestamp;
-                                                                                                const diff = new Date().getTime() - new Date(refTime).getTime();
-                                                                                                const seconds = Math.floor(diff / 1000);
-                                                                                                if (seconds < 60) return `${Math.max(0, seconds)}s ago`;
-                                                                                                if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-                                                                                                if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-                                                                                                return `${Math.floor(seconds / 86400)}d ago`;
-                                                                                            })()}
-                                                                                        </Text>
-                                                                                    </View>
-
-                                                                                    <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                                                                </TouchableOpacity>
-                                                                            );
-                                                                        })}
-                                                                    </View>
-                                                                </View>
-                                                            );
-                                                        })()}
 
                                                         <View style={{ flex: 1 }} />
 
@@ -34286,6 +34149,8 @@ Review the following raw transcribed text:
                 </Modal>
 
                 <ZoomableImageModal visible={!!fullScreenImage} uri={fullScreenImage} onClose={() => setFullScreenImage(null)} />
+
+                {renderSideMenu()}
 
                 {/* NEW: Full Screen Reference Text Modal */}
                 <Modal visible={showFullScreenReference} animationType="slide" onRequestClose={() => setShowFullScreenReference(false)}>
