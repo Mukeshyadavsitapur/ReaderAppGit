@@ -24938,7 +24938,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     </View>
                                 )}
 
-                                {selectedScenario?.id !== 'ai_tutor' && (
+                                {selectedScenario?.id !== 'ai_tutor' && !selectedScenario?.isCustom && (
                                     <>
                                         <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>INPUT</Text>
 
@@ -25497,6 +25497,73 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     </View>
                                 )}
                             </ScrollView>
+
+                            {/* Pinned Bottom Input exclusively for Custom Features - Precision Keyboard Tracking */}
+                            {selectedScenario?.isCustom && (
+                                <View style={[{ padding: 15, paddingBottom: Platform.OS === 'ios' ? 25 : 15, backgroundColor: theme.bg, borderTopWidth: 1, borderTopColor: theme.border }, Platform.OS === 'android' && isKeyboardVisible ? { paddingBottom: keyboardHeight } : null]}>
+                                    <View style={[{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg,
+                                        borderColor: schoolConfig.input.trim().length > 0 ? primaryColor + '40' : theme.border,
+                                        borderWidth: 1.5,
+                                        borderRadius: 30, // Pill shape
+                                        paddingHorizontal: 16,
+                                        paddingVertical: 2,
+                                        width: '100%',
+                                        shadowColor: primaryColor,
+                                        shadowOffset: { width: 0, height: 4 },
+                                        shadowOpacity: schoolConfig.input.trim().length > 0 ? 0.1 : 0.05,
+                                        shadowRadius: 10,
+                                        elevation: 6
+                                    }]}>
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setImagePickerMode('custom');
+                                                setVisionDraft({ uris: [], prompt: "" });
+                                                setShowImageSourceModal(true);
+                                            }}
+                                            style={{
+                                                width: 38,
+                                                height: 38,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                marginRight: 4
+                                            }}
+                                        >
+                                            <Plus size={26} color={theme.secondary} />
+                                        </TouchableOpacity>
+
+                                        <TextInput
+                                            style={[{ flex: 1, fontSize: 16, color: theme.text, minHeight: 46 }]}
+                                            placeholder={selectedScenario?.placeholder || "Ask or enter a topic..."}
+                                            placeholderTextColor={theme.secondary}
+                                            value={schoolConfig.input}
+                                            onChangeText={(text) => setSchoolConfig({ ...schoolConfig, input: text })}
+                                            multiline={true}
+                                        />
+
+                                        {renderMicButton('setup_input', { marginLeft: 6, elevation: 0, shadowOpacity: 0 }, 20)}
+
+                                        <TouchableOpacity
+                                            onPress={handleStartScenario}
+                                            style={{
+                                                width: 38,
+                                                height: 38,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                marginLeft: 4
+                                            }}
+                                        >
+                                            {schoolConfig.input.trim().length > 0 ? (
+                                                <ArrowRight size={22} color={primaryColor} />
+                                            ) : (
+                                                <Sparkles size={22} color={theme.text} />
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
                         </View>
                     )}
                 </KeyboardAvoidingView>
