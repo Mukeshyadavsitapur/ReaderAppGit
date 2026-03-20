@@ -165,6 +165,13 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { Theme, Message, Highlight, SpeechRange, Tool, ChatSession, LineWord, TextSegment, InteractiveTextProps } from '../constants/types';
+import { HIGHLIGHT_COLORS } from '../constants/highlights';
+import InteractiveText from '../components/common/InteractiveText';
+import ResponsiveWrapper from '../components/common/ResponsiveWrapper';
+import GeminiHome from '../components/redesign/GeminiHome';
+import GeminiChat from '../components/redesign/GeminiChat';
+
 const isWeb = Platform.OS === 'web';
 
 
@@ -252,206 +259,7 @@ AsyncStorage.multiRemove = async (keys: readonly string[], callback?: any) => {
 
 // --- TYPE DEFINITIONS ---
 
-export interface Theme {
-    id: string;
-    bg: string;
-    text: string;
-    primary: string;
-    secondary: string;
-    highlight: string;
-    uiBg: string;
-    buttonBg: string;
-    border: string;
-    error: string;
-    headerBg: string;
-    headerText: string;
-    badgeBg: string;
-    badgeText: string;
-    inputBg: string;
-    logoBg: string;
-    logoText: string;
-    toolColor: string[] | null;
-    activeWord: string;
-    bubbleUser: string;
-    bubbleAI: string;
-    statusBarStyle: "light-content" | "dark-content";
-}
-
-export interface Message {
-    id: string;
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp?: string;
-}
-
-export interface Highlight {
-    start: number;
-    end: number;
-    text: string;
-    color: string;
-    id: string;
-}
-
-export interface FlashcardItem {
-    id: string;
-    word: string;
-    definition: string;
-    timestamp?: string;
-}
-
-export interface ChatSession {
-    id: string;
-    toolId: string;
-    title: string;
-    timestamp: string;
-    messages: Message[];
-    pinned?: boolean;
-    hasAudio?: boolean;
-    image?: string;
-    highlights?: Highlight[];
-    items?: FlashcardItem[];
-    // Properties used in App but optional in base interface
-    images?: string[];
-    score?: number;
-    attempts?: number;
-    completed?: boolean;
-    currentIndex?: number;
-    quizData?: any[];
-    totalQuestions?: number;
-    totalTime?: number;
-    contentPath?: string;
-    partNumber?: number;
-    [key: string]: any;
-}
-
-export interface SavedQuestion {
-    id: string;
-    question: string;
-    options?: string[];
-    correctOptionIndex?: number;
-    explanation?: string;
-    visualPrompt?: string;
-    visualUri?: string;
-    timestamp: string;
-}
-
-export interface SavedWord {
-    word: string;
-    definition: string;
-    timestamp: string;
-    examples?: string[];
-}
-
-export interface DisplaySettings {
-    theme: string;
-    fontSize: number;
-    fontFamily: string;
-    textStyles: string[];
-    language: string;
-    voice: string;
-    tapToDefine: boolean;
-    questionsLimit?: number;
-    userName?: string;
-    userProfession?: string;
-    userGoal?: string;
-    userBio?: string;
-    ttsRate?: number;
-    availableLanguages?: string[];
-    primaryLanguage?: string;
-    onlineTtsEnabled?: boolean;
-    imageGenerationEnabled?: boolean;
-    llmProvider?: string;
-    groqApiKey?: string;
-    hfApiKey?: string;
-    showPersonalDictionary?: boolean;
-    preventSleep?: boolean;
-    dictionaryLimit?: number;
-    libraryLimit?: number;
-    keepLabelsEnglish?: boolean;
-    nameLocked?: boolean;
-    isExamMode?: boolean;
-    quizTarget?: string;
-    modeLocked?: boolean;
-    isOnboarded?: boolean;
-    textModels?: string[]; // NEW
-    groqModels?: string[]; // NEW
-    imageModels?: string[]; // NEW
-    ttsModels?: string[]; // NEW
-    groqTtsModels?: string[]; // NEW
-    sttGroqModels?: string[]; // NEW
-    sttGeminiModels?: string[]; // NEW
-}
-
-export interface QuizState {
-    questions: SavedQuestion[];
-    currentIndex: number;
-    selectedOptions: (number | null)[];
-    showExplanations: boolean[];
-    translations?: Record<number, string>;
-}
-
-export interface FlashcardSession {
-    items: FlashcardItem[];
-    currentIndex: number;
-    title?: string;
-}
-
-export interface AudioFile {
-    id: string;
-    name: string;
-    uri: string;
-    duration?: number;
-    timestamp: string;
-}
-
-export interface Tool {
-    id: string;
-    title: string;
-    emoji: string;
-    prompt: string;
-    color?: string;
-    category?: string;
-}
-
-export interface LibraryGroup {
-    id: string;
-    isGroup: true;
-    toolId?: string;
-    title: string;
-    items?: ChatSession[];
-    chapters?: ChatSession[];
-    timestamp: string;
-    pinned: boolean;
-    hasAudio: boolean;
-    image?: string;
-    count?: number;
-}
-
-export type LibraryItem = ChatSession | LibraryGroup;
-
-export interface ReaderParagraph {
-    id: string;
-    type: 'text' | 'table' | 'concept-card';
-    text?: string;
-    rows?: string[];
-    title?: string;
-    content?: string;
-    offset: number;
-    initiallyHidden?: boolean;
-    toggleLabel?: string;
-    chapterName?: string;
-}
-
-export interface SpeechRange {
-    start: number;
-    end: number;
-}
-
-export interface StorageStats {
-    free: number;
-    used: number;
-    audio: number;
-}
+// Type definitions moved to constants/types.ts
 
 // Component Props Types
 // OPTIMIZATION: Memoized Library Items to prevent re-renders
@@ -755,19 +563,6 @@ export interface ParsedTextProps {
     onExpand?: (data: string[]) => void;
 }
 
-export interface InteractiveTextProps {
-    rawText: string;
-    onWordPress?: (word: string) => void;
-    onLinkPress?: (url: string) => boolean | void;
-    style?: any;
-    activeSentence?: SpeechRange | null;
-    paragraphOffset?: number;
-    theme: Theme;
-    isHighlightMode?: boolean;
-    highlights?: Highlight[];
-    onHighlightPress?: (highlight: { start: number; end: number; text: string }) => void;
-    tapToDefineEnabled?: boolean;
-}
 
 export interface ConceptCardProps {
     title?: string;
@@ -1609,8 +1404,7 @@ If you're not ready to connect yet, enjoy features that work **100% offline**:
 // const AD_IMAGE = require("./assets/banner.jpg");
 
 const TEXT_MODELS = [
-    "gemini-2.5-flash",         //move "gemini-2.5-flash" as first priority model
-    "gemini-2.5-pro",          //remove gemini-3.0 model due to error keep only working model
+    "gemini-2.5-flash",         //move "gemini-2.5-flash" as first priority modeel due to error keep only working model
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash-preview-09-2025"
 ];
@@ -1646,15 +1440,6 @@ const GROQ_TTS_MODELS = [
 
 // ... (other code) ...
 
-// NEW: Highlight Colors Definition
-const HIGHLIGHT_COLORS = {
-    yellow: { day: '#fef08a', night: '#854d0e', code: '#facc15' }, // Yellow-200/800
-    green: { day: '#bbf7d0', night: '#14532d', code: '#4ade80' }, // Green-200/800
-    blue: { day: '#bfdbfe', night: '#1e3a8a', code: '#60a5fa' }, // Blue-200/800
-    pink: { day: '#fbcfe8', night: '#831843', code: '#f472b6' }, // Pink-200/800
-    purple: { day: '#ddd6fe', night: '#5b21b6', code: '#a78bfa' }, // Violet-200/800
-    orange: { day: '#fed7aa', night: '#7c2d12', code: '#fb923c' }, // Orange-200/800
-};
 
 const FEMALE_VOICES: string[] = ["Kore", "Leda", "Aoede", "Zephyr", "Callirrhoe"];
 const MALE_VOICES: string[] = ["Fenrir", "Puck", "Charon", "Orus", "Iapetus", "Algenib", "Alnilam"];
@@ -2217,7 +2002,7 @@ const SCHOOL_TOOLS: any[] = [
 
     { id: "visual_learner", title: "Vision", Icon: FileImage, role: "Visual Tutor", type: "vision", actionLabel: "Select Image", prompt: "Analyze images.", color: ["#2dd4bf", "#10b981"] },
     { id: "examiner", title: "Quiz", Icon: MonitorCheck, role: "Quiz Examiner", type: "quiz", actionLabel: "Start Quiz", prompt: "You are an examiner.", placeholder: "Enter topic (e.g. 'Hard Math Quiz', 'Grade 5 History')...", color: ["#34d399", "#22c55e"] },
-    { id: "ai_tutor", title: "Personal Assistant", Icon: GraduationCap, role: "Personal Tutor", type: "lesson", actionLabel: "Start Learning", prompt: "You are a friendly Personal Assistant. Explain concepts in simple, beginner-friendly language, like easy-to-read study notes. Avoid complex jargon. Use tables, charts, diagrams, and bullet points. Use [[CONCEPT_CARD]] for formulas, code snippets, dates, and key definitions in ANY subject. **STRICTLY MAX 30-50 words per card**. Split complex topics into multiple cards. End with a [[CONCEPT_CARD: CHAPTER SUMMARY]].", placeholder: "Ask for study notes, explanations, or help...", color: ["#3b82f6", "#8b5cf6"] },
+    { id: "ai_tutor", title: "Personal Assistant", Icon: GraduationCap, role: "Personal Tutor", type: "lesson", actionLabel: "Start Learning", prompt: "You are a helpful AI assistant, similar to Google Gemini. Provide direct, quick, and easy-to-understand answers. For Machine Learning and educational chapters, provide deep details, examples, and beginner-friendly explanations. If the topic is complex, use diagrams (Mermaid or ASCII) and clear step-by-step breakdowns. When generating offline chapters, be extra descriptive with more details and examples to ensure perfect understanding. In machine learning notes, always use the chapter name suggested by the user. When providing an optional lab, first create the original lab and then add additional practice examples for better understanding.", placeholder: "Ask for study notes, explanations, or help...", color: ["#3b82f6", "#8b5cf6"] },
 
     // Row 2
 
@@ -2799,18 +2584,18 @@ const TOOL_QUICK_PROMPTS: { [key: string]: { label: string; prompt: string }[] |
     "ml_tutor": [
         // Level 1: Foundations
         { label: "History of AI", prompt: "Summarize the History of Artificial Intelligence." },
-        { label: "ML Basics", prompt: "Explain the fundamental paradigms of Machine Learning. Use [[CONCEPT_CARD]] for key definitions." },
+        { label: "ML Basics", prompt: "Explain the fundamental paradigms of Machine Learning." },
         { label: "Supervised", prompt: "Explain Supervised Learning algorithms (Regression, Classification)." },
         { label: "Unsupervised", prompt: "Explain Unsupervised Learning and Dimensionality Reduction." },
-        { label: "Reinforcement", prompt: "Explain Reinforcement Learning (RL) and Q-Learning. Use [[CONCEPT_CARD]] for the Bellman equation." },
+        { label: "Reinforcement", prompt: "Explain Reinforcement Learning (RL) and Q-Learning." },
         { label: "Overfitting", prompt: "Explain Overfitting, Underfitting, and Regularization." },
-        { label: "Gradient Descent", prompt: "Explain Gradient Descent optimization and its variants (Adam, SGD). Use [[CONCEPT_CARD]] for the update rule." },
+        { label: "Gradient Descent", prompt: "Explain Gradient Descent optimization and its variants (Adam, SGD)." },
         { label: "Bias & Ethics", prompt: "Explain Bias, Fairness, and Ethics in AI systems." },
         // Level 2: Core Algorithms & Neural Networks
         { label: "Clustering", prompt: "Explain K-Means and Hierarchical Clustering algorithms." },
-        { label: "SVMs", prompt: "Explain Support Vector Machines (SVMs). Use [[CONCEPT_CARD]] for the hyperplane formula." },
-        { label: "Neural Networks", prompt: "Explain the anatomy and math of Neural Networks. Use [[CONCEPT_CARD]] for activation functions." },
-        { label: "Backprop", prompt: "Explain the Backpropagation algorithm in Neural Networks. Use [[CONCEPT_CARD]] for chain rule." },
+        { label: "SVMs", prompt: "Explain Support Vector Machines (SVMs)." },
+        { label: "Neural Networks", prompt: "Explain the anatomy and math of Neural Networks." },
+        { label: "Backprop", prompt: "Explain the Backpropagation algorithm in Neural Networks." },
         { label: "Deep Learning", prompt: "Explain Deep Learning fundamentals and how it differs from ML." },
         { label: "CNNs", prompt: "Explain Convolutional Neural Networks (CNNs) and their layers." },
         { label: "RNNs", prompt: "Explain Recurrent Neural Networks (RNNs)." },
@@ -2818,15 +2603,15 @@ const TOOL_QUICK_PROMPTS: { [key: string]: { label: string; prompt: string }[] |
         // Level 3: Advanced Architectures & NLP
         { label: "NLP", prompt: "Explain Natural Language Processing (NLP) core tasks." },
         { label: "Embeddings", prompt: "Explain Vector Embeddings and semantic search." },
-        { label: "Transformers", prompt: "Explain the Transformer architecture (Encoder/Decoder). Use [[CONCEPT_CARD]] for Attention mechanism." },
-        { label: "Attention", prompt: "Explain the Self-Attention mechanism in Transformers. Use [[CONCEPT_CARD]] for Q, K, V formulas." },
+        { label: "Transformers", prompt: "Explain the Transformer architecture (Encoder/Decoder)." },
+        { label: "Attention", prompt: "Explain the Self-Attention mechanism in Transformers." },
         { label: "LLMs", prompt: "Explain the architecture and training of Large Language Models." },
         { label: "RAG", prompt: "Explain Retrieval-Augmented Generation (RAG) systems." },
         { label: "Fine-Tuning", prompt: "Explain Fine-Tuning, PEFT, and LoRA techniques." },
         { label: "Prompt Eng.", prompt: "Explain detailed Prompt Engineering strategies for developers." },
         // Level 4: Generative AI & Specialized
         { label: "Computer Vision", prompt: "Explain the core concepts and tasks in Computer Vision." },
-        { label: "GANs", prompt: "Explain Generative Adversarial Networks (GANs) architecture. Use [[CONCEPT_CARD]] for loss functions." },
+        { label: "GANs", prompt: "Explain Generative Adversarial Networks (GANs) architecture." },
         { label: "Diffusion", prompt: "Explain how Diffusion Models (like Stable Diffusion) work." },
         { label: "Data Augmentation", prompt: "Explain Data Augmentation techniques for image and text." },
         { label: "Agents", prompt: "Explain Autonomous AI Agents and their architectures." },
@@ -3005,15 +2790,15 @@ const TOOL_QUICK_PROMPTS: { [key: string]: { label: string; prompt: string }[] |
         { label: "Photography", prompt: "Create a 10-day plan to master the basics of digital photography." }
     ],
     "math_solver": [
-        { label: "Algebra", prompt: "Solve for x: 3x - 7 = 14. Use [[CONCEPT_CARD]] for the solution steps." },
-        { label: "Derivative", prompt: "Calculate the derivative of f(x) = 3x^2 + 5x. Use [[CONCEPT_CARD]] for the rules used." },
-        { label: "Pythagoras", prompt: "Find the hypotenuse of a right triangle with sides 3 and 4. Use [[CONCEPT_CARD]] for the calculation." },
+        { label: "Algebra", prompt: "Solve for x: 3x - 7 = 14." },
+        { label: "Derivative", prompt: "Calculate the derivative of f(x) = 3x^2 + 5x." },
+        { label: "Pythagoras", prompt: "Find the hypotenuse of a right triangle with sides 3 and 4." },
         { label: "Statistics", prompt: "Calculate the Mean, Median, and Mode of: 5, 2, 8, 2, 9." },
-        { label: "Quadratic", prompt: "Solve x^2 - 5x + 6 = 0 using the quadratic formula. Use [[CONCEPT_CARD]] for the formula." },
-        { label: "Fractions", prompt: "Calculate 3/4 + 2/5 and simplify. Use [[CONCEPT_CARD]] for steps." },
+        { label: "Quadratic", prompt: "Solve x^2 - 5x + 6 = 0 using the quadratic formula." },
+        { label: "Fractions", prompt: "Calculate 3/4 + 2/5 and simplify." },
         { label: "Trig", prompt: "Calculate the value of sin(30°) + cos(60°)." },
-        { label: "Geometry", prompt: "Calculate the area of a circle with radius 5. Use [[CONCEPT_CARD]] for the formula." },
-        { label: "Matrix", prompt: "Multiply matrices: [[1, 2], [3, 4]] * [[1, 0], [0, 1]]. Use [[CONCEPT_CARD]] for the matrix." },
+        { label: "Geometry", prompt: "Calculate the area of a circle with radius 5." },
+        { label: "Matrix", prompt: "Multiply matrices: [[1, 2], [3, 4]] * [[1, 0], [0, 1]]." },
         { label: "Logarithms", prompt: "Evaluate log10(1000)." }
     ],
     "debate_coach": [
@@ -3923,451 +3708,6 @@ const SeekSlider = ({ value, min, max, onSeekEnd, theme, activeColor = '#3b82f6'
         </View>
     );
 };
-
-interface TextSegment {
-    text: string;
-    isBold: boolean;
-    isItalic: boolean;
-    isMath: boolean;
-    isLink: boolean;
-    linkUrl?: string | null;
-    isGreen: boolean;
-}
-
-interface LineWord {
-    word: string;
-    start: number;
-    end: number;
-    isBold: boolean;
-    isItalic: boolean;
-    isMath: boolean;
-    isLink: boolean;
-    linkUrl?: string | null;
-    isGreen: boolean;
-}
-
-
-
-const InteractiveText = React.memo(({ rawText, onWordPress, onLinkPress, style, activeSentence, paragraphOffset = 0, theme, isHighlightMode, highlights = [], onHighlightPress, tapToDefineEnabled = true }: InteractiveTextProps) => {
-    // Flatten style array to object to access properties safely
-    const flatStyle: any = useMemo(() => StyleSheet.flatten(style) || {}, [style]);
-
-    // UPDATED: Destructure processed data and total length for paragraph-level operations
-    const { lines: processedLines, totalLength } = useMemo(() => {
-        if (typeof rawText !== 'string') return { lines: [], totalLength: 0 };
-        // Split by newline but keep the delimiter to detect empty lines
-        const lines = rawText.split(/(\n)/g);
-        let charIndex = 0;
-
-        const mappedLines = lines.map((line, lineIdx) => {
-            const rawLine = line; // Don't trim immediately, checking for \n
-            if (rawLine === '\n') {
-                // It's a newline separator
-                return { isNewline: true, key: lineIdx };
-            }
-
-            const trimmed = rawLine.trim();
-            let type = 'normal';
-            let cleanLine = line;
-
-            if (trimmed.length === 0) {
-                // Empty line (double newline case)
-                return { isNewline: false, isEmpty: true, key: lineIdx };
-            }
-
-            if (trimmed.startsWith('#')) {
-                type = 'header';
-                cleanLine = line.replace(/#{1,6}\s*/, '');
-            } else if (trimmed.startsWith('**') && trimmed.endsWith('**') && trimmed.length < 50) {
-                type = 'menu';
-                cleanLine = line.replace(/^\*\*/, '').replace(/\*\*$/, '');
-            } else if ((trimmed.startsWith('* ') || trimmed.startsWith('- ')) && trimmed.length < 60) {
-                type = 'submenu';
-                cleanLine = line.replace(/^[\*\-]\s*/, '');
-            } else if (trimmed.startsWith('>')) { // Added quote detection
-                type = 'quote';
-                cleanLine = line.replace(/^>\s*/, '');
-            } else {
-                // NEW: Detect Formula Lines
-                const mathSymbols = /[=≈∝><≥≤∫∑√±×÷]/;
-                const isShort = trimmed.length < 80;
-                if (isShort && mathSymbols.test(trimmed) && !trimmed.endsWith('.')) {
-                    type = 'formula';
-                }
-            }
-
-            // 1. Initial segment (whole line)
-            let mixedSegments: TextSegment[] = [{ text: cleanLine, isBold: false, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: false }];
-
-            // ... (existing segmentation logic unchanged) ...
-            // 2. Process Markdown Links [Text](URL) - Process FIRST to protect URLs
-            mixedSegments = mixedSegments.flatMap(seg => {
-                if (seg.isBold || seg.isItalic || seg.isMath) return [seg];
-                const parts = seg.text.split(/(\[[^\]]+\]\([^)]+\))/g);
-                return parts.map(part => {
-                    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-                    if (linkMatch) {
-                        return {
-                            text: linkMatch[1].replace(/\s+/g, ' ').trim(),
-                            isBold: false, isItalic: false, isMath: false,
-                            isLink: true, linkUrl: linkMatch[2],
-                            isGreen: false
-                        };
-                    }
-                    return {
-                        text: part,
-                        isBold: false, isItalic: false, isMath: false,
-                        isLink: false, linkUrl: null,
-                        isGreen: false
-                    };
-                });
-            });
-
-            // 3. Process Bold
-            mixedSegments = mixedSegments.flatMap(seg => {
-                if (seg.isBold || seg.isItalic || seg.isMath || seg.isLink) return [seg];
-                return seg.text.split(/(\*\*.*?\*\*)/g).map(part => {
-                    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-                        return { text: part.slice(2, -2), isBold: true, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: false };
-                    }
-                    return { text: part, isBold: false, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: false };
-                });
-            });
-
-            // 4. Process Math
-            mixedSegments = mixedSegments.flatMap(seg => {
-                if (seg.isBold || seg.isItalic || seg.isMath || seg.isLink) return [seg];
-                return seg.text.split(/(\$.*?\$)/g).map(part => {
-                    if (part.startsWith('$') && part.endsWith('$') && part.length >= 3) {
-                        return { text: part.slice(1, -1), isBold: false, isItalic: false, isMath: true, isLink: false, linkUrl: null, isGreen: false };
-                    }
-                    return { text: part, isBold: false, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: false };
-                });
-            });
-
-            // 5. Process Italic
-            mixedSegments = mixedSegments.flatMap(seg => {
-                if (seg.isBold || seg.isMath || seg.isLink) return [seg];
-                return seg.text.split(/(\*[^*]+?\*)/g).map(part => {
-                    if (part.startsWith('*') && part.endsWith('*') && part.length >= 3) {
-                        return { text: part.slice(1, -1), isBold: false, isItalic: true, isMath: false, isLink: false, linkUrl: null, isGreen: false };
-                    }
-                    return { text: part, isBold: false, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: false };
-                });
-            });
-
-            // 6. Process Green Blank
-            mixedSegments = mixedSegments.flatMap(seg => {
-                if (seg.isBold || seg.isMath || seg.isLink || seg.isItalic) return [seg];
-                return seg.text.split(/(\[\[Blank\]\])/g).map(part => {
-                    if (part === '[[Blank]]') {
-                        return { text: 'Blank', isBold: true, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: true };
-                    }
-                    return { text: part, isBold: false, isItalic: false, isMath: false, isLink: false, linkUrl: null, isGreen: false };
-                });
-            });
-
-            const lineWords: LineWord[] = [];
-
-            mixedSegments.forEach(seg => {
-                let cleanSeg = seg.text;
-                if (!seg.isMath && !seg.isLink && !seg.isGreen) {
-                    cleanSeg = cleanSeg.replace(/\|/g, ' ');
-                    cleanSeg = cleanSeg.replace(/(\*\*|__|\*|_|`|~|\\|\[|\]|#)/g, '');
-                    cleanSeg = cleanSeg.replace(/[\u2022\u25CF\u25CB\u25A0\u25A1\u25B6\u25C0\u26AB\u26AA\uD83D\uDD34\uD83D\uDD35\u2705\u274C\u2728\u2B50]/g, '');
-                    cleanSeg = cleanSeg.replace(/\s+/g, ' ');
-                }
-
-                const words = cleanSeg.split(/(\s+)/);
-                words.forEach(word => {
-                    if (!word) return;
-                    lineWords.push({
-                        word,
-                        start: charIndex,
-                        end: charIndex + word.length,
-                        isBold: seg.isBold,
-                        isItalic: seg.isItalic,
-                        isMath: seg.isMath,
-                        isLink: seg.isLink,
-                        linkUrl: seg.linkUrl,
-                        isGreen: seg.isGreen
-                    });
-                    charIndex += word.length;
-                });
-            });
-
-            return { lineWords, type, key: lineIdx };
-        });
-
-        return { lines: mappedLines, totalLength: charIndex };
-    }, [rawText]);
-
-    // NEW: Track press duration and movement to differentiate Tap (Define) vs Selection/Scroll
-    const pressTrackerRef = useRef({ time: 0, x: 0, y: 0 });
-
-    return (
-        // UPDATED: Enable text selection even if Tap to Define is ON. (Only disable in HighlightMode to prevent conflict)
-        <Text style={flatStyle} selectable={!isHighlightMode}>
-            {processedLines.map((lineData) => {
-                if (lineData.isNewline) {
-                    return <Text key={lineData.key}>{"\n"}</Text>;
-                }
-                if (lineData.isEmpty) {
-                    return null; // Don't render empty strings, newline handles spacing
-                }
-
-                const { lineWords, type, key } = lineData;
-
-                let dynamicColor = flatStyle.color || theme.text;
-                let dynamicWeight = flatStyle.fontWeight || 'normal';
-                let dynamicSize = flatStyle.fontSize;
-                let dynamicMargin = 0;
-                let dynamicStyle = flatStyle.fontStyle || 'normal';
-                let dynamicTextAlign = 'left';
-
-                if (type === 'header') {
-                    dynamicColor = theme.id === 'night' ? '#60a5fa' : (theme.id === 'sepia' ? '#8c7b66' : '#2563eb');
-                    dynamicWeight = flatStyle.fontWeight || 'bold';
-                    dynamicSize = flatStyle.fontSize * 1.3;
-                    dynamicMargin = 10;
-                } else if (type === 'menu') {
-                    dynamicColor = theme.id === 'night' ? '#c084fc' : (theme.id === 'sepia' ? '#8c7b66' : '#9333ea');
-                    dynamicWeight = flatStyle.fontWeight || '700';
-                } else if (type === 'submenu') {
-                    dynamicColor = theme.id === 'night' ? '#34d399' : (theme.id === 'sepia' ? '#5b4636' : '#059669');
-                    dynamicWeight = flatStyle.fontWeight || '600';
-                } else if (type === 'quote') {
-                    dynamicColor = theme.secondary;
-                    dynamicStyle = 'italic';
-                    dynamicMargin = 4;
-                } else if (type === 'formula') {
-                    dynamicTextAlign = 'center';
-                    dynamicStyle = 'italic';
-                    dynamicColor = theme.text;
-                    dynamicSize = flatStyle.fontSize * 1.15;
-                    dynamicMargin = 8;
-                    dynamicWeight = '600';
-                }
-
-                return (
-                    <Text key={key} style={{ marginTop: dynamicMargin, textAlign: dynamicTextAlign as any }}>
-                        {lineWords && (lineWords as any[]).map(({ word, start, end, isBold, isItalic, isMath, isLink, linkUrl, isGreen }, index) => {
-                            if (!word) return null;
-
-                            const globalStart = paragraphOffset + start;
-                            const globalEnd = globalStart + word.length;
-
-                            let isHighlighted = false;
-
-                            if (activeSentence) {
-                                if (globalStart >= activeSentence.start && globalStart < activeSentence.end) {
-                                    isHighlighted = true;
-                                }
-                            }
-
-                            // CHECK MANUAL HIGHLIGHT
-                            const manualHighlight = highlights.find(h =>
-                                (globalStart < h.end && globalEnd > h.start) // Overlap check
-                            );
-
-                            const isUrl = word.match(/^https?:\/\//i);
-                            const isSpace = !word.trim();
-
-                            let wordColor = dynamicColor;
-                            let wordWeight = dynamicWeight;
-                            let wordStyleProp = dynamicStyle;
-                            let wordDecor = flatStyle.textDecorationLine || 'none';
-
-                            if (isUrl) {
-                                wordColor = '#2563eb';
-                                wordDecor = 'underline';
-                            } else if (isLink) {
-                                wordColor = '#2563eb';
-                                wordDecor = 'underline';
-                                wordWeight = 'bold';
-                            } else if (isGreen) {
-                                wordColor = '#22c55e';
-                                wordWeight = 'bold';
-                            } else if (isBold && type === 'normal') {
-                                wordColor = theme.id === 'day' ? '#2563eb' : theme.primary;
-                                wordWeight = 'bold';
-                            } else if (isMath && type === 'normal') {
-                                wordColor = theme.id === 'day' ? '#ea580c' : '#fb923c';
-                                wordWeight = '500';
-                            } else if (isItalic && type === 'normal') {
-                                wordColor = theme.id === 'day' ? '#9333ea' : '#c084fc';
-                                wordStyleProp = 'italic';
-                            } else if (type === 'formula') {
-                                wordColor = dynamicColor;
-                                wordWeight = dynamicWeight;
-                                let fontFamily = 'serif';
-                                if (Platform.OS === 'ios') fontFamily = 'Georgia';
-                            }
-
-                            let backgroundColor = 'transparent';
-                            if (manualHighlight) {
-                                const hColor = manualHighlight.color || 'yellow';
-                                const colorDef = (HIGHLIGHT_COLORS as any)[hColor] || HIGHLIGHT_COLORS.yellow;
-                                backgroundColor = theme.id === 'day' ? colorDef.day : colorDef.night;
-                            } else if (isHighlighted) {
-                                backgroundColor = theme.activeWord;
-                            }
-
-                            const wordStyle = {
-                                color: manualHighlight && theme.id !== 'day' ? '#fefce8' : wordColor,
-                                fontWeight: wordWeight,
-                                backgroundColor: backgroundColor,
-                                fontSize: dynamicSize,
-                                fontFamily: type === 'formula' ? (Platform.OS === 'ios' ? 'Georgia' : 'serif') : flatStyle.fontFamily,
-                                fontStyle: wordStyleProp,
-                                lineHeight: flatStyle.lineHeight,
-                                textDecorationLine: wordDecor,
-                                letterSpacing: flatStyle.letterSpacing,
-                                includeFontPadding: false,
-                                textAlignVertical: 'center' as any
-                            };
-
-                            if (isSpace) {
-                                return (
-                                    <Text key={`${key}-${index}`} style={wordStyle}>
-                                        {word}
-                                    </Text>
-                                );
-                            }
-
-                            const isInteractive = isHighlightMode || (isLink && linkUrl) || isUrl || tapToDefineEnabled;
-
-                            return (
-                                <Text
-                                    key={`${key}-${index}`}
-                                    style={wordStyle}
-                                    onPressIn={(e) => {
-                                        const { pageX, pageY } = e.nativeEvent;
-                                        pressTrackerRef.current = { time: Date.now(), x: pageX, y: pageY };
-                                    }}
-                                    onPress={isInteractive ? (e) => {
-                                        const { pageX, pageY } = e.nativeEvent || {};
-                                        const { time, x, y } = pressTrackerRef.current;
-                                        const isWeb = Platform.OS === 'web';
-
-                                        const duration = Date.now() - time;
-
-                                        // On Web, coordinate tracking results (pageX/pageY) can be less reliable on Text elements 
-                                        // especially when selectable is true. We relax the check for Web.
-                                        if (isWeb) {
-                                            // Only ignore if we have a valid start time AND it's clearly a long press (>500ms)
-                                            // If time is 0, it means onPressIn didn't fire (common on web selection), 
-                                            // we allow the tap anyway.
-                                            if (time !== 0 && duration > 500) {
-                                                return;
-                                            }
-                                        } else {
-                                            const dist = Math.sqrt(Math.pow((pageX || 0) - x, 2) + Math.pow((pageY || 0) - y, 2));
-                                            // Ignore if long press (>350ms) OR moved significantly (>10px) (Drag/Selection)
-                                            if (duration > 350 || dist > 10) {
-                                                return;
-                                            }
-                                        }
-
-                                        if (isHighlightMode) {
-                                            onHighlightPress && onHighlightPress({
-                                                start: paragraphOffset,
-                                                end: paragraphOffset + totalLength,
-                                                text: "Paragraph Highlight"
-                                            });
-                                        } else if (isLink && linkUrl) {
-                                            const handled = onLinkPress?.(linkUrl);
-                                            if (handled) return;
-                                            Linking.openURL(linkUrl).catch(err => Alert.alert("Error", "Cannot open this link."));
-                                        } else if (isUrl) {
-                                            const cleanUrl = word.replace(/[.,;)]$/, '');
-                                            Linking.openURL(cleanUrl).catch(err => Alert.alert("Error", "Cannot open this link."));
-                                        } else if (tapToDefineEnabled) {
-                                            onWordPress?.(word.replace(/[.,/#!$%^&*;:{}=\-_`~()"'?]/g, ""));
-                                        }
-                                    } : undefined}
-                                >
-                                    {word}
-                                </Text>
-                            );
-                        })}
-                    </Text>
-                );
-            })}
-        </Text>
-    );
-}, (prev, next) => {
-    // Flatten styles to compare properties correctly (handles array styles)
-    const prevStyle = StyleSheet.flatten(prev.style) || {};
-    const nextStyle = StyleSheet.flatten(next.style) || {};
-
-    // 1. Check standard props (Primitive & References)
-    if (prev.rawText !== next.rawText ||
-        prev.paragraphOffset !== next.paragraphOffset ||
-        prev.theme.id !== next.theme.id ||
-        prev.theme.text !== next.theme.text ||
-        prev.theme.bg !== next.theme.bg ||     // NEW: Check for background changes
-        prev.isHighlightMode !== next.isHighlightMode ||
-        prev.tapToDefineEnabled !== next.tapToDefineEnabled ||
-        prevStyle.fontSize !== nextStyle.fontSize ||
-        prevStyle.fontFamily !== nextStyle.fontFamily ||
-        prevStyle.fontWeight !== nextStyle.fontWeight ||
-        prevStyle.color !== nextStyle.color || // NEW: Explicitly check style prop color
-        prevStyle.fontStyle !== nextStyle.fontStyle ||
-        prevStyle.textDecorationLine !== nextStyle.textDecorationLine ||
-        prevStyle.letterSpacing !== nextStyle.letterSpacing
-    ) {
-        return false; // Re-render needed
-    }
-
-    // 2. Optimization: Active Sentence Check
-    // Only re-render if the active sentence INTERSECTS this paragraph.
-    const pStart = next.paragraphOffset || 0;
-    // Use raw length as a safe upper bound
-    const pEnd = pStart + next.rawText.length + 50;
-
-    // Helper to check intersection for Sentence
-    const sentenceIntersects = (range: any) => {
-        if (!range) return false;
-        return (range.start < pEnd && range.end > pStart);
-    };
-
-    const prevActive = prev.activeSentence;
-    const nextActive = next.activeSentence;
-
-    const wasHighlighted = sentenceIntersects(prevActive);
-    const isHighlighted = sentenceIntersects(nextActive);
-
-    // If highlight status changed (e.g., entered or left this paragraph), re-render
-    if (wasHighlighted !== isHighlighted) return false;
-    // If still highlighted, check if bounds changed
-    if (wasHighlighted && isHighlighted && prevActive && nextActive) {
-        if ((prevActive as any).start !== (nextActive as any).start || (prevActive as any).end !== (nextActive as any).end) return false;
-    }
-
-    // 3. Smart Manual Highlight Check
-    // If global highlights array reference changed, check if it actually affects THIS paragraph
-    if (prev.highlights !== next.highlights) {
-        const getRelevant = (list: any[] | undefined) => (list || []).filter(h => h.start < pEnd && h.end > pStart);
-
-        const prevRelevant = getRelevant(prev.highlights || []);
-        const nextRelevant = getRelevant(next.highlights || []);
-
-        // Fast length check first
-        if (prevRelevant.length !== nextRelevant.length) return false;
-
-        // Deep check items without JSON.stringify for speed
-        for (let i = 0; i < prevRelevant.length; i++) {
-            const p = prevRelevant[i];
-            const n = nextRelevant[i];
-            if (p.id !== n.id || p.start !== n.start || p.end !== n.end || p.color !== n.color) {
-                return false;
-            }
-        }
-    }
-
-    return true; // Props are effectively equal
-});
 
 const CleanSlider = ({ value, min, max, onValueChange, label, formatValue, activeColor = '#3b82f6', theme }: any) => {
     const percentage = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
@@ -14597,7 +13937,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 } else if (readingSession.toolId === 'quick_search') {
                     systemRole = "Expert Researcher";
                     contextInstruction = "You are a Research Assistant providing follow-up information.";
-                    detailedInstruction = "Provide a detailed, fact-based answer. Use markdown for structure. For any key concepts across all subjects (History, Art, Science, etc.), you MUST use the **Concept Card** format: `[[CONCEPT_CARD: Title]] ...Content (Max 300 chars)... [[END_CARD]]`.";
+                    detailedInstruction = "Provide a detailed, fact-based answer. Use markdown for structure (headers, lists, tables). Bold important key points.";
                 } else if (readingSession.toolId === 'story_generator') {
                     systemRole = readingSession.storyMode === 'character' ? "Method Actor" : "Master Narrator";
                     contextInstruction = "You are the author/storyteller of this text. Maintain the narrative voice.";
@@ -14642,7 +13982,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     const safeTitle = newTitle.length > 50 ? newTitle.substring(0, 50) + "..." : newTitle;
 
                     // Format the content to include context context
-                    const newContent = `**Context:** *${readingSession.title}*\n\n**Question:** ${queryToUse}\n\n---\n\n${cleanResponse}`;
+                    const newContent = `**Context:** *${readingSession.title}*\n\n**Question:** ${queryToUse}\n\n----- \n\n${cleanResponse}`;
 
                     // UPDATE: Inherit toolId unless it's a special type that has its own tab (Stories, Notes, Quizzes)
                     const nextToolId = ['story_generator', 'quiz_save', 'quick_notes'].includes(readingSession.toolId)
@@ -14689,15 +14029,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         setGenerationData(isReaderContext ? "Searching..." : "Searching deeply...");
 
         const prompt = `
-    You are a friendly Personal Assistant. Explain concepts in simple, beginner-friendly language, like easy-to-read study notes. Avoid complex jargon. Use tables, charts, diagrams, and bullet points to make information visual and clear. bold important key points.
+    You are a helpful AI assistant, similar to Google Gemini. Provide direct, quick, and easy-to-understand answers. Focus on the user's specific query and avoid unnecessary elaboration.
 
     User Query: "${queryToUse}"
     
-    IMPORTANT: For any key concepts across all subjects (History, Art, Science, etc.), you MUST use the **Concept Card** format:
-    [[CONCEPT_CARD: Title]]
-    ...Content (Max 300 chars)...
-    [[END_CARD]]
-
     VISUAL REQUIREMENT:
     - Only provide an image prompt if the topic is complex, spatial, or hard to visualize without a diagram.
     - If generating, strictly on a new line at the end: IMAGE_PROMPT: <prompt>
@@ -21025,7 +20360,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                     // Prepare Content
                     const contentParts = [{
-                        text: `Act as a friendly, helpful Personal Assistant. The user has sent you an image. Your task is to analyze it and answer their request in a warm, conversational, and helper-like tone. Do not just describe the image unless asked. Focus on helping the user with their goal related to the image. Request: "${currentInput}".`
+                        text: `You are a helpful and knowledgeable AI assistant. The user has provided an image. Your task is to analyze it and address their request comprehensively and accurately. Request: "${currentInput}".`
                     }];
 
                     // Read Images
@@ -21078,47 +20413,27 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 if (teacherMode === 'discussion') {
                     systemRole = "Personal Assistant";
-                    prompt = `Act as a friendly Personal Assistant and Tutor.
+                    prompt = `You are a helpful and knowledgeable AI assistant.
                     
                     User Request: "${currentInput}"
                     
-                    Task: Chat with the user to explain this or help them.
-                    - Be encouraging and supportive.
-                    - Use simple, clear language.
-                    - Ask follow-up questions to ensure understanding.
-                    - Use \`[[CONCEPT_CARD: Title]] ... [[END_CARD]]\` for any key terms, formulas, or code.
+                    Task: Provide clear, detailed, and accurate information to help the user.
+                    - Be professional and informative.
+                    - Use comprehensive and precise language.
                     
-                    Format: Short conversational response. End with a relevant follow-up question.`;
+                    Format: Detailed conversational response.`;
                 } else if (teacherMode === 'lesson') {
                     systemRole = "Personal Tutor";
-                    prompt = `Act as a friendly Personal Assistant.
+                    prompt = `You are a helpful and knowledgeable AI assistant.
                     
                     User Request: "${currentInput}"
                     
-                    Task: Explain concepts in simple, beginner-friendly language, like easy-to-read study notes.
+                    Task: Provide comprehensive and detailed explanations, like high-quality study notes.
                     
                     Guidelines:
-                    - Avoid complex jargon.
-                    - Use **tables**, **charts** (using text/markdown), **diagrams**, and **bullet points** to make information visual and clear.
+                    - Use clear and professional terminology.
+                    - Use **tables**, **charts** (using text/markdown), and **bullet points** to make information visual and structured.
                     - **Bold** important key points.
-                    - **CONCEPT CARD RULE**:
-                      - **USAGE**: Use for formulas, code, OR key definitions in ANY subject (History, Grammar, Science, etc.).
-                      - **PLACEMENT**: Insert \`[[CONCEPT_CARD]]\` **IMMEDIATELY** after determining a key concept. Do NOT group them all at the end.
-                      - **CONSTRAINT**: **STRICTLY MAX 30-50 WORDS (5-10 lines)** per card. If a concept is complex, **split it into MULTIPLE separate Concept Cards**. Never write a whole chapter in one card.
-                      - **CONTENT**: "Cheat Sheet" style. Title, 2-3 Bullet Points, 1 Key Formula/Date.
-                      - **Example**:
-                      \`[[CONCEPT_CARD: NEWTON'S 2ND LAW]]
-                      **Formula**: F = ma
-                      **Meaning**: Force equals mass times acceleration.
-                      **Key Point**: Heavier objects need more force.
-                      [[END_CARD]]\`
-
-                    - **CHAPTER SUMMARY (Compulsory End)**:
-                      - You MUST end with \`[[CONCEPT_CARD: CHAPTER SUMMARY]]\`.
-                      - **Content**: A concise summary of the chapter/response (approx 30-50 words).
-                      - **Intelligent Synthesis**: Summarize the *core narrative* (how concepts connect).
-                      - 4-6 meaningful takeaways. Do not just list random words.
-                    
                     - Structure the response logically (Intro, Key Examples, Summary).
                     
                     Logic Config:
@@ -21129,7 +20444,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 } else {
                     // Safety Fallback (Default to Discussion)
                     systemRole = "Personal Assistant";
-                    prompt = `Act as a friendly Personal Assistant. Request: "${currentInput}"`;
+                    prompt = `You are a helpful AI assistant. Request: "${currentInput}"`;
                 }
                 break;
 
@@ -27663,7 +26978,7 @@ Review the following raw transcribed text:
                         }
                         const refinedText = refineData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
                         if (refinedText) {
-                            console.log(`Chatbot STT (Gemini Refined ${model}) Result:`, refinedText);
+                            console.log(`Chatbot STT (Gemini Refining ${model}) Result:`, refinedText);
                             return refinedText;
                         }
                     } catch (err) {
@@ -27682,309 +26997,42 @@ Review the following raw transcribed text:
         if (!activeChatbotChar) return null;
 
         return (
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={{ flex: 1, backgroundColor: theme.bg }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
-            >
-                {/* Scrollable Conversation */}
-                <ScrollView
-                    ref={chatbotScrollRef}
-                    style={{ flex: 1 }}
-                    contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
-                    onScrollBeginDrag={() => setIsChatScrolling(true)}
-                    onScrollEndDrag={() => setIsChatScrolling(false)}
-                    onContentSizeChange={() => {
-                        if (!isChatScrolling) chatbotScrollRef.current?.scrollToEnd({ animated: true });
-                    }}
-                >
-                    {chatbotMessages.map((msg, idx) => (
-                        <View key={msg.id} style={{
-                            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                            maxWidth: '85%',
-                            marginBottom: 16,
-                            backgroundColor: msg.role === 'user' ? primaryColor : (theme.id === 'day' ? '#f3f4f6' : theme.uiBg),
-                            padding: 14,
-                            borderRadius: 20,
-                            borderBottomRightRadius: msg.role === 'user' ? 4 : 20,
-                            borderBottomLeftRadius: msg.role === 'assistant' ? 4 : 20,
-                            shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 1 },
-                            shadowOpacity: 0.05,
-                            shadowRadius: 2,
-                            elevation: 1
-                        }}>
-                            {activeChatbotChar?.id === 'trans_o_bot' && msg.role === 'assistant' && msg.content.toLowerCase().match(/(?:^|\n)\s*(?:#+\s*|\**)\s*tricky parts explained\s*[:\*\-\s]*/) ? (
-                                (() => {
-                                    const parts = msg.content.split(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*/i);
-                                    let before = parts[0];
-                                    const rest = parts[1] || "";
-
-                                    const explanationEndIndex = rest.search(/Try saying|Would you like/i);
-                                    const explanation = explanationEndIndex !== -1 ? rest.substring(0, explanationEndIndex) : rest;
-                                    const finalPart = explanationEndIndex !== -1 ? rest.substring(explanationEndIndex) : "";
-
-                                    // Clean up any stray asterisks, headers or trailing separators
-                                    before = before.replace(/\s*[#\*\s\-:]+$/, '');
-
-                                    return (
-                                        <View>
-                                            <InteractiveText rawText={before} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
-                                            <View style={{
-                                                backgroundColor: theme.id === 'day' ? '#f5f3ff' : 'rgba(139, 92, 246, 0.08)',
-                                                padding: 14,
-                                                borderRadius: 16,
-                                                marginVertical: 12,
-                                                borderWidth: 1,
-                                                borderColor: theme.id === 'day' ? '#ddd6fe' : 'rgba(139, 92, 246, 0.3)',
-                                                borderLeftWidth: 4,
-                                                borderLeftColor: '#8b5cf6'
-                                            }}>
-                                                <Text style={{ color: '#8b5cf6', fontWeight: '900', marginBottom: 8, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Tricky parts explained</Text>
-                                                <InteractiveText rawText={explanation.trim()} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 14, lineHeight: 20 }} />
-                                            </View>
-                                            <InteractiveText rawText={finalPart.trim()} theme={theme} onWordPress={handleWordLookup} style={{ color: theme.text, fontSize: 16, lineHeight: 22 }} />
-                                        </View>
-                                    );
-                                })()
-                            ) : (
-                                <InteractiveText
-                                    rawText={msg.content}
-                                    theme={theme}
-                                    onWordPress={handleWordLookup}
-                                    style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 16, lineHeight: 22 }}
-                                />
-                            )}
-
-                            {msg.role === 'assistant' && (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                                    <Text style={{ color: theme.secondary, fontSize: 10, opacity: 0.55, fontStyle: 'italic' }}>tap any word to define</Text>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                        {/* Brainstorm / Reply-Hint Button */}
-                                        <TouchableOpacity
-                                            onPress={() => handleBrainstorm(msg)}
-                                            disabled={chatbotBrainstormingMsgId === msg.id}
-                                        >
-                                            {chatbotBrainstormingMsgId === msg.id ? (
-                                                <ActivityIndicator size="small" color={'#f59e0b'} />
-                                            ) : (
-                                                <Lightbulb
-                                                    size={16}
-                                                    color={chatbotBrainstormHints[msg.id] ? '#f59e0b' : theme.secondary}
-                                                    fill={chatbotBrainstormHints[msg.id] ? '#f59e0b' : 'none'}
-                                                />
-                                            )}
-                                        </TouchableOpacity>
-
-                                        {/* Language Switch Button */}
-                                        <TouchableOpacity
-                                            onPress={() => switchChatBubbleLanguage(msg)}
-                                            disabled={chatbotTranslatingMsgId === msg.id}
-                                            style={{
-                                                width: 28, height: 28, borderRadius: 14,
-                                                alignItems: 'center', justifyContent: 'center',
-                                                borderWidth: 1, borderColor: theme.border,
-                                                backgroundColor: theme.uiBg
-                                            }}
-                                        >
-                                            {chatbotTranslatingMsgId === msg.id ? (
-                                                <ActivityIndicator size="small" color={theme.secondary} />
-                                            ) : (
-                                                <Text style={{ color: theme.secondary, fontWeight: '900', fontSize: 9 }}>
-                                                    {(chatbotMsgLanguages[msg.id] || displaySettings.language || 'EN').substring(0, 2).toUpperCase()}
-                                                </Text>
-                                            )}
-                                        </TouchableOpacity>
-
-                                        {/* Speaker / Stop Button */}
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                // If THIS bubble is already playing, act as a stop button
-                                                if (chatbotSpeakingMsgId === msg.id) {
-                                                    stopTTS();
-                                                    setChatbotSpeakingMsgId(null);
-                                                    return;
-                                                }
-                                                let textToSpeak = msg.content;
-                                                if (activeChatbotChar?.id === 'trans_o_bot') {
-                                                    textToSpeak = msg.content.replace(/(?:^|\n)\s*(?:#+\s*|\**)\s*Tricky parts explained\s*[:\*\-\s]*[\s\S]*?(?=[tT]ry saying|[wW]ould you like|$)/gi, '');
-                                                }
-                                                // Always clean Markdown for manual audio playback
-                                                const cleaned = cleanTextForDisplay(textToSpeak);
-                                                // Mark this bubble as the active speaker, then start playing
-                                                setChatbotSpeakingMsgId(msg.id);
-                                                speak(cleaned, 0, false, true, "Chatbot", true);
-                                            }}
-                                        >
-                                            {chatbotSpeakingMsgId === msg.id ? (
-                                                <Square size={16} color={'#ef4444'} fill={'#ef4444'} />
-                                            ) : (
-                                                <Volume2 size={16} color={theme.secondary} />
-                                            )}
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
-
-                            {msg.role === 'user' && (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8 }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                        {/* Grammar Check Button */}
-                                        <TouchableOpacity
-                                            onPress={() => handleGrammarCheck(msg)}
-                                            disabled={chatbotGrammarCheckingMsgId === msg.id}
-                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
-                                        >
-                                            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontStyle: 'italic' }}>check grammar</Text>
-                                            {chatbotGrammarCheckingMsgId === msg.id ? (
-                                                <ActivityIndicator size="small" color={'#10b981'} />
-                                            ) : (
-                                                <CheckCircle
-                                                    size={16}
-                                                    color={chatbotGrammarHints[msg.id] ? '#10b981' : 'rgba(255,255,255,0.6)'}
-                                                    fill={chatbotGrammarHints[msg.id] ? '#10b981' : 'none'}
-                                                />
-                                            )}
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* Brainstorm hint card */}
-                            {chatbotBrainstormHints[msg.id] && (
-                                <View style={{
-                                    marginTop: 8,
-                                    padding: 10,
-                                    backgroundColor: 'rgba(245,158,11,0.10)',
-                                    borderRadius: 10,
-                                    borderLeftWidth: 3,
-                                    borderLeftColor: '#f59e0b',
-                                }}>
-                                    <Text style={{ color: '#f59e0b', fontSize: 10, fontWeight: '700', marginBottom: 4 }}>💡 Reply ideas</Text>
-                                    <Text style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>{chatbotBrainstormHints[msg.id]}</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setChatbotBrainstormHints(prev => { const n = { ...prev }; delete n[msg.id]; return n; })}
-                                        style={{ alignSelf: 'flex-end', marginTop: 6 }}
-                                    >
-                                        <Text style={{ color: '#f59e0b', fontSize: 11 }}>dismiss</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-
-                            {/* Grammar Check hint card */}
-                            {chatbotGrammarHints[msg.id] && (
-                                <View style={{
-                                    marginTop: 8,
-                                    padding: 10,
-                                    backgroundColor: 'rgba(16,185,129,0.10)',
-                                    borderRadius: 10,
-                                    borderRightWidth: 3,
-                                    borderRightColor: '#10b981',
-                                }}>
-                                    <Text style={{ color: '#10b981', fontSize: 10, fontWeight: '700', marginBottom: 4, textAlign: 'right' }}>📝 Grammar Check</Text>
-                                    <InteractiveText rawText={chatbotGrammarHints[msg.id]} theme={{ ...theme, text: msg.role === 'user' ? 'white' : theme.text }} onWordPress={handleWordLookup} style={{ color: msg.role === 'user' ? 'white' : theme.text, fontSize: 13, lineHeight: 19 }} />
-                                    <TouchableOpacity
-                                        onPress={() => setChatbotGrammarHints(prev => { const n = { ...prev }; delete n[msg.id]; return n; })}
-                                        style={{ alignSelf: 'flex-start', marginTop: 6 }}
-                                    >
-                                        <Text style={{ color: '#10b981', fontSize: 11 }}>dismiss</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        </View>
-                    ))}
-                    {isChatbotTyping && (
-                        <View style={{ alignSelf: 'flex-start', padding: 14, backgroundColor: theme.uiBg, borderRadius: 20, borderBottomLeftRadius: 4 }}>
-                            <ActivityIndicator size="small" color={primaryColor} />
-                        </View>
-                    )}
-                </ScrollView>
-
-
-                {/* Bottom Controls */}
-                <View style={{
-                    padding: 20,
-                    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-                    borderTopWidth: 1,
-                    borderTopColor: theme.border,
-                    backgroundColor: theme.bg,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 15
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            const willExpand = !isChatbotInputExpanded;
-                            setIsChatbotInputExpanded(willExpand);
-                            if (willExpand) {
-                                setTimeout(() => {
-                                    chatbotInputRef.current?.focus();
-                                }, 100);
-                            }
-                        }}
-                        style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.uiBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}
-                    >
-                        {isChatbotInputExpanded ? <X size={20} color={theme.text} /> : <LucideKeyboard size={20} color={theme.text} />}
-                    </TouchableOpacity>
-
-                    {isChatbotInputExpanded ? (
-                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.uiBg, borderRadius: 22, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 15 }}>
-                            <TextInput
-                                ref={chatbotInputRef}
-                                style={{ flex: 1, height: 44, color: theme.text }}
-                                placeholder="Type a message..."
-                                placeholderTextColor={theme.secondary}
-                                value={chatbotInput}
-                                onChangeText={setChatbotInput}
-                                onSubmitEditing={() => handleChatbotSend(chatbotInput)}
-                                multiline={false}
-                            />
-                            <TouchableOpacity onPress={() => handleChatbotSend(chatbotInput)}>
-                                <ArrowRight size={20} color={primaryColor} />
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <>
-                            <TouchableOpacity
-                                onPress={handleChatbotVoiceToggle}
-                                style={{
-                                    flex: 1,
-                                    height: 56,
-                                    borderRadius: 28,
-                                    backgroundColor: (isRecording || isOfflineRecognizing) ? '#ef4444' : primaryColor,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 10,
-                                    shadowColor: (isRecording || isOfflineRecognizing) ? '#ef4444' : primaryColor,
-                                    shadowOffset: { width: 0, height: 4 },
-                                    shadowOpacity: 0.3,
-                                    shadowRadius: 8,
-                                    elevation: 6
-                                }}
-                            >
-                                {isTranscribing ? (
-                                    <ActivityIndicator size="small" color="white" />
-                                ) : (
-                                    <>
-                                        <Mic size={24} color="white" />
-                                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
-                                            {(isRecording || isOfflineRecognizing) ? 'Listening...' : 'Push to Talk'}
-                                        </Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                onPress={endChatbotSession}
-                                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.id === 'day' ? '#fee2e2' : 'rgba(239, 68, 68, 0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}
-                            >
-                                <PhoneOff size={20} color="#ef4444" />
-                            </TouchableOpacity>
-                        </>
-                    )}
-                </View>
-            </KeyboardAvoidingView>
+            <GeminiChat
+                theme={theme}
+                primaryColor={primaryColor}
+                messages={chatbotMessages}
+                activeChar={activeChatbotChar}
+                isTyping={isChatbotTyping}
+                input={chatbotInput}
+                setInput={setChatbotInput}
+                onSend={handleChatbotSend}
+                onVoiceToggle={handleChatbotVoiceToggle}
+                onEndSession={endChatbotSession}
+                onWordLookup={handleWordLookup}
+                onBrainstorm={handleBrainstorm}
+                onGrammarCheck={handleGrammarCheck}
+                onTTS={(text, msgId) => {
+                    if (chatbotSpeakingMsgId === msgId) {
+                        stopTTS();
+                        setChatbotSpeakingMsgId(null);
+                        return;
+                    }
+                    setChatbotSpeakingMsgId(msgId);
+                    speak(cleanTextForDisplay(text), 0, false, true, "Chatbot", true);
+                }}
+                onSwitchLanguage={switchChatBubbleLanguage}
+                isRecording={isRecording}
+                isTranscribing={isTranscribing}
+                speakingMsgId={chatbotSpeakingMsgId}
+                translatingMsgId={chatbotTranslatingMsgId}
+                brainstormingMsgId={chatbotBrainstormingMsgId}
+                grammarCheckingMsgId={chatbotGrammarCheckingMsgId}
+                brainstormHints={chatbotBrainstormHints}
+                grammarHints={chatbotGrammarHints}
+                msgLanguages={chatbotMsgLanguages}
+                displayLanguage={displaySettings.language}
+                scrollRef={chatbotScrollRef}
+            />
         );
     };
 
@@ -28268,184 +27316,49 @@ Review the following raw transcribed text:
                             <>
                                 {activeTab === 'home' ? (
                                     <View style={{ flex: 1 }}>
-                                        {isChatbotMode ? (
-                                            activeChatbotChar ? renderChatbotMessaging() : renderChatbotHome()
+                                        {activeChatbotChar ? (
+                                            renderChatbotMessaging()
                                         ) : (
-                                            <View style={{ flex: 1 }}>
-                                                {/* GEMINI-STYLE: Main content with bottom pinned search bar */}
-                                                {/* GEMINI-STYLE: Main content with bottom pinned search bar */}
-                                                <KeyboardAvoidingView
-                                                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                                                    style={{ flex: 1, paddingBottom: Platform.OS === 'android' && isKeyboardVisible ? keyboardHeight : 0 }}
-                                                    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-                                                >
-                                                    <ScrollView
-                                                        style={{ flex: 1 }}
-                                                        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 20, paddingTop: 20 }]}
-                                                        keyboardShouldPersistTaps="handled"
-                                                    >
-                                                        {/* GEMINI-STYLE: Greeting at top of scrollable area */}
-                                                        {!isLandscape && (
-                                                            <View style={[{
-                                                                marginTop: 40, 
-                                                                marginBottom: 40, 
-                                                                paddingHorizontal: 20,
-                                                                alignItems: 'flex-start'
-                                                            }]}>
-                                                                <Text style={[{ 
-                                                                    fontSize: 34, 
-                                                                    fontWeight: '800', 
-                                                                    color: theme.id === 'day' ? '#cfcfcf' : theme.secondary
-                                                                }]}>
-                                                                    {uiData.staticText?.home?.welcome || "Hello,"}
-                                                                </Text>
-                                                                <Text style={[{ 
-                                                                    fontSize: 34, 
-                                                                    fontWeight: '800', 
-                                                                    color: theme.id === 'day' ? '#333333' : theme.text
-                                                                }]}>
-                                                                    {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
-                                                                    {' in '}
-                                                                    <Text
-                                                                        onPress={cycleGlobalLanguage}
-                                                                        style={{ color: primaryColor, textDecorationLine: 'underline' }}
-                                                                    >
-                                                                        {displaySettings.language}
-                                                                    </Text>
-                                                                </Text>
-                                                            </View>
-                                                        )}
-
-                                                        <View>
-                                                            <View>
-                                                                {(() => {
-                                                                    // 1. Get All Available Tools & Sort by MRU
-                                                                    const allTools = getAllTools();
-                                                                    const toolsSource = allTools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner');
-
-                                                                    toolsSource.sort((a: any, b: any) => {
-                                                                        const indexA = lastUsedTools.indexOf(a.id);
-                                                                        const indexB = lastUsedTools.indexOf(b.id);
-                                                                        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                                                                        if (indexA !== -1) return -1;
-                                                                        if (indexB !== -1) return 1;
-                                                                        return 0;
-                                                                    });
-
-                                                                    // 2. Prepare Items List
-                                                                    const allItems = [
-                                                                        ...toolsSource.map((t: any) => ({ id: t.id, type: 'tool', data: t }))
-                                                                    ];
-
-                                                                    // Check if image exists on disk
-                                                                    const checkImageExists = async (uri: string) => {
-                                                                        if (!uri) return false;
-                                                                    };
-                                                                    // 3. Shared Tool Press Handler
-                                                                    const onToolPress = (tool: any) => {
-                                                                        setLastUsedTools((prev: any) => {
-                                                                            const newOrder = [tool.id, ...prev.filter((id: string) => id !== tool.id)];
-                                                                            return newOrder.slice(0, 50);
-                                                                        });
-                                                                        if (tool.id === 'visual_learner') {
-                                                                            setImagePickerMode('vision');
-                                                                            setVisionDraft({ uris: [], prompt: "" });
-                                                                            setShowImageSourceModal(true);
-                                                                        } else {
-                                                                            setSelectedScenario(tool);
-                                                                            const defLength = tool.id === 'examiner' ? "" : "Medium";
-                                                                            const targetSubject = tool.id === 'examiner' ? lastQuizSubject : "General";
-                                                                            saveSchoolConfig({ input: "", length: defLength, complexity: "Intermediate", subject: targetSubject });
-                                                                            setAppMode('setup');
-                                                                        }
-                                                                    };
-
-                                                                    return (
-                                                                        <View style={{ marginBottom: 10, paddingHorizontal: 20 }}>
-                                                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
-                                                                                {allItems.map((item: any, index: number) => {
-                                                                                    if (item.type === 'new_role') {
-                                                                                        return (
-                                                                                            <TouchableOpacity
-                                                                                                key="new_role"
-                                                                                                onPress={handleNewRolePress}
-                                                                                                style={{
-                                                                                                    width: '48%',
-                                                                                                    padding: 16,
-                                                                                                    backgroundColor: theme.buttonBg,
-                                                                                                    borderRadius: 20,
-                                                                                                    borderWidth: 1,
-                                                                                                    borderColor: theme.border,
-                                                                                                    shadowColor: "#000",
-                                                                                                    shadowOffset: { width: 0, height: 2 },
-                                                                                                    shadowOpacity: 0.05,
-                                                                                                    shadowRadius: 4,
-                                                                                                    elevation: 2,
-                                                                                                    alignItems: 'flex-start'
-                                                                                                }}
-                                                                                            >
-                                                                                                <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: theme.id === 'sepia' ? '#fffefb' : primaryColor, alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: theme.id === 'sepia' ? 1 : 0, borderColor: '#e3dccf' }}>
-                                                                                                    <Plus size={22} color={theme.id === 'sepia' ? theme.secondary : "white"} />
-                                                                                                </View>
-                                                                                                <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 4 }}>New Role</Text>
-                                                                                                <Text style={{ fontSize: 13, color: theme.secondary }} numberOfLines={2}>Create a custom persona</Text>
-                                                                                            </TouchableOpacity>
-                                                                                        );
-                                                                                    } else {
-                                                                                        const tool = item.data;
-                                                                                        const IconComponent = tool.isCustom ? (ICON_MAP[tool.iconName] || Bot) : tool.Icon;
-                                                                                        return (
-                                                                                            <TouchableOpacity
-                                                                                                key={tool.id}
-                                                                                                onPress={() => onToolPress(tool)}
-                                                                                                onLongPress={() => handleRoleLongPress(tool)}
-                                                                                                style={{
-                                                                                                    width: '48%',
-                                                                                                    padding: 16,
-                                                                                                    backgroundColor: theme.uiBg,
-                                                                                                    borderRadius: 20,
-                                                                                                    borderWidth: 1,
-                                                                                                    borderColor: theme.border,
-                                                                                                    shadowColor: "#000",
-                                                                                                    shadowOffset: { width: 0, height: 2 },
-                                                                                                    shadowOpacity: 0.05,
-                                                                                                    shadowRadius: 4,
-                                                                                                    elevation: 2,
-                                                                                                    alignItems: 'flex-start'
-                                                                                                }}
-                                                                                            >
-                                                                                                <LinearGradient colors={theme.toolColor || tool.color} style={{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                                                                                                    <IconComponent size={22} color={!theme.toolColor ? "white" : tool.color[1]} />
-                                                                                                </LinearGradient>
-                                                                                                <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 4 }} numberOfLines={1}>{tool.title}</Text>
-                                                                                                <Text style={{ fontSize: 13, color: theme.secondary }} numberOfLines={2}>{tool.role}</Text>
-                                                                                            </TouchableOpacity>
-                                                                                        );
-                                                                                    }
-                                                                                })}
-                                                                            </View>
-                                                                        </View>
-                                                                    );
-                                                                })()}
-                                                            </View>
-                                                        </View>
-                                                    </ScrollView>
-
-                                                    {/* GEMINI-STYLE: Search bar pinned at bottom of screen */}
-                                                    <View style={{
-                                                        paddingHorizontal: 16,
-                                                        paddingTop: 10,
-                                                        // Fallback pad if custom height is somehow 0
-                                                        paddingBottom: isKeyboardVisible ? (Platform.OS === 'ios' ? 10 : (keyboardHeight > 0 ? 10 : 20)) : (Platform.OS === 'ios' ? 28 : 14),
-                                                        backgroundColor: theme.bg,
-                                                        borderTopWidth: isKeyboardVisible ? 0 : 1,
-                                                        borderTopColor: theme.id === 'day' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.07)',
-                                                        zIndex: 150,
-                                                    }}>
-                                                        {renderHomeSearchBar()}
-                                                    </View>
-                                                </KeyboardAvoidingView>
-                                            </View>
+                                            <GeminiHome
+                                                theme={theme}
+                                                primaryColor={primaryColor}
+                                                userName={displaySettings.userName || 'there'}
+                                                displayLanguage={displaySettings.language}
+                                                allTools={(() => {
+                                                    const tools = getAllTools ? getAllTools() : [];
+                                                    return tools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner');
+                                                })()}
+                                                onToolPress={(tool) => {
+                                                    setLastUsedTools((prev: any) => {
+                                                        const newOrder = [tool.id, ...prev.filter((id: string) => id !== tool.id)];
+                                                        return newOrder.slice(0, 50);
+                                                    });
+                                                    if (tool.id === 'visual_learner') {
+                                                        setImagePickerMode('vision');
+                                                        setVisionDraft({ uris: [], prompt: "" });
+                                                        setShowImageSourceModal(true);
+                                                    } else {
+                                                        setSelectedScenario(tool);
+                                                        const defLength = tool.id === 'examiner' ? "" : "Medium";
+                                                        const targetSubject = tool.id === 'examiner' ? lastQuizSubject : "General";
+                                                        saveSchoolConfig({ input: "", length: defLength, complexity: "Intermediate", subject: targetSubject });
+                                                        setAppMode('setup');
+                                                    }
+                                                }}
+                                                onSearch={handleQuickSearch}
+                                                onVoicePress={() => handleVoiceToggle('search')}
+                                                onAttachPress={() => {
+                                                    setImagePickerMode('attach');
+                                                    setShowImageSourceModal(true);
+                                                }}
+                                                onVisionPress={() => {
+                                                    setImagePickerMode('vision');
+                                                    setVisionDraft({ uris: [], prompt: "" });
+                                                    setShowImageSourceModal(true);
+                                                }}
+                                                cycleGlobalLanguage={cycleGlobalLanguage}
+                                                renderHomeSearchBar={renderHomeSearchBar}
+                                            />
                                         )}
                                     </View>
                                 ) : activeTab === 'library' ? (
