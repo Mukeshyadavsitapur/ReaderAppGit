@@ -7913,8 +7913,8 @@ export default function App() {
             .filter((s: any) => {
                 if (!noteSearchQuery.trim()) return true;
                 const query = noteSearchQuery.toLowerCase();
-                const titleMatch = s.title?.toLowerCase().includes(query);
-                const contentMatch = s.messages[0]?.content?.toLowerCase().includes(query);
+                const titleMatch = s.title?.toLowerCase()?.includes(query) ?? false;
+                const contentMatch = s.messages?.[0]?.content?.toLowerCase()?.includes(query) ?? false;
                 return titleMatch || contentMatch;
             })
             .sort((a: any, b: any) => {
@@ -7934,8 +7934,8 @@ export default function App() {
                     // Apply Search Filter
                     if (librarySearchQuery.trim()) {
                         const q = librarySearchQuery.toLowerCase();
-                        const matchesTitle = s.title?.toLowerCase().includes(q);
-                        const matchesContent = s.messages?.[0]?.content?.toLowerCase().includes(q);
+                        const matchesTitle = s.title?.toLowerCase()?.includes(q) ?? false;
+                        const matchesContent = s.messages?.[0]?.content?.toLowerCase()?.includes(q) ?? false;
                         return matchesTitle || matchesContent;
                     }
                     return true;
@@ -8062,7 +8062,7 @@ export default function App() {
                     .filter(s => {
                         if (!librarySearchQuery.trim()) return true;
                         const q = librarySearchQuery.toLowerCase();
-                        return s.title?.toLowerCase().includes(q);
+                        return s.title?.toLowerCase()?.includes(q) ?? false;
                     })
                     .sort((a, b) => {
                         if (a.pinned && !b.pinned) return -1;
@@ -8074,7 +8074,7 @@ export default function App() {
                     .filter(q => {
                         if (!librarySearchQuery.trim()) return true;
                         const query = librarySearchQuery.toLowerCase();
-                        return q.question?.toLowerCase().includes(query) || q.explanation?.toLowerCase().includes(query);
+                        return (q.question?.toLowerCase()?.includes(query) ?? false) || (q.explanation?.toLowerCase()?.includes(query) ?? false);
                     })
                     .reverse();
             } else if (questionsViewMode === 'cards') {
@@ -8083,7 +8083,7 @@ export default function App() {
                     .filter((s: any) => {
                         if (!librarySearchQuery.trim()) return true;
                         const q = librarySearchQuery.toLowerCase();
-                        return s.title?.toLowerCase().includes(q);
+                        return s.title?.toLowerCase()?.includes(q) ?? false;
                     })
                     .sort((a, b) => {
                         if (a.pinned && !b.pinned) return -1;
@@ -8115,7 +8115,7 @@ export default function App() {
                     .filter(w => {
                         if (!librarySearchQuery.trim()) return true;
                         const query = librarySearchQuery.toLowerCase();
-                        return w.word?.toLowerCase().includes(query) || w.definition?.toLowerCase().includes(query);
+                        return (w.word?.toLowerCase()?.includes(query) ?? false) || (w.definition?.toLowerCase()?.includes(query) ?? false);
                     })
                     .reverse();
             }
@@ -23322,68 +23322,63 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         const headerBg = isDay ? theme.primary : theme.uiBg;
         const headerTextColor = isDay ? '#ffffff' : theme.text;
         const headerIconColor = isDay ? '#ffffff' : theme.text;
-        const logoBoxBg = isDay ? '#ffffff' : theme.logoBg;
-        const logoTextColor = isDay ? theme.primary : theme.logoText;
-        const borderColor = isDay ? 'transparent' : theme.border;
-        const borderBottomWidth = isDay ? 0 : 1;
+        
+        // Remove borders as requested
+        const borderColor = 'transparent';
+        const borderBottomWidth = 0;
 
         return (
-            <View style={[styles.header, { backgroundColor: headerBg, borderColor: borderColor, borderBottomWidth: borderBottomWidth }]}>
-                <View style={styles.logoContainer}>
+            <View style={[styles.header, { backgroundColor: headerBg, borderColor: borderColor, borderBottomWidth: borderBottomWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 }]}>
+                {/* LEFT section */}
+                <View style={{ flex: 1, alignItems: 'flex-start' }}>
                     {appMode === 'reader' ? (
-                        <>
-                            <TouchableOpacity
-                                onPress={() => toggleSideMenu(true)}
-                                activeOpacity={0.7}
-                                style={{
-                                    width: 40,
-                                    height: 40,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    marginRight: 8,
-                                    borderRadius: 20,
-                                    backgroundColor: isDay ? 'rgba(255,255,255,0.1)' : 'transparent'
-                                }}
-                            >
-                                <Menu size={22} color={isDay ? "white" : theme.secondary} />
-                            </TouchableOpacity>
-                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, flexShrink: 1 }]} numberOfLines={1}>
-                                    {readingSession?.title ? (readingSession.title.length > 30 ? readingSession.title.substring(0, 30) + '...' : readingSession.title) : "Reader"}
-                                </Text>
-                            </View>
-                        </>
+                        <TouchableOpacity
+                            onPress={() => toggleSideMenu(true)}
+                            activeOpacity={0.7}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: 20,
+                                backgroundColor: isDay ? 'rgba(255,255,255,0.1)' : 'transparent'
+                            }}
+                        >
+                            <Menu size={22} color={isDay ? "white" : theme.secondary} />
+                        </TouchableOpacity>
                     ) : showBack ? (
-                        <TouchableOpacity onPress={backAction} style={{ marginRight: 15 }}>
+                        <TouchableOpacity onPress={backAction} style={{ padding: 8 }}>
                             <ArrowLeft size={24} color={headerIconColor} />
                         </TouchableOpacity>
                     ) : (
-                        <>
-                            <TouchableOpacity
-                                onPress={() => toggleSideMenu(true)}
-                                activeOpacity={0.7}
-                                style={{
-                                    width: 40,
-                                    height: 40,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    marginRight: 8,
-                                    borderRadius: 20,
-                                    backgroundColor: isDay ? 'rgba(255,255,255,0.1)' : 'transparent'
-                                }}
-                            >
-                                <Menu size={22} color={isDay ? "white" : theme.secondary} />
-                            </TouchableOpacity>
-                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, flexShrink: 1 }]} numberOfLines={1}>
-                                    {displayTitle.length > 30 ? displayTitle.substring(0, 30) + '...' : displayTitle}
-                                </Text>
-                            </View>
-                        </>
+                        <TouchableOpacity
+                            onPress={() => toggleSideMenu(true)}
+                            activeOpacity={0.7}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: 20,
+                                backgroundColor: isDay ? 'rgba(255,255,255,0.1)' : 'transparent'
+                            }}
+                        >
+                            <Menu size={22} color={isDay ? "white" : theme.secondary} />
+                        </TouchableOpacity>
                     )}
                 </View>
 
-                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                {/* CENTER section */}
+                <View style={{ flex: 3, alignItems: 'center' }}>
+                    <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, textAlign: 'center', fontSize: 18, fontWeight: '700' }]} numberOfLines={1}>
+                        {appMode === 'reader' && readingSession?.title 
+                            ? (readingSession.title.length > 28 ? readingSession.title.substring(0, 28) + '...' : readingSession.title) 
+                            : (displayTitle.length > 28 ? displayTitle.substring(0, 28) + '...' : displayTitle)}
+                    </Text>
+                </View>
+
+                {/* RIGHT section */}
+                <View style={{ flex: 1, alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
                     {rightAction}
                 </View>
             </View>
@@ -28195,7 +28190,14 @@ Review the following raw transcribed text:
                                                                     fontWeight: '800', 
                                                                     color: theme.id === 'day' ? '#333333' : theme.text
                                                                 }]}>
-                                                                    {uiData.staticText?.home?.subtitle || "How can I help you today?"}
+                                                                    {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
+                                                                    {' in '}
+                                                                    <Text
+                                                                        onPress={cycleGlobalLanguage}
+                                                                        style={{ color: primaryColor, textDecorationLine: 'underline' }}
+                                                                    >
+                                                                        {displaySettings.language}
+                                                                    </Text>
                                                                 </Text>
                                                             </View>
                                                         )}
