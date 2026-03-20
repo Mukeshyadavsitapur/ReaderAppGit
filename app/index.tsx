@@ -5427,10 +5427,13 @@ export default function App() {
     const [showReferenceText, setShowReferenceText] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [customChatbotCharacters, setCustomChatbotCharacters] = useState<any[]>([]);
+    const [customMenuFeatures, setCustomMenuFeatures] = useState<any[]>([]);
     const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
+    const [showAddMenuFeatureModal, setShowAddMenuFeatureModal] = useState(false);
     const [newCharName, setNewCharName] = useState("");
     const [newCharPrompt, setNewCharPrompt] = useState("");
     const [isTranscribing, setIsTranscribing] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // NEW: Sharing Lock State to prevent multiple tap crashes
     const [isSharing, setIsSharing] = useState<any>(false);
@@ -6989,6 +6992,39 @@ export default function App() {
     const [showPromptCreator, setShowPromptCreator] = useState(false);
     const [newPromptData, setNewPromptData] = useState({ label: "", prompt: "" });
 
+    useEffect(() => {
+        const loadCustomData = async () => {
+            try {
+                const [savedChars, savedFeatures] = await Promise.all([
+                    AsyncStorage.getItem('customChatbotCharacters'),
+                    AsyncStorage.getItem('customMenuFeatures')
+                ]);
+                if (savedChars) setCustomChatbotCharacters(JSON.parse(savedChars));
+                if (savedFeatures) setCustomMenuFeatures(JSON.parse(savedFeatures));
+            } catch (e) {
+                console.warn("Failed to load custom data", e);
+            }
+        };
+        loadCustomData();
+    }, []);
+
+    useEffect(() => {
+        const saveCustomChars = async () => {
+            try {
+                await AsyncStorage.setItem('customChatbotCharacters', JSON.stringify(customChatbotCharacters));
+            } catch (e) { }
+        };
+        saveCustomChars();
+    }, [customChatbotCharacters]);
+
+    useEffect(() => {
+        const saveCustomFeatures = async () => {
+            try {
+                await AsyncStorage.setItem('customMenuFeatures', JSON.stringify(customMenuFeatures));
+            } catch (e) { }
+        };
+        saveCustomFeatures();
+    }, [customMenuFeatures]);
 
 
     // Pagination Removed: visibleLibraryCount reset logic deleted.
@@ -22950,6 +22986,39 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <View style={{ paddingTop: 50, paddingBottom: 20 }}>
                         <ScrollView style={{ paddingHorizontal: 4 }}>
                             <View style={{ gap: 4, paddingVertical: 8 }}>
+                                {/* 0. Custom Features (ADDED ABOVE ALL) */}
+                                {customMenuFeatures.map((feature) => (
+                                    <TouchableOpacity
+                                        key={feature.id}
+                                        onPress={() => {
+                                            toggleSideMenu(false);
+                                            setIsChatbotMode(true);
+                                            handleChatbotCharSelect(feature);
+                                        }}
+                                        onLongPress={() => handleLongPressCustomFeature(feature)}
+                                        style={[styles.menuItem, (selectedScenario?.id === feature.id && isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                    >
+                                        <Sparkles size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]} numberOfLines={1}>{feature.title}</Text>
+                                        <View style={{ backgroundColor: primaryColor + '15', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginLeft: 'auto' }}>
+                                            <Text style={{ fontSize: 8, color: primaryColor, fontWeight: 'bold' }}>NEW</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        toggleSideMenu(false);
+                                        setNewCharName("");
+                                        setNewCharPrompt("");
+                                        setShowAddMenuFeatureModal(true);
+                                    }}
+                                    style={[styles.menuItem, { opacity: 0.8, borderStyle: 'dashed', borderWidth: 1, borderColor: theme.border, marginBottom: 8 }]}
+                                >
+                                    <Plus size={20} color={theme.secondary} />
+                                    <Text style={[styles.menuItemText, { color: theme.secondary }]}>Generate New Feature</Text>
+                                </TouchableOpacity>
+
                                 {/* 1. New Session */}
                                 <TouchableOpacity
                                     onPress={() => {
@@ -23220,36 +23289,116 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             return;
         }
 
-        const newChar = {
-            id: `custom_${Date.now()}`,
-            title: newCharName.trim(),
-            role: 'Custom Character',
-            prompt: newCharPrompt.trim(),
-            iconName: 'User',
-            color: [primaryColor, primaryColor],
-            greeting: `Hello! I'm ${newCharName.trim()}. How can I help you today?`,
-            isCustom: true
-        };
+        if (editingId) {
+            setCustomChatbotCharacters(prev => prev.map(c => 
+                c.id === editingId 
+                ? { ...c, title: newCharName.trim(), prompt: newCharPrompt.trim(), greeting: `Hello! I'm ${newCharName.trim()}. How can I help you today?` }
+                : c
+            ));
+            showToast("Character updated!");
+        } else {
+            const newChar = {
+                id: `custom_${Date.now()}`,
+                title: newCharName.trim(),
+                role: 'Custom Character',
+                prompt: newCharPrompt.trim(),
+                iconName: 'User',
+                color: [primaryColor, primaryColor],
+                greeting: `Hello! I'm ${newCharName.trim()}. How can I help you today?`,
+                isCustom: true
+            };
+            setCustomChatbotCharacters(prev => [newChar, ...prev]);
+            showToast("Character added!");
+        }
 
-        setCustomChatbotCharacters(prev => [newChar, ...prev]);
         setNewCharName("");
         setNewCharPrompt("");
+        setEditingId(null);
         setShowAddCharacterModal(false);
-        showToast("Character added successfully!");
     };
 
-    const handleDeleteCustomCharacter = (char: any) => {
+    const handleLongPressCustomCharacter = (char: any) => {
         Alert.alert(
-            "Delete Character",
-            `Are you sure you want to delete "${char.title}"?`,
+            "Options",
+            char.title,
             [
                 { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Edit", 
+                    onPress: () => {
+                        setNewCharName(char.title);
+                        setNewCharPrompt(char.prompt);
+                        setEditingId(char.id);
+                        setShowAddCharacterModal(true);
+                    }
+                },
                 { 
                     text: "Delete", 
                     style: "destructive", 
                     onPress: () => {
                         setCustomChatbotCharacters(prev => prev.filter(c => c.id !== char.id));
                         showToast("Character deleted.");
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleAddCustomFeature = () => {
+        if (!newCharName.trim() || !newCharPrompt.trim()) {
+            showToast("Please provide both name and instruction.");
+            return;
+        }
+
+        if (editingId) {
+            setCustomMenuFeatures(prev => prev.map(f => 
+                f.id === editingId 
+                ? { ...f, title: newCharName.trim(), prompt: newCharPrompt.trim(), greeting: `Hello! I'm your ${newCharName.trim()} assistant. How can I help you?` }
+                : f
+            ));
+            showToast("Feature updated!");
+        } else {
+            const newFeature = {
+                id: `feature_${Date.now()}`,
+                title: newCharName.trim(),
+                role: 'Custom Feature',
+                prompt: newCharPrompt.trim(),
+                iconName: 'Sparkles',
+                color: [primaryColor, primaryColor],
+                greeting: `Hello! I'm your ${newCharName.trim()} assistant. How can I help you?`,
+                isCustom: true
+            };
+            setCustomMenuFeatures(prev => [newFeature, ...prev]);
+            showToast("Feature added to menu!");
+        }
+
+        setNewCharName("");
+        setNewCharPrompt("");
+        setEditingId(null);
+        setShowAddMenuFeatureModal(false);
+    };
+
+    const handleLongPressCustomFeature = (feature: any) => {
+        Alert.alert(
+            "Options",
+            feature.title,
+            [
+                { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Edit", 
+                    onPress: () => {
+                        setNewCharName(feature.title);
+                        setNewCharPrompt(feature.prompt);
+                        setEditingId(feature.id);
+                        setShowAddMenuFeatureModal(true);
+                    }
+                },
+                { 
+                    text: "Delete", 
+                    style: "destructive", 
+                    onPress: () => {
+                        setCustomMenuFeatures(prev => prev.filter(f => f.id !== feature.id));
+                        showToast("Feature removed.");
                     }
                 }
             ]
@@ -23318,7 +23467,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     <TouchableOpacity
                                         key={char.id}
                                         onPress={() => handleChatbotCharSelect(char)}
-                                        onLongPress={() => char.isCustom && handleDeleteCustomCharacter(char)}
+                                        onLongPress={() => char.isCustom && handleLongPressCustomCharacter(char)}
                                         activeOpacity={0.7}
                                         style={{
                                             flexDirection: 'row',
@@ -23358,7 +23507,12 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                             {/* Add New Character Button */}
                             <TouchableOpacity
-                                onPress={() => setShowAddCharacterModal(true)}
+                                onPress={() => {
+                                    setEditingId(null);
+                                    setNewCharName("");
+                                    setNewCharPrompt("");
+                                    setShowAddCharacterModal(true);
+                                }}
                                 activeOpacity={0.7}
                                 style={{
                                     flexDirection: 'row',
@@ -23391,93 +23545,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
-
-                    {/* Add Character Modal */}
-                    <Modal
-                        visible={showAddCharacterModal}
-                        animationType="slide"
-                        transparent={true}
-                        onRequestClose={() => setShowAddCharacterModal(false)}
-                    >
-                        <KeyboardAvoidingView 
-                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-                            style={{ flex: 1 }}
-                        >
-                            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                                <View style={{ 
-                                    backgroundColor: theme.bg, 
-                                    borderTopLeftRadius: 32, 
-                                    borderTopRightRadius: 32, 
-                                    padding: 24,
-                                    paddingBottom: 40,
-                                    maxHeight: '80%'
-                                }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                                        <Text style={{ fontSize: 20, fontWeight: '900', color: theme.text }}>New Character</Text>
-                                        <TouchableOpacity onPress={() => setShowAddCharacterModal(false)}>
-                                            <X size={24} color={theme.secondary} />
-                                        </TouchableOpacity>
-                                    </View>
-
-                                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.secondary, marginBottom: 8, marginLeft: 4 }}>CHARACTER NAME</Text>
-                                    <TextInput
-                                        style={{
-                                            backgroundColor: theme.uiBg,
-                                            borderRadius: 16,
-                                            padding: 16,
-                                            color: theme.text,
-                                            fontSize: 16,
-                                            marginBottom: 20,
-                                            borderWidth: 1,
-                                            borderColor: theme.border
-                                        }}
-                                        placeholder="e.g. Science Professor"
-                                        placeholderTextColor={theme.secondary + '70'}
-                                        value={newCharName}
-                                        onChangeText={setNewCharName}
-                                    />
-
-                                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.secondary, marginBottom: 8, marginLeft: 4 }}>SYSTEM INSTRUCTION (PROMPT)</Text>
-                                    <TextInput
-                                        style={{
-                                            backgroundColor: theme.uiBg,
-                                            borderRadius: 16,
-                                            padding: 16,
-                                            color: theme.text,
-                                            fontSize: 15,
-                                            minHeight: 120,
-                                            textAlignVertical: 'top',
-                                            marginBottom: 32,
-                                            borderWidth: 1,
-                                            borderColor: theme.border
-                                        }}
-                                        placeholder="Describe how the AI should behave..."
-                                        placeholderTextColor={theme.secondary + '70'}
-                                        multiline
-                                        value={newCharPrompt}
-                                        onChangeText={setNewCharPrompt}
-                                    />
-
-                                    <TouchableOpacity
-                                        onPress={handleAddCustomCharacter}
-                                        style={{
-                                            backgroundColor: primaryColor,
-                                            borderRadius: 18,
-                                            paddingVertical: 16,
-                                            alignItems: 'center',
-                                            shadowColor: primaryColor,
-                                            shadowOffset: { width: 0, height: 4 },
-                                            shadowOpacity: 0.3,
-                                            shadowRadius: 8,
-                                            elevation: 6
-                                        }}
-                                    >
-                                        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Save Character</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        </KeyboardAvoidingView>
-                    </Modal>
                 </View>
             </View>
         );
@@ -33651,6 +33718,200 @@ Review the following raw transcribed text:
                     </View>
                 </TouchableOpacity>
             </Modal>
+            {/* Add/Edit Character Modal (Global) */}
+            <Modal
+                visible={showAddCharacterModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => {
+                    setShowAddCharacterModal(false);
+                    setEditingId(null);
+                }}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={{ flex: 1 }}
+                >
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                        <View style={{
+                            backgroundColor: theme.bg,
+                            borderTopLeftRadius: 32,
+                            borderTopRightRadius: 32,
+                            padding: 24,
+                            paddingBottom: 40,
+                            maxHeight: '80%'
+                        }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                                <Text style={{ fontSize: 20, fontWeight: '900', color: theme.text }}>
+                                    {editingId ? "Edit Character" : "New Character"}
+                                </Text>
+                                <TouchableOpacity onPress={() => {
+                                    setShowAddCharacterModal(false);
+                                    setEditingId(null);
+                                }}>
+                                    <X size={24} color={theme.secondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.secondary, marginBottom: 8, marginLeft: 4 }}>CHARACTER NAME</Text>
+                            <TextInput
+                                style={{
+                                    backgroundColor: theme.uiBg,
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    color: theme.text,
+                                    fontSize: 16,
+                                    marginBottom: 20,
+                                    borderWidth: 1,
+                                    borderColor: theme.border
+                                }}
+                                placeholder="e.g. Science Professor"
+                                placeholderTextColor={theme.secondary + '70'}
+                                value={newCharName}
+                                onChangeText={setNewCharName}
+                            />
+
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.secondary, marginBottom: 8, marginLeft: 4 }}>SYSTEM INSTRUCTION (PROMPT)</Text>
+                            <TextInput
+                                style={{
+                                    backgroundColor: theme.uiBg,
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    color: theme.text,
+                                    fontSize: 15,
+                                    minHeight: 120,
+                                    textAlignVertical: 'top',
+                                    marginBottom: 32,
+                                    borderWidth: 1,
+                                    borderColor: theme.border
+                                }}
+                                placeholder="Define your character's personality and knowledge..."
+                                placeholderTextColor={theme.secondary + '70'}
+                                multiline
+                                value={newCharPrompt}
+                                onChangeText={setNewCharPrompt}
+                            />
+
+                            <TouchableOpacity
+                                onPress={handleAddCustomCharacter}
+                                style={{
+                                    backgroundColor: primaryColor,
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    alignItems: 'center',
+                                    shadowColor: primaryColor,
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 8,
+                                    elevation: 4
+                                }}
+                            >
+                                <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
+                                    {editingId ? "Update Character" : "Create Character"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Add/Edit Menu Feature Modal (Global) */}
+            <Modal
+                visible={showAddMenuFeatureModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => {
+                    setShowAddMenuFeatureModal(false);
+                    setEditingId(null);
+                }}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={{ flex: 1 }}
+                >
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                        <View style={{
+                            backgroundColor: theme.bg,
+                            borderTopLeftRadius: 32,
+                            borderTopRightRadius: 32,
+                            padding: 24,
+                            paddingBottom: 40,
+                            maxHeight: '80%'
+                        }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                                <Text style={{ fontSize: 20, fontWeight: '900', color: theme.text }}>
+                                    {editingId ? "Edit Feature" : "Generate New Feature"}
+                                </Text>
+                                <TouchableOpacity onPress={() => {
+                                    setShowAddMenuFeatureModal(false);
+                                    setEditingId(null);
+                                }}>
+                                    <X size={24} color={theme.secondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.secondary, marginBottom: 8, marginLeft: 4 }}>FEATURE NAME</Text>
+                            <TextInput
+                                style={{
+                                    backgroundColor: theme.uiBg,
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    color: theme.text,
+                                    fontSize: 16,
+                                    marginBottom: 20,
+                                    borderWidth: 1,
+                                    borderColor: theme.border
+                                }}
+                                placeholder="e.g. Travel Translator"
+                                placeholderTextColor={theme.secondary + '70'}
+                                value={newCharName}
+                                onChangeText={setNewCharName}
+                            />
+
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.secondary, marginBottom: 8, marginLeft: 4 }}>SYSTEM INSTRUCTION (PROMPT)</Text>
+                            <TextInput
+                                style={{
+                                    backgroundColor: theme.uiBg,
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    color: theme.text,
+                                    fontSize: 15,
+                                    minHeight: 120,
+                                    textAlignVertical: 'top',
+                                    marginBottom: 32,
+                                    borderWidth: 1,
+                                    borderColor: theme.border
+                                }}
+                                placeholder="Define the behavior of this feature..."
+                                placeholderTextColor={theme.secondary + '70'}
+                                multiline
+                                value={newCharPrompt}
+                                onChangeText={setNewCharPrompt}
+                            />
+
+                            <TouchableOpacity
+                                onPress={handleAddCustomFeature}
+                                style={{
+                                    backgroundColor: primaryColor,
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    alignItems: 'center',
+                                    shadowColor: primaryColor,
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 8,
+                                    elevation: 4
+                                }}
+                            >
+                                <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
+                                    {editingId ? "Update Feature" : "Create Feature"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
         </SafeAreaProvider >
     );
 }
