@@ -2108,7 +2108,7 @@ const SPEECH_RECORDING_OPTIONS: any = {
 // HELPER: FileSystem Storage for Recent Searches
 const getRecentSearchesPath = () => {
     if (isWeb) return 'recentSearches_web'; // AsyncStorage key
-    return FileSystem.documentDirectory + 'recentSearches.json';
+    return FileSystem.documentDirectory + 'recent_searches.json';
 };
 
 const saveRecentSearchesToFile = async (searches: any[]) => {
@@ -2141,7 +2141,7 @@ const loadRecentSearchesFromFile = async () => {
                 return Array.isArray(parsed) ? parsed : [];
             }
         }
-        return [];
+        return null;
     } catch (e) {
         console.error("Failed to load recent searches from file:", e);
         return null;
@@ -5112,6 +5112,7 @@ LibrarySessionItem.displayName = 'LibrarySessionItem';
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        minHeight: isWeb ? '100vh' : 'auto',
     },
     header: { height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1 },
     logoContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
@@ -5151,12 +5152,17 @@ const styles = StyleSheet.create({
     historyItem: { padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
     historyTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
     footer: {
+        position: isWeb ? 'fixed' : 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
         flexDirection: 'row',
         height: 80, // Increased from 60 to 80
         borderTopWidth: 1,
         alignItems: 'center',
         justifyContent: 'space-around',
-        paddingBottom: 10 // Added padding for safe area
+        paddingBottom: 10, // Added padding for safe area
+        zIndex: 1000, // Ensure it stays above content
     },
     tabItem: {
         flex: 1,
@@ -7364,30 +7370,6 @@ export default function App() {
 
     // NEW: Sync Refs for Deep Link Handler and Auto-Submit
     useEffect(() => { setRecentSearchesRef.current = setRecentSearches; }, [setRecentSearches]);
-
-    // SANITIZATION: Check for corrupt "Objects as React Child" data in recent searches on startup
-    // --- NEW: FILE-BASED STORAGE HELPERS (Unlimited Size) ---
-    const getRecentSearchesPath = () => `${FileSystem.documentDirectory}recent_searches.json`;
-
-    const saveRecentSearchesToFile = async (data: any) => {
-        try {
-            await FileSystem.writeAsStringAsync(getRecentSearchesPath(), JSON.stringify(data), { encoding: 'utf8' });
-        } catch (e) {
-            console.error("Failed to save dictionary to file", e);
-        }
-    };
-
-    const loadRecentSearchesFromFile = async () => {
-        try {
-            const path = getRecentSearchesPath();
-            // REFACTOR: getInfoAsync is deprecated. Attempt read directly.
-            const content = await FileSystem.readAsStringAsync(path, { encoding: 'utf8' });
-            return JSON.parse(content);
-        } catch (e) {
-            // File doesn't exist or read failed. Return null to trigger migration check.
-            return null;
-        }
-    };
 
     // SANITIZATION: Check for corrupt "Objects as React Child" data in recent searches on startup
     // UPDATED: Handles migration from AsyncStorage -> FileSystem
@@ -16143,7 +16125,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             >
                                 <Pressable
                                     onPress={handleFlip}
-                                    style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', padding: 20, paddingTop: 40, paddingBottom: 60 }}
+                                    style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', padding: 20, paddingTop: 40, paddingBottom: 90 }}
                                 >
                                     <Text style={{ fontSize: 13 * (displaySettings.fontSize || 1), fontWeight: 'bold', color: theme.secondary, textTransform: 'uppercase', marginBottom: 20 }}>
                                         {flashcardSession.type === 'word' ? 'Word' : (flashcardSession.type === 'generated' ? 'Question' : 'Question')}
@@ -16195,7 +16177,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             >
                                 <Pressable
                                     onPress={handleFlip}
-                                    style={{ flex: 1, alignItems: 'center', padding: 20, paddingTop: 20, minHeight: '100%', paddingBottom: 60 }}
+                                    style={{ flex: 1, alignItems: 'center', padding: 20, paddingTop: 20, minHeight: '100%', paddingBottom: 90 }}
                                 >
                                     <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#22c55e', textTransform: 'uppercase', marginBottom: 5, marginTop: 10 }}>
                                         {flashcardSession.type === 'word' ? 'Definition' : (flashcardSession.type === 'generated' ? 'Explanation' : 'Answer')}
@@ -23581,31 +23563,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     </View>
                                 </View>
                             )}
-                            <View style={{ marginTop: 24, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 16, paddingHorizontal: 12, marginBottom: 20 }}>
-                                <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Tools</Text>
-                                <TouchableOpacity
-                                    onPress={handleDownloadDictionary}
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        gap: 12,
-                                        paddingVertical: 4
-                                    }}
-                                >
-                                    <View style={{
-                                        width: 32, height: 32,
-                                        borderRadius: 8,
-                                        backgroundColor: theme.buttonBg,
-                                        alignItems: 'center', justifyContent: 'center'
-                                    }}>
-                                        <DownloadCloud size={18} color={theme.primary} />
-                                    </View>
-                                    <View>
-                                        <Text style={{ fontSize: 14, color: theme.text, fontWeight: '600' }}>Offline Dictionary</Text>
-                                        <Text style={{ fontSize: 11, color: theme.secondary }}>Download for offline use</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            </View>
+
                         </ScrollView>
                     </View>
                 </Animated.View>
@@ -26522,6 +26480,36 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 20 }} />
 
                     <TouchableOpacity
+                        onPress={handleDownloadDictionary}
+                        style={{
+                            backgroundColor: theme.buttonBg,
+                            borderColor: theme.border,
+                            borderWidth: 1,
+                            borderRadius: 12,
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            alignItems: 'center',
+                            flexDirection: 'row',
+                            marginBottom: 20
+                        }}
+                    >
+                        <View style={{ 
+                            width: 36, height: 36, 
+                            borderRadius: 10, 
+                            backgroundColor: isDay ? '#f0f9ff' : 'rgba(56, 189, 248, 0.1)', 
+                            alignItems: 'center', justifyContent: 'center',
+                            marginRight: 12
+                        }}>
+                            <DownloadCloud size={20} color={isDay ? theme.primary : '#38bdf8'} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text }}>Offline Dictionary</Text>
+                            <Text style={{ fontSize: 12, color: theme.secondary }}>Download for offline use</Text>
+                        </View>
+                        <ChevronRight size={18} color={theme.secondary} opacity={0.5} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                         onPress={handleResetLibrary}
                         style={{
                             backgroundColor: theme.buttonBg,
@@ -26722,7 +26710,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 activeOpacity={0.9}
                 style={{
                     position: 'absolute',
-                    bottom: (appMode === 'idle' ? 60 : 0), // Adjust position above Footer in idle mode
+                    bottom: (appMode === 'idle' ? 80 : 0), // Adjust position above Footer in idle mode
                     left: 0,
                     right: 0,
                     backgroundColor: theme.uiBg,
