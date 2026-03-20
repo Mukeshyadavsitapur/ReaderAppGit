@@ -48,7 +48,6 @@ import {
     Dumbbell,
     ExternalLink,
     Eye,
-    EyeOff,
     Feather,
     FileDown,
     File as FileIcon,
@@ -56,7 +55,6 @@ import {
     Files,
     FileText,
     Flag,
-    Flower,
     Gamepad2,
     Gavel,
     Globe,
@@ -80,19 +78,19 @@ import {
     Mail,
     Maximize2,
     Megaphone,
+    Menu,
     MessageSquare,
     Mic,
     Microscope,
     Minus,
     MonitorCheck,
     Moon,
-    MoonStar,
+    MoreVertical,
     Music,
     NotebookPen,
     Palette,
     Pause,
     PenLine,
-    PhoneCall,
     PhoneOff,
     Pin,
     Plane,
@@ -132,9 +130,7 @@ import {
     Wrench,
     X,
     XCircle,
-    Youtube,
-    Menu,
-    MoreVertical
+    Youtube
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -4250,12 +4246,12 @@ const InteractiveText = React.memo(({ rawText, onWordPress, onLinkPress, style, 
                                         pressTrackerRef.current = { time: Date.now(), x: pageX, y: pageY };
                                     }}
                                     onPress={isInteractive ? (e) => {
-                                        const { pageX, pageY } = e.nativeEvent || {}; 
+                                        const { pageX, pageY } = e.nativeEvent || {};
                                         const { time, x, y } = pressTrackerRef.current;
                                         const isWeb = Platform.OS === 'web';
 
                                         const duration = Date.now() - time;
-                                        
+
                                         // On Web, coordinate tracking results (pageX/pageY) can be less reliable on Text elements 
                                         // especially when selectable is true. We relax the check for Web.
                                         if (isWeb) {
@@ -4309,7 +4305,7 @@ const InteractiveText = React.memo(({ rawText, onWordPress, onLinkPress, style, 
     if (prev.rawText !== next.rawText ||
         prev.paragraphOffset !== next.paragraphOffset ||
         prev.theme.id !== next.theme.id ||
-        prev.theme.text !== next.theme.text || 
+        prev.theme.text !== next.theme.text ||
         prev.theme.bg !== next.theme.bg ||     // NEW: Check for background changes
         prev.isHighlightMode !== next.isHighlightMode ||
         prev.tapToDefineEnabled !== next.tapToDefineEnabled ||
@@ -10181,65 +10177,65 @@ export default function App() {
                         // FALLBACK / MIGRATION: No Index Found (First run or post-restore)
                         // We must crawl all individual keys to build the index.
                         console.log("Starting migration crawl...");
-                    try {
-                        const indexJson = await AsyncStorage.getItem('session_index');
-                        if (indexJson) {
-                            const ids = JSON.parse(indexJson);
-                            if (Array.isArray(ids)) {
-                                // Reverse to prioritize newest, but we will load ALL eventually
-                                const reversedIds = [...ids].reverse();
-                                setAllSessionIds(reversedIds);
+                        try {
+                            const indexJson = await AsyncStorage.getItem('session_index');
+                            if (indexJson) {
+                                const ids = JSON.parse(indexJson);
+                                if (Array.isArray(ids)) {
+                                    // Reverse to prioritize newest, but we will load ALL eventually
+                                    const reversedIds = [...ids].reverse();
+                                    setAllSessionIds(reversedIds);
 
-                                // Crawler Config
-                                const BATCH_SIZE = 12; // Keep safe for Android CursorWindow
-                                let fullMetadataMap: Record<string, any> = {};
+                                    // Crawler Config
+                                    const BATCH_SIZE = 12; // Keep safe for Android CursorWindow
+                                    let fullMetadataMap: Record<string, any> = {};
 
-                                console.log(`Crawl Started: Index contains ${reversedIds.length} items. Fetching in batches...`);
+                                    console.log(`Crawl Started: Index contains ${reversedIds.length} items. Fetching in batches...`);
 
-                                for (let i = 0; i < reversedIds.length; i += BATCH_SIZE) {
-                                    const batchIds = reversedIds.slice(i, i + BATCH_SIZE);
-                                    const batchKeys = batchIds.map(id => `session_${id}`);
+                                    for (let i = 0; i < reversedIds.length; i += BATCH_SIZE) {
+                                        const batchIds = reversedIds.slice(i, i + BATCH_SIZE);
+                                        const batchKeys = batchIds.map(id => `session_${id}`);
 
-                                    try {
-                                        const chunks = await AsyncStorage.multiGet(batchKeys);
-                                        let batchSuccessCount = 0;
-                                        chunks.forEach(([key, value]) => {
-                                            if (value) {
-                                                try {
-                                                    const id = key.replace('session_', '');
-                                                    const liteSession = parseSessionLite(value);
-                                                    if (liteSession) {
-                                                        fullMetadataMap[id] = liteSession;
-                                                        batchSuccessCount++;
+                                        try {
+                                            const chunks = await AsyncStorage.multiGet(batchKeys);
+                                            let batchSuccessCount = 0;
+                                            chunks.forEach(([key, value]) => {
+                                                if (value) {
+                                                    try {
+                                                        const id = key.replace('session_', '');
+                                                        const liteSession = parseSessionLite(value);
+                                                        if (liteSession) {
+                                                            fullMetadataMap[id] = liteSession;
+                                                            batchSuccessCount++;
+                                                        }
+                                                    } catch (parseError) {
+                                                        console.error(`Corrupt session JSON for key ${key}:`, parseError);
                                                     }
-                                                } catch (parseError) {
-                                                    console.error(`Corrupt session JSON for key ${key}:`, parseError);
                                                 }
-                                            }
-                                        });
-                                        // console.log(`Batch ${i} loaded: ${batchSuccessCount} items.`);
+                                            });
+                                            // console.log(`Batch ${i} loaded: ${batchSuccessCount} items.`);
 
-                                        // Incremental Update (Visual Progress)
-                                        setChatSessions((prev: any) => ({ ...prev, ...fullMetadataMap }));
+                                            // Incremental Update (Visual Progress)
+                                            setChatSessions((prev: any) => ({ ...prev, ...fullMetadataMap }));
 
-                                        // Yield to UI
-                                        await new Promise(resolve => setTimeout(resolve, 10));
+                                            // Yield to UI
+                                            await new Promise(resolve => setTimeout(resolve, 10));
 
-                                    } catch (batchError) {
-                                        console.error("Error loading batch:", batchError);
+                                        } catch (batchError) {
+                                            console.error("Error loading batch:", batchError);
+                                        }
                                     }
-                                }
 
-                                // FINISH: Save the newly built index for next time
-                                if (Object.keys(fullMetadataMap).length > 0) {
-                                    await AsyncStorage.setItem('library_metadata_index', JSON.stringify(fullMetadataMap));
-                                    console.log("✅ Migration Complete: Saved NEW library_metadata_index.");
-                                } else {
-                                    console.warn("⚠️ Migration finished but no items loaded. Index might be empty.");
+                                    // FINISH: Save the newly built index for next time
+                                    if (Object.keys(fullMetadataMap).length > 0) {
+                                        await AsyncStorage.setItem('library_metadata_index', JSON.stringify(fullMetadataMap));
+                                        console.log("✅ Migration Complete: Saved NEW library_metadata_index.");
+                                    } else {
+                                        console.warn("⚠️ Migration finished but no items loaded. Index might be empty.");
+                                    }
+                                    setLoadedSessionCount(reversedIds.length);
                                 }
-                                setLoadedSessionCount(reversedIds.length);
                             }
-                        }
                         } catch (crawlError) {
                             console.error("Crawl logic failed:", crawlError);
                         }
@@ -22926,19 +22922,19 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             activeOpacity={1}
                             onPress={() => setIsReaderMenuVisible(false)}
                         >
-                             <View style={{
-                                 backgroundColor: theme.uiBg,
-                                 width: 220,
-                                 borderRadius: 20,
-                                 padding: 8,
-                                 shadowColor: "#000",
-                                 shadowOffset: { width: 0, height: 10 },
-                                 shadowOpacity: 0.3,
-                                 shadowRadius: 20,
-                                 elevation: 10,
-                                 borderWidth: 1,
-                                 borderColor: theme.border
-                             }}>
+                            <View style={{
+                                backgroundColor: theme.uiBg,
+                                width: 220,
+                                borderRadius: 20,
+                                padding: 8,
+                                shadowColor: "#000",
+                                shadowOffset: { width: 0, height: 10 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 20,
+                                elevation: 10,
+                                borderWidth: 1,
+                                borderColor: theme.border
+                            }}>
                                 <ScrollView bounces={false}>
                                     {/* Smart Discovery */}
                                     <TouchableOpacity
@@ -23403,6 +23399,22 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             older: allSessions.filter((s: any) => new Date(s.lastOpened || s.timestamp).getTime() < sevenDaysAgo)
         };
 
+        const allRecentSessions = [
+            ...groups.today,
+            ...groups.yesterday,
+            ...groups.previous7,
+            ...groups.older
+        ];
+        const limitedSessionIds = new Set(allRecentSessions.slice(0, 20).map((s: any) => s.id));
+        const hasMoreSessions = allRecentSessions.length > 20;
+
+        const limitedGroups = {
+            today: groups.today.filter((s: any) => limitedSessionIds.has(s.id)),
+            yesterday: groups.yesterday.filter((s: any) => limitedSessionIds.has(s.id)),
+            previous7: groups.previous7.filter((s: any) => limitedSessionIds.has(s.id)),
+            older: groups.older.filter((s: any) => limitedSessionIds.has(s.id))
+        };
+
         const renderGroup = (label: string, sessions: any[]) => {
             if (sessions.length === 0) return null;
             return (
@@ -23486,7 +23498,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         <ScrollView style={{ paddingHorizontal: 4 }}>
                             <View style={{ gap: 4, paddingVertical: 8 }}>
                                 {/* 1. New Session */}
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => {
                                         toggleSideMenu(false);
                                         setAppMode('idle');
@@ -23499,8 +23511,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 </TouchableOpacity>
 
                                 {/* 2. Notes */}
-                                <TouchableOpacity 
-                                    onPress={() => { toggleSideMenu(false); setActiveTab('notes'); setAppMode('idle'); }} 
+                                <TouchableOpacity
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('notes'); setAppMode('idle'); }}
                                     style={[styles.menuItem, (activeTab === 'notes' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
                                 >
                                     <NotebookPen size={20} color={primaryColor} />
@@ -23525,7 +23537,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     >
                                         <Bot size={20} color={primaryColor} />
                                         <Text style={[styles.menuItemText, { color: theme.text }]}>
-                                            {isChatbotMode ? "Switch to Reader" : "Open Chatbot"}
+                                            {isChatbotMode ? "Switch to Reader" : "Chatbot"}
                                         </Text>
                                     </TouchableOpacity>
 
@@ -23566,8 +23578,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 </View>
 
                                 {/* 4. Dictionary */}
-                                <TouchableOpacity 
-                                    onPress={() => { toggleSideMenu(false); setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }} 
+                                <TouchableOpacity
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }}
                                     style={[styles.menuItem, (activeTab === 'dictionary' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
                                 >
                                     <BookA size={20} color={primaryColor} />
@@ -23594,8 +23606,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 </TouchableOpacity>
 
                                 {/* 6. Studio */}
-                                <TouchableOpacity 
-                                    onPress={() => { toggleSideMenu(false); setActiveTab('story'); setAppMode('idle'); }} 
+                                <TouchableOpacity
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('story'); setAppMode('idle'); }}
                                     style={[styles.menuItem, (activeTab === 'story' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
                                 >
                                     <BookAudio size={20} color={primaryColor} />
@@ -23603,8 +23615,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 </TouchableOpacity>
 
                                 {/* 7. Library */}
-                                <TouchableOpacity 
-                                    onPress={() => { toggleSideMenu(false); setActiveTab('library'); setAppMode('idle'); }} 
+                                <TouchableOpacity
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('library'); setAppMode('idle'); }}
                                     style={[styles.menuItem, (activeTab === 'library' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
                                 >
                                     <Library size={20} color={primaryColor} />
@@ -23612,10 +23624,25 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 </TouchableOpacity>
                             </View>
 
-                            {renderGroup("Today", groups.today)}
-                            {renderGroup("Yesterday", groups.yesterday)}
-                            {renderGroup("Previous 7 Days", groups.previous7)}
-                            {renderGroup("Older", groups.older)}
+                            {renderGroup("Today", limitedGroups.today)}
+                            {renderGroup("Yesterday", limitedGroups.yesterday)}
+                            {renderGroup("Previous 7 Days", limitedGroups.previous7)}
+                            {renderGroup("Older", limitedGroups.older)}
+
+                            {hasMoreSessions && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        toggleSideMenu(false);
+                                        setActiveTab('library');
+                                        setAppMode('idle');
+                                    }}
+                                    style={{ marginTop: 4, alignItems: 'center', padding: 12 }}
+                                >
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>Manage all activity</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            )}
 
                             {/* Vocabulary Section (Streamlined) */}
                             {recentSearches.length > 0 && (
@@ -26612,10 +26639,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             marginBottom: 20
                         }}
                     >
-                        <View style={{ 
-                            width: 36, height: 36, 
-                            borderRadius: 10, 
-                            backgroundColor: isDay ? '#f0f9ff' : 'rgba(56, 189, 248, 0.1)', 
+                        <View style={{
+                            width: 36, height: 36,
+                            borderRadius: 10,
+                            backgroundColor: isDay ? '#f0f9ff' : 'rgba(56, 189, 248, 0.1)',
                             alignItems: 'center', justifyContent: 'center',
                             marginRight: 12
                         }}>
