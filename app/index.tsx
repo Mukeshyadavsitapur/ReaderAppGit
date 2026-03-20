@@ -133,7 +133,8 @@ import {
     X,
     XCircle,
     Youtube,
-    Menu
+    Menu,
+    MoreVertical
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -5151,16 +5152,16 @@ const styles = StyleSheet.create({
     historyItem: { padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
     historyTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
     footer: {
-        position: (isWeb ? 'fixed' : 'absolute') as any,
+        position: (isWeb ? 'fixed' : 'absolute') as 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
         flexDirection: 'row',
-        height: 80, // Increased from 60 to 80
+        height: (isWeb ? 80 : 90), // Increased for mobile safe area
         borderTopWidth: 1,
         alignItems: 'center',
         justifyContent: 'space-around',
-        paddingBottom: 10, // Added padding for safe area
+        paddingBottom: (isWeb ? 0 : 20), // Added padding for safe area on mobile
         zIndex: 1000, // Ensure it stays above content
     },
     tabItem: {
@@ -5262,6 +5263,17 @@ const styles = StyleSheet.create({
         fontSize: 13,
         marginTop: 2,
         fontWeight: '500'
+    },
+    menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 12,
+        gap: 12,
+    },
+    menuItemText: {
+        fontSize: 16,
+        fontWeight: '600',
     }
 });
 
@@ -7020,6 +7032,7 @@ export default function App() {
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const isLandscape = windowWidth > windowHeight;
     const [isReaderSearchExpanded, setIsReaderSearchExpanded] = useState(false);
+    const [isReaderMenuVisible, setIsReaderMenuVisible] = useState(false);
     const [isLocalSearchMode, setIsLocalSearchMode] = useState(false); // NEW: Missing state for Reader Sidebar
 
 
@@ -22882,134 +22895,183 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             };
 
             rightAction = (
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-
-                    {/* NEW: Smart Discovery Button */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity
-                        onPress={handleReaderDiscovery}
+                        onPress={() => setIsReaderMenuVisible(true)}
                         style={readerBtnStyle}
                     >
-                        <Sparkles size={18} color={isDay ? '#ffffff' : theme.text} />
+                        <MoreVertical size={20} color={isDay ? '#ffffff' : theme.text} />
                     </TouchableOpacity>
 
-                    {/* Highlighter Button */}
-                    <TouchableOpacity
-                        onPress={toggleHighlighter}
-                        style={[readerBtnStyle, isHighlightMode && { backgroundColor: primaryColor, borderColor: primaryColor }] as any}
+                    <Modal
+                        visible={isReaderMenuVisible}
+                        transparent
+                        animationType="fade"
+                        onRequestClose={() => setIsReaderMenuVisible(false)}
                     >
-                        <Highlighter size={18} color={isHighlightMode ? 'white' : (isDay ? '#ffffff' : theme.text)} />
-                    </TouchableOpacity>
-
-                    {/* Language Switch Toggle (Code Only) */}
-                    <TouchableOpacity
-                        onPress={switchReaderLanguage}
-                        disabled={isTranslating} // Disable while translating
-                        style={readerBtnStyle}
-                    >
-                        {isTranslating ? (
-                            <ActivityIndicator size="small" color={isDay ? '#ffffff' : theme.text} />
-                        ) : (
-                            <Text style={{ color: isDay ? '#ffffff' : theme.text, fontWeight: '900', fontSize: 11 }}>
-                                {(readingSession?.language || displaySettings.language).substring(0, 2).toUpperCase()}
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-
-                    {/* Edit Button */}
-                    <TouchableOpacity
-                        onPress={onEdit}
-                        style={readerBtnStyle}
-                    >
-                        <PenLine size={18} color={isDay ? '#ffffff' : theme.text} />
-                    </TouchableOpacity>
-
-                    {/* Export Text Button (Save to Device) */}
-                    <TouchableOpacity onPress={handleReaderExport} style={readerBtnStyle}>
-                        <Download size={18} color={isDay ? '#ffffff' : theme.text} />
-                    </TouchableOpacity>
-
-                    {/* Share Button (Share File) - Restored */}
-                    <TouchableOpacity onPress={onShare} style={readerBtnStyle}>
-                        <Share2 size={18} color={isDay ? '#ffffff' : theme.text} />
-                    </TouchableOpacity>
-
-                    {/* Appearance Button */}
-                    <TouchableOpacity onPress={() => setShowAppearance(true)} style={readerBtnStyle}>
-                        <Palette size={18} color={isDay ? '#ffffff' : theme.text} />
-                    </TouchableOpacity>
-
-                    {/* Audio Upload Button */}
-                    <TouchableOpacity onPress={handleUploadAudio} style={readerBtnStyle}>
-                        <Music size={18} color={isDay ? '#ffffff' : theme.text} />
-                    </TouchableOpacity>
-
-                    {/* TTS Button */}
-                    <TouchableOpacity
-                        onPress={async () => {
-                            const isPlayingCurrent = ttsStatus === 'playing' && playingMeta?.id === readingSession?.id;
-                            const isPlayingOther = ttsStatus === 'playing' && playingMeta?.id !== readingSession?.id;
-
-                            if (ttsStatus === 'stopped') {
-                                // Check for custom audio first
-                                const sessionId = readingSession?.id;
-                                if (sessionId && customAudioUris[sessionId]) {
-                                    const played = await playCustomAudio(sessionId);
-                                    if (played) {
-                                        setPlayingMeta({ id: readingSession.id, title: readingSession.title });
-                                        return;
-                                    }
-                                }
-                                // Fall back to TTS
-                                speak(readingSession?.messages[0]?.content);
-                                setPlayingMeta({ id: readingSession.id, title: readingSession.title });
-                            } else if (isPlayingOther) {
-                                // Check for custom audio first
-                                const sessionId = readingSession?.id;
-                                if (sessionId && customAudioUris[sessionId]) {
-                                    const played = await playCustomAudio(sessionId);
-                                    if (played) {
-                                        setPlayingMeta({ id: readingSession.id, title: readingSession.title });
-                                        return;
-                                    }
-                                }
-                                // Fall back to TTS
-                                speak(readingSession?.messages[0]?.content, 0, false, true);
-                                setPlayingMeta({ id: readingSession.id, title: readingSession.title });
-                            } else {
-                                stopTTS();
-                                stopCustomAudio();
-                            }
-                        }}
-                        style={readerBtnStyle}
-                    >
-                        {isTtsDownloading ? (
-                            <ActivityIndicator size="small" color={isDay ? '#ffffff' : theme.text} />
-                        ) : ((ttsStatus === 'playing' && playingMeta?.id === readingSession?.id) || isCustomAudioPlaying) ? (
-                            <Square size={16} color={isDay ? '#ffffff' : theme.text} fill={isDay ? '#ffffff' : theme.text} />
-                        ) : (
-                            <Volume2 size={18} color={isDay ? '#ffffff' : theme.text} />
-                        )}
-                    </TouchableOpacity>
-
-                    {/* NEW: Minimize Button (Only in Landscape) - Moves functionality from sidebar header to here */}
-                    {isLandscape && (
                         <TouchableOpacity
-                            onPress={() => setIsReaderSearchExpanded(false)}
-                            style={readerBtnStyle}
+                            style={{ flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 60, paddingRight: 20 }}
+                            activeOpacity={1}
+                            onPress={() => setIsReaderMenuVisible(false)}
                         >
-                            <Maximize2 size={18} color={isDay ? '#ffffff' : theme.text} />
-                        </TouchableOpacity>
-                    )}
+                             <View style={{
+                                 backgroundColor: theme.bg,
+                                 width: 220,
+                                 borderRadius: 20,
+                                 padding: 8,
+                                 shadowColor: "#000",
+                                 shadowOffset: { width: 0, height: 10 },
+                                 shadowOpacity: 0.3,
+                                 shadowRadius: 20,
+                                 elevation: 10,
+                                 borderWidth: 1,
+                                 borderColor: theme.border
+                             }}>
+                                <ScrollView bounces={false}>
+                                    {/* Smart Discovery */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); handleReaderDiscovery(); }}
+                                    >
+                                        <Sparkles size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Discovery</Text>
+                                    </TouchableOpacity>
 
-                    {/* Close Button */}
-                    <TouchableOpacity
-                        onPress={handleClose}
-                        style={readerBtnStyle}
-                    >
-                        <X size={20} color={isDay ? '#ffffff' : theme.text} />
-                    </TouchableOpacity>
+                                    {/* Highlighter */}
+                                    <TouchableOpacity
+                                        style={[styles.menuItem, isHighlightMode && { backgroundColor: theme.highlight }]}
+                                        onPress={() => { setIsReaderMenuVisible(false); toggleHighlighter(); }}
+                                    >
+                                        <Highlighter size={20} color={isHighlightMode ? 'white' : primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: isHighlightMode ? 'white' : theme.text }]}>
+                                            {isHighlightMode ? "Stop Highlighting" : "Highlighter Mode"}
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    {/* Language */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); switchReaderLanguage(); }}
+                                        disabled={isTranslating}
+                                    >
+                                        {isTranslating ? (
+                                            <ActivityIndicator size="small" color={primaryColor} />
+                                        ) : (
+                                            <Text style={{ color: primaryColor, fontWeight: '900', fontSize: 14, width: 22, textAlign: 'center' }}>
+                                                {(readingSession?.language || displaySettings.language).substring(0, 2).toUpperCase()}
+                                            </Text>
+                                        )}
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Switch Language</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Edit */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); onEdit(); }}
+                                    >
+                                        <PenLine size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Edit Content</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Export */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); handleReaderExport(); }}
+                                    >
+                                        <Download size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Export to Device</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Share */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); onShare(); }}
+                                    >
+                                        <Share2 size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Share Session</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Appearance */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); setShowAppearance(true); }}
+                                    >
+                                        <Palette size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Appearance</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Audio Upload */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); handleUploadAudio(); }}
+                                    >
+                                        <Music size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>Upload Audio</Text>
+                                    </TouchableOpacity>
+
+                                    {/* TTS / Audio Playback */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={async () => {
+                                            setIsReaderMenuVisible(false);
+                                            const isPlayingCurrent = ttsStatus === 'playing' && playingMeta?.id === readingSession?.id;
+                                            if (ttsStatus === 'stopped') {
+                                                const sessionId = readingSession?.id;
+                                                if (sessionId && (customAudioUris as any)[sessionId]) {
+                                                    const played = await playCustomAudio(sessionId);
+                                                    if (played) {
+                                                        setPlayingMeta({ id: readingSession.id, title: readingSession.title });
+                                                        return;
+                                                    }
+                                                }
+                                                speak(readingSession?.messages[0]?.content);
+                                                setPlayingMeta({ id: readingSession.id, title: readingSession.title });
+                                            } else {
+                                                stopTTS();
+                                                stopCustomAudio();
+                                            }
+                                        }}
+                                    >
+                                        {isTtsDownloading ? (
+                                            <ActivityIndicator size="small" color={primaryColor} />
+                                        ) : ((ttsStatus === 'playing' && playingMeta?.id === readingSession?.id) || isCustomAudioPlaying) ? (
+                                            <Square size={18} color={primaryColor} fill={primaryColor} />
+                                        ) : (
+                                            <Volume2 size={20} color={primaryColor} />
+                                        )}
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>
+                                            {((ttsStatus === 'playing' && playingMeta?.id === readingSession?.id) || isCustomAudioPlaying) ? "Stop Audio" : "Play Audio"}
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    {isLandscape && (
+                                        <TouchableOpacity
+                                            style={styles.menuItem}
+                                            onPress={() => { setIsReaderMenuVisible(false); setIsReaderSearchExpanded(false); }}
+                                        >
+                                            <Maximize2 size={20} color={primaryColor} />
+                                            <Text style={[styles.menuItemText, { color: theme.text }]}>Minimize</Text>
+                                        </TouchableOpacity>
+                                    )}
+
+                                    <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 4 }} />
+
+                                    {/* Close Reader */}
+                                    <TouchableOpacity
+                                        style={styles.menuItem}
+                                        onPress={() => { setIsReaderMenuVisible(false); handleClose(); }}
+                                    >
+                                        <X size={20} color="#ff4444" />
+                                        <Text style={[styles.menuItemText, { color: "#ff4444", fontWeight: 'bold' }]}>Exit Reader</Text>
+                                    </TouchableOpacity>
+                                </ScrollView>
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+
                 </View>
             );
+
         } else if (appMode === 'live') {
             displayTitle = quizState?.title || "Quiz";
             const currentQ = quizState?.questions[quizState?.currentIndex];
@@ -23239,13 +23301,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         return (
             <View style={[styles.header, { backgroundColor: headerBg, borderColor: borderColor, borderBottomWidth: borderBottomWidth }]}>
-                {appMode !== 'reader' && (
-                    <View style={styles.logoContainer}>
-                        {showBack ? (
-                            <TouchableOpacity onPress={backAction} style={{ marginRight: 15 }}>
-                                <ArrowLeft size={24} color={headerIconColor} />
-                            </TouchableOpacity>
-                        ) : (
+                <View style={styles.logoContainer}>
+                    {appMode === 'reader' ? (
+                        <>
                             <TouchableOpacity
                                 onPress={() => toggleSideMenu(true)}
                                 activeOpacity={0.7}
@@ -23261,17 +23319,43 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             >
                                 <Menu size={22} color={isDay ? "white" : theme.secondary} />
                             </TouchableOpacity>
-                        )}
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, flexShrink: 1 }]} numberOfLines={1}>
+                                    {readingSession?.title ? (readingSession.title.length > 30 ? readingSession.title.substring(0, 30) + '...' : readingSession.title) : "Reader"}
+                                </Text>
+                            </View>
+                        </>
+                    ) : showBack ? (
+                        <TouchableOpacity onPress={backAction} style={{ marginRight: 15 }}>
+                            <ArrowLeft size={24} color={headerIconColor} />
+                        </TouchableOpacity>
+                    ) : (
+                        <>
+                            <TouchableOpacity
+                                onPress={() => toggleSideMenu(true)}
+                                activeOpacity={0.7}
+                                style={{
+                                    width: 40,
+                                    height: 40,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginRight: 8,
+                                    borderRadius: 20,
+                                    backgroundColor: isDay ? 'rgba(255,255,255,0.1)' : 'transparent'
+                                }}
+                            >
+                                <Menu size={22} color={isDay ? "white" : theme.secondary} />
+                            </TouchableOpacity>
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, flexShrink: 1 }]} numberOfLines={1}>
+                                    {displayTitle.length > 30 ? displayTitle.substring(0, 30) + '...' : displayTitle}
+                                </Text>
+                            </View>
+                        </>
+                    )}
+                </View>
 
-                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, flexShrink: 1 }]} numberOfLines={1}>
-                                {displayTitle.length > 30 ? displayTitle.substring(0, 30) + '...' : displayTitle}
-                            </Text>
-                        </View>
-                    </View>
-                )}
-
-                <View style={appMode === 'reader' ? { flex: 1 } : { flexDirection: 'row', gap: 10 }}>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                     {rightAction}
                 </View>
             </View>
@@ -27868,24 +27952,24 @@ Review the following raw transcribed text:
 
 
 
-            {/* NEW: Autocomplete Suggestions Dropdown for Home Search (Now shows whenever query matches, regardless of mode) */}
+            {/* Autocomplete Suggestions — opens UPWARD since bar is pinned at bottom */}
             {
                 quickSearchQuery.trim().length > 0 && librarySuggestions.length > 0 && (
                     <View style={{
                         position: 'absolute',
-                        top: 55, // Just below search bar
+                        bottom: 58, // Appear above the search bar
                         left: 0,
                         right: 0,
                         backgroundColor: theme.uiBg,
                         borderRadius: 12,
                         borderWidth: 1,
                         borderColor: theme.border,
-                        zIndex: 100,
+                        zIndex: 200,
                         shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 4 },
+                        shadowOffset: { width: 0, height: -4 },
                         shadowOpacity: 0.1,
                         shadowRadius: 5,
-                        elevation: 5
+                        elevation: 10
                     }}>
                         {librarySuggestions.map((session: any, idx: number) => (
                             <TouchableOpacity
@@ -28013,7 +28097,7 @@ Review the following raw transcribed text:
     return (
         <SafeAreaProvider>
             <SafeAreaView style={{ flex: 0, backgroundColor: headerBg }} edges={['top', 'left', 'right']} />
-            <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['left', 'right', 'bottom']}>
+            <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['left', 'right']}>
                 <StatusBar
                     barStyle={activeStatusBarStyle}
                 />
@@ -28037,54 +28121,38 @@ Review the following raw transcribed text:
                                         {isChatbotMode ? (
                                             activeChatbotChar ? renderChatbotMessaging() : renderChatbotHome()
                                         ) : (
-                                            <>
-                                                {/* PERSISTENT HEADER: Greeting + Search Bar (ONLY IN PORTRAIT) */}
-                                                {!isLandscape && (
-                                                    <View style={{
-                                                        paddingHorizontal: 20,
-                                                        paddingTop: 15,
-                                                        paddingBottom: 15,
-                                                        backgroundColor: theme.bg,
-                                                        zIndex: 10,
-                                                        // Subtle divider for separation
-                                                        borderBottomWidth: 1,
-                                                        borderBottomColor: theme.id === 'day' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)'
-                                                    }}>
-                                                        <View style={[styles.welcomeSection, { marginTop: 0, marginBottom: 15 }]}>
-                                                            <Text style={[styles.welcomeTitle, { color: theme.text }]}>{uiData.staticText?.home?.welcome || "Hello, Friend!"}</Text>
-                                                            <Text style={[styles.welcomeSub, { color: theme.secondary }]}>
-                                                                {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
-                                                                {' '}
-                                                                <Text
-                                                                    onPress={cycleGlobalLanguage}
-                                                                    style={{ color: primaryColor, fontWeight: 'bold', textDecorationLine: 'underline' }}>
-                                                                    {displaySettings.language}
-                                                                </Text>
-                                                            </Text>
-                                                        </View>
-
-                                                        {renderHomeSearchBar()}
-                                                    </View>
-                                                )}
-
+                                            <View style={{ flex: 1 }}>
+                                                {/* GEMINI-STYLE: Main content with bottom pinned search bar */}
                                                 <KeyboardAvoidingView
                                                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                                                     style={{ flex: 1 }}
                                                     keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                                                 >
-                                                    <ScrollView contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 100 }]} keyboardShouldPersistTaps="handled">
-
-                                                        {/* SCROLLABLE SEARCH BAR (ONLY IN LANDSCAPE) */}
-                                                        {isLandscape && (
-                                                            <View style={{ marginTop: 20, marginBottom: 10, zIndex: 100 }}>
-                                                                {renderHomeSearchBar()}
+                                                    <ScrollView
+                                                        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 110, paddingTop: 20 }]}
+                                                        keyboardShouldPersistTaps="handled"
+                                                    >
+                                                        {/* GEMINI-STYLE: Greeting at top of scrollable area */}
+                                                        {!isLandscape && (
+                                                            <View style={[
+                                                                styles.welcomeSection,
+                                                                { marginTop: 10, marginBottom: 28, paddingHorizontal: 4 }
+                                                            ]}>
+                                                                <Text style={[styles.welcomeTitle, { color: theme.text }]}>
+                                                                    {uiData.staticText?.home?.welcome || "Hello, Friend!"}
+                                                                </Text>
+                                                                <Text style={[styles.welcomeSub, { color: theme.secondary }]}>
+                                                                    {uiData.staticText?.home?.subtitle || "What shall we learn today?"}
+                                                                    {' '}
+                                                                    <Text
+                                                                        onPress={cycleGlobalLanguage}
+                                                                        style={{ color: primaryColor, fontWeight: 'bold', textDecorationLine: 'underline' }}
+                                                                    >
+                                                                        {displaySettings.language}
+                                                                    </Text>
+                                                                </Text>
                                                             </View>
                                                         )}
-
-
-
-
-                                                        <View style={{ flex: 1 }} />
 
                                                         <View>
                                                             <View>
@@ -28099,27 +28167,24 @@ Review the following raw transcribed text:
                                                                         if (indexA !== -1 && indexB !== -1) return indexA - indexB;
                                                                         if (indexA !== -1) return -1;
                                                                         if (indexB !== -1) return 1;
-                                                                        return 0; // Default order
+                                                                        return 0;
                                                                     });
 
-                                                                    // 2. Prepare Items List (New Role LAST)
+                                                                    // 2. Prepare Items List
                                                                     const allItems = [
                                                                         ...toolsSource.map((t: any) => ({ id: t.id, type: 'tool', data: t }))
                                                                     ];
 
-                                                                    // Check if image exists on disk to avoid re-download/re-generation
+                                                                    // Check if image exists on disk
                                                                     const checkImageExists = async (uri: string) => {
                                                                         if (!uri) return false;
-                                                                    }; // Closing checkImageExists here
+                                                                    };
                                                                     // 3. Shared Tool Press Handler
                                                                     const onToolPress = (tool: any) => {
-                                                                        // Update MRU
                                                                         setLastUsedTools((prev: any) => {
                                                                             const newOrder = [tool.id, ...prev.filter((id: string) => id !== tool.id)];
                                                                             return newOrder.slice(0, 50);
                                                                         });
-
-                                                                        // Original Action
                                                                         if (tool.id === 'visual_learner') {
                                                                             setImagePickerMode('vision');
                                                                             setVisionDraft({ uris: [], prompt: "" });
@@ -28133,14 +28198,13 @@ Review the following raw transcribed text:
                                                                         }
                                                                     };
 
-                                                                    // --- STATE 1: COLLAPSED VERTICAL LIST ---
                                                                     return (
                                                                         <View style={{ marginBottom: 10 }}>
                                                                             <ScrollView
-                                                                                style={{ maxHeight: 380 }} // Increased height slightly
+                                                                                style={{ maxHeight: 380 }}
                                                                                 nestedScrollEnabled={true}
-                                                                                showsVerticalScrollIndicator={false} // Hide scrollbar for cleaner look
-                                                                                contentContainerStyle={{ gap: 12, paddingHorizontal: 4, paddingBottom: 4 }} // Added padding for shadows
+                                                                                showsVerticalScrollIndicator={false}
+                                                                                contentContainerStyle={{ gap: 12, paddingHorizontal: 4, paddingBottom: 4 }}
                                                                             >
                                                                                 {allItems.map((item: any, index: number) => {
                                                                                     if (item.type === 'new_role') {
@@ -28151,13 +28215,12 @@ Review the following raw transcribed text:
                                                                                                 style={{
                                                                                                     flexDirection: 'row',
                                                                                                     alignItems: 'center',
-                                                                                                    padding: 16, // Increased padding
+                                                                                                    padding: 16,
                                                                                                     backgroundColor: theme.buttonBg,
-                                                                                                    borderRadius: 20, // More rounded
+                                                                                                    borderRadius: 20,
                                                                                                     borderWidth: 1,
                                                                                                     borderColor: theme.border,
                                                                                                     gap: 16,
-                                                                                                    // Premium Shadow
                                                                                                     shadowColor: "#000",
                                                                                                     shadowOffset: { width: 0, height: 2 },
                                                                                                     shadowOpacity: 0.05,
@@ -28186,13 +28249,12 @@ Review the following raw transcribed text:
                                                                                                 style={{
                                                                                                     flexDirection: 'row',
                                                                                                     alignItems: 'center',
-                                                                                                    padding: 16, // Increased padding
+                                                                                                    padding: 16,
                                                                                                     backgroundColor: theme.uiBg,
-                                                                                                    borderRadius: 20, // More rounded
+                                                                                                    borderRadius: 20,
                                                                                                     borderWidth: 1,
                                                                                                     borderColor: theme.border,
                                                                                                     gap: 16,
-                                                                                                    // Premium Shadow
                                                                                                     shadowColor: "#000",
                                                                                                     shadowOffset: { width: 0, height: 2 },
                                                                                                     shadowOpacity: 0.05,
@@ -28217,12 +28279,27 @@ Review the following raw transcribed text:
                                                                     );
                                                                 })()}
                                                             </View>
-
-                                                            {/* REMOVED: Help & Guide Section from Home (Moved to 'help_guide_char' Tool) */}
                                                         </View>
                                                     </ScrollView>
                                                 </KeyboardAvoidingView>
-                                            </>
+
+                                                {/* GEMINI-STYLE: Search bar pinned at bottom of screen */}
+                                                <View style={{
+                                                    position: 'absolute',
+                                                    bottom: 0,
+                                                    left: 0,
+                                                    right: 0,
+                                                    paddingHorizontal: 16,
+                                                    paddingTop: 10,
+                                                    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+                                                    backgroundColor: theme.bg,
+                                                    borderTopWidth: 1,
+                                                    borderTopColor: theme.id === 'day' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.07)',
+                                                    zIndex: 150,
+                                                }}>
+                                                    {renderHomeSearchBar()}
+                                                </View>
+                                            </View>
                                         )}
                                     </View>
                                 ) : activeTab === 'library' ? (
