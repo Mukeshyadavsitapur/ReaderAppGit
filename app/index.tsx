@@ -14037,24 +14037,24 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     width: 38,
                     height: 38,
                     borderRadius: 19,
-                    backgroundColor: isCurrentlyActive ? '#ef4444' : theme.buttonBg,
+                    backgroundColor: isCurrentlyActive ? primaryColor : 'transparent', // Minimal by default
                     alignItems: 'center',
                     justifyContent: 'center',
-                    borderWidth: 1,
-                    borderColor: isCurrentWorking ? '#ef4444' : theme.border,
+                    borderWidth: isCurrentlyActive ? 1 : 0, // Minimal by default
+                    borderColor: isCurrentWorking ? primaryColor : 'transparent',
                     zIndex: 10,
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.1,
+                    shadowOpacity: isCurrentlyActive ? 0.1 : 0, // Minimal by default
                     shadowRadius: 2,
-                    elevation: 2
+                    elevation: isCurrentlyActive ? 2 : 0 // Minimal by default
                 }, customStyle]}
             >
                 {isTranscribing && voiceTarget === target ? (
-                    <ActivityIndicator size="small" color="#ef4444" />
+                    <ActivityIndicator size="small" color={primaryColor} />
                 ) : (
                     <Animated.View style={{ opacity: voiceTarget === target ? recordingOpacity : 1 }}>
-                        <Mic size={iconSize} color={isCurrentlyActive ? '#ef4444' : theme.text} />
+                        <Mic size={iconSize} color={isCurrentlyActive ? '#ffffff' : theme.text} />
                     </Animated.View>
                 )}
             </TouchableOpacity>
@@ -25225,24 +25225,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                             />
 
                                             {/* Microphone Button */}
-                                            <TouchableOpacity
-                                                onPress={() => handleVoiceToggle('setup_input')}
-                                                style={{
-                                                    width: 38,
-                                                    height: 38,
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    marginRight: 4
-                                                }}
-                                            >
-                                                {isTranscribing && voiceTarget === 'setup_input' ? (
-                                                    <ActivityIndicator size="small" color={theme.text} />
-                                                ) : (
-                                                    <Animated.View style={{ opacity: voiceTarget === 'setup_input' ? recordingOpacity : 1 }}>
-                                                        <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'setup_input') ? primaryColor : theme.text} />
-                                                    </Animated.View>
-                                                )}
-                                            </TouchableOpacity>
+                                            {renderMicButton('setup_input', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
 
                                             {/* Vision Button (for quiz only) */}
                                             {selectedScenario?.id === 'examiner' && (
@@ -27965,24 +27948,7 @@ Review the following raw transcribed text:
                 />
 
 
-                <TouchableOpacity
-                    onPress={() => handleVoiceToggle('search')}
-                    style={{
-                        width: 38,
-                        height: 38,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 4
-                    }}
-                >
-                    {isTranscribing && voiceTarget === 'search' ? (
-                        <ActivityIndicator size="small" color={theme.text} />
-                    ) : (
-                        <Animated.View style={{ opacity: voiceTarget === 'search' ? recordingOpacity : 1 }}>
-                            <Mic size={20} color={(isRecording && voiceTarget === 'search') ? primaryColor : theme.text} />
-                        </Animated.View>
-                    )}
-                </TouchableOpacity>
+                {renderMicButton('search', { marginRight: 4 }, 20)}
 
                 {/* NEW: Vision Camera Button */}
                 <TouchableOpacity
@@ -28075,24 +28041,7 @@ Review the following raw transcribed text:
                 returnKeyType="search"
             />
 
-            <TouchableOpacity
-                onPress={() => handleVoiceToggle('dictionary')}
-                style={{
-                    width: 38,
-                    height: 38,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 4
-                }}
-            >
-                {isTranscribing && voiceTarget === 'dictionary' ? (
-                    <ActivityIndicator size="small" color={theme.text} />
-                ) : (
-                    <Animated.View style={{ opacity: voiceTarget === 'dictionary' ? recordingOpacity : 1 }}>
-                        <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'dictionary') ? '#ef4444' : theme.text} />
-                    </Animated.View>
-                )}
-            </TouchableOpacity>
+            {renderMicButton('dictionary', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
 
             <TouchableOpacity
                 onPress={() => {
@@ -28192,7 +28141,8 @@ Review the following raw transcribed text:
                                                     keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                                                 >
                                                     <ScrollView
-                                                        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 110, paddingTop: 20 }]}
+                                                        style={{ flex: 1 }}
+                                                        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 20, paddingTop: 20 }]}
                                                         keyboardShouldPersistTaps="handled"
                                                     >
                                                         {/* GEMINI-STYLE: Greeting at top of scrollable area */}
@@ -28347,10 +28297,6 @@ Review the following raw transcribed text:
 
                                                     {/* GEMINI-STYLE: Search bar pinned at bottom of screen */}
                                                     <View style={{
-                                                        position: 'absolute',
-                                                        bottom: 0,
-                                                        left: 0,
-                                                        right: 0,
                                                         paddingHorizontal: 16,
                                                         paddingTop: 10,
                                                         paddingBottom: Platform.OS === 'ios' ? 28 : 14,
@@ -28482,28 +28428,7 @@ Review the following raw transcribed text:
 
 
 
-                                                    <TouchableOpacity
-                                                        onPress={() => handleVoiceToggle('library_search')}
-                                                        style={{
-                                                            width: 38,
-                                                            height: 38,
-                                                            borderRadius: 19,
-                                                            backgroundColor: ((isRecording || isOfflineRecognizing) && voiceTarget === 'library_search') ? '#ef4444' : theme.buttonBg,
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            marginRight: 8,
-                                                            borderWidth: 1,
-                                                            borderColor: (isRecording || isOfflineRecognizing || isTranscribing) && voiceTarget === 'library_search' ? '#ef4444' : theme.border
-                                                        }}
-                                                    >
-                                                        {isTranscribing && voiceTarget === 'library_search' ? (
-                                                            <ActivityIndicator size="small" color={theme.text} />
-                                                        ) : (
-                                                            <Animated.View style={{ opacity: voiceTarget === 'library_search' ? recordingOpacity : 1 }}>
-                                                                <Mic size={18} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'library_search') ? 'white' : theme.text} />
-                                                            </Animated.View>
-                                                        )}
-                                                    </TouchableOpacity>
+                                                    {renderMicButton('library_search', { marginRight: 8, elevation: 0, shadowOpacity: 0 }, 18)}
 
                                                     {librarySearchQuery.length > 0 ? (
                                                         <TouchableOpacity onPress={() => setLibrarySearchQuery("")} style={{ padding: 10 }}>
@@ -29935,18 +29860,7 @@ Review the following raw transcribed text:
                                                                     multiline={true}
                                                                 />
 
-                                                                <TouchableOpacity
-                                                                    onPress={() => handleVoiceToggle('story_query')}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                                                                >
-                                                                    {isTranscribing && voiceTarget === 'story_query' ? (
-                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                    ) : (
-                                                                        <Animated.View style={{ opacity: voiceTarget === 'story_query' ? recordingOpacity : 1 }}>
-                                                                            <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'story_query') ? primaryColor : theme.text} />
-                                                                        </Animated.View>
-                                                                    )}
-                                                                </TouchableOpacity>
+                                                                {renderMicButton('story_query', { elevation: 0, shadowOpacity: 0 }, 20)}
 
                                                                 {/* Vision Button inside Search Bar */}
                                                                 <TouchableOpacity
@@ -30037,18 +29951,7 @@ Review the following raw transcribed text:
                                                                     multiline={true}
                                                                 />
 
-                                                                <TouchableOpacity
-                                                                    onPress={() => handleVoiceToggle('editorial_topic')}
-                                                                    style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                                                                >
-                                                                    {isTranscribing && voiceTarget === 'editorial_topic' ? (
-                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                    ) : (
-                                                                        <Animated.View style={{ opacity: voiceTarget === 'editorial_topic' ? recordingOpacity : 1 }}>
-                                                                            <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'editorial_topic') ? primaryColor : theme.text} />
-                                                                        </Animated.View>
-                                                                    )}
-                                                                </TouchableOpacity>
+                                                                {renderMicButton('editorial_topic', { elevation: 0, shadowOpacity: 0 }, 20)}
 
                                                                 {/* Vision Button */}
                                                                 <TouchableOpacity
@@ -30815,28 +30718,7 @@ Review the following raw transcribed text:
                                                             onChangeText={setNoteSearchQuery}
                                                         />
 
-                                                        <TouchableOpacity
-                                                            onPress={() => handleVoiceToggle('notes_search')}
-                                                            style={{
-                                                                width: 38,
-                                                                height: 38,
-                                                                borderRadius: 19,
-                                                                backgroundColor: ((isRecording || isOfflineRecognizing) && voiceTarget === 'notes_search') ? '#ef4444' : theme.buttonBg,
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                marginRight: 8,
-                                                                borderWidth: 1,
-                                                                borderColor: (isRecording || isOfflineRecognizing || isTranscribing) && voiceTarget === 'notes_search' ? '#ef4444' : theme.border
-                                                            }}
-                                                        >
-                                                            {isTranscribing && voiceTarget === 'notes_search' ? (
-                                                                <ActivityIndicator size="small" color={theme.text} />
-                                                            ) : (
-                                                                <Animated.View style={{ opacity: voiceTarget === 'notes_search' ? recordingOpacity : 1 }}>
-                                                                    <Mic size={18} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'notes_search') ? 'white' : theme.text} />
-                                                                </Animated.View>
-                                                            )}
-                                                        </TouchableOpacity>
+                                                        {renderMicButton('notes_search', { marginRight: 8, elevation: 0, shadowOpacity: 0 }, 18)}
 
                                                         {noteSearchQuery.length > 0 ? (
                                                             <TouchableOpacity onPress={() => setNoteSearchQuery("")} style={{ padding: 10 }}>
@@ -31428,24 +31310,7 @@ Review the following raw transcribed text:
                                                                         multiline={true}
                                                                     />
 
-                                                                    <TouchableOpacity
-                                                                        onPress={() => handleVoiceToggle('search')}
-                                                                        style={{
-                                                                            width: 38,
-                                                                            height: 38,
-                                                                            alignItems: 'center',
-                                                                            justifyContent: 'center',
-                                                                            marginRight: 4
-                                                                        }}
-                                                                    >
-                                                                        {isTranscribing && voiceTarget === 'search' ? (
-                                                                            <ActivityIndicator size="small" color={theme.text} />
-                                                                        ) : (
-                                                                            <Animated.View style={{ opacity: voiceTarget === 'search' ? recordingOpacity : 1 }}>
-                                                                                <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'search') ? primaryColor : theme.text} />
-                                                                            </Animated.View>
-                                                                        )}
-                                                                    </TouchableOpacity>
+                                                                    {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
 
                                                                     <TouchableOpacity
                                                                         onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
@@ -31646,24 +31511,7 @@ Review the following raw transcribed text:
                                                                     multiline={true}
                                                                 />
 
-                                                                <TouchableOpacity
-                                                                    onPress={() => handleVoiceToggle('search')}
-                                                                    style={{
-                                                                        width: 38,
-                                                                        height: 38,
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        marginRight: 4
-                                                                    }}
-                                                                >
-                                                                    {isTranscribing && voiceTarget === 'search' ? (
-                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                    ) : (
-                                                                        <Animated.View style={{ opacity: voiceTarget === 'search' ? recordingOpacity : 1 }}>
-                                                                            <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'search') ? primaryColor : theme.text} />
-                                                                        </Animated.View>
-                                                                    )}
-                                                                </TouchableOpacity>
+                                                                    {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
 
                                                                 <TouchableOpacity
                                                                     onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
@@ -33925,24 +33773,7 @@ Review the following raw transcribed text:
                                         onChangeText={(t) => setVisionDraft((prev: any) => ({ ...prev, prompt: t }))}
                                         multiline
                                     />
-                                    <TouchableOpacity
-                                        onPress={() => handleVoiceToggle('vision_prompt')}
-                                        style={{
-                                            width: 38,
-                                            height: 38,
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            marginRight: 4
-                                        }}
-                                    >
-                                        {isTranscribing && voiceTarget === 'vision_prompt' ? (
-                                            <ActivityIndicator size="small" color={theme.text} />
-                                        ) : (
-                                            <Animated.View style={{ opacity: voiceTarget === 'vision_prompt' ? recordingOpacity : 1 }}>
-                                                <Mic size={20} color={((isRecording || isOfflineRecognizing) && voiceTarget === 'vision_prompt') ? primaryColor : theme.text} />
-                                            </Animated.View>
-                                        )}
-                                    </TouchableOpacity>
+                                    {renderMicButton('vision_prompt', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
                                     <TouchableOpacity
                                         onPress={() => processVisionRequest()}
                                         disabled={visionDraft.uris.length === 0}
