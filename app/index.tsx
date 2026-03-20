@@ -6046,13 +6046,16 @@ export default function App() {
     const [silenceTimeoutMs, setSilenceTimeoutMs] = useState<number>(3000);
     const [showSilencePicker, setShowSilencePicker] = useState<boolean>(false);
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
-        const showSubscription = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
+        const showSubscription = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
             setIsKeyboardVisible(true);
+            setKeyboardHeight(e.endCoordinates ? e.endCoordinates.height : 0);
         });
         const hideSubscription = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
             setIsKeyboardVisible(false);
+            setKeyboardHeight(0);
         });
 
         return () => {
@@ -28160,9 +28163,10 @@ Review the following raw transcribed text:
                                         ) : (
                                             <View style={{ flex: 1 }}>
                                                 {/* GEMINI-STYLE: Main content with bottom pinned search bar */}
+                                                {/* GEMINI-STYLE: Main content with bottom pinned search bar */}
                                                 <KeyboardAvoidingView
-                                                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                                                    style={{ flex: 1 }}
+                                                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                                                    style={{ flex: 1, paddingBottom: Platform.OS === 'android' && isKeyboardVisible ? keyboardHeight : 0 }}
                                                     keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                                                 >
                                                     <ScrollView
@@ -28321,7 +28325,8 @@ Review the following raw transcribed text:
                                                     <View style={{
                                                         paddingHorizontal: 16,
                                                         paddingTop: 10,
-                                                        paddingBottom: isKeyboardVisible ? 10 : (Platform.OS === 'ios' ? 28 : 14),
+                                                        // Fallback pad if custom height is somehow 0
+                                                        paddingBottom: isKeyboardVisible ? (Platform.OS === 'ios' ? 10 : (keyboardHeight > 0 ? 10 : 20)) : (Platform.OS === 'ios' ? 28 : 14),
                                                         backgroundColor: theme.bg,
                                                         borderTopWidth: isKeyboardVisible ? 0 : 1,
                                                         borderTopColor: theme.id === 'day' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.07)',
