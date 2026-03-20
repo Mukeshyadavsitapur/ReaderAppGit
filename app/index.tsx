@@ -23483,111 +23483,135 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     }}
                 >
                     <View style={{ paddingTop: 50, paddingBottom: 20 }}>
-                        {/* New Session Button */}
-                        <TouchableOpacity
-                            onPress={() => {
-                                toggleSideMenu(false);
-                                setAppMode('idle');
-                                setActiveTab('home');
-                            }}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 12,
-                                marginHorizontal: 16,
-                                padding: 12,
-                                backgroundColor: theme.buttonBg,
-                                borderRadius: 25,
-                                marginBottom: 12, // Reduced to make space for the toggle
-                                borderWidth: 1,
-                                borderColor: theme.border
-                            }}
-                        >
-                            <Plus size={20} color={theme.primary} />
-                            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>New Session</Text>
-                        </TouchableOpacity>
+                        <ScrollView style={{ paddingHorizontal: 4 }}>
+                            <View style={{ gap: 4, paddingVertical: 8 }}>
+                                {/* 1. New Session */}
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        toggleSideMenu(false);
+                                        setAppMode('idle');
+                                        setActiveTab('home');
+                                    }}
+                                    style={[styles.menuItem, (activeTab === 'home' && appMode === 'idle' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                >
+                                    <Plus size={20} color={primaryColor} />
+                                    <Text style={[styles.menuItemText, { color: theme.text }]}>New Session</Text>
+                                </TouchableOpacity>
 
-                        {/* Chatbot Mode Toggle */}
-                        <View style={{ marginHorizontal: 16, marginBottom: 20 }}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (isChatbotMode) {
-                                        if (isLiveChatbotMode) {
-                                            setIsChatbotMode(false);
-                                        } else {
-                                            endChatbotSession();
-                                            setIsChatbotMode(false);
-                                        }
-                                    } else {
-                                        setIsChatbotMode(true);
-                                    }
-                                    toggleSideMenu(false); // Close menu when switching modes
-                                }}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: 12,
-                                    padding: 12,
-                                    backgroundColor: isChatbotMode ? theme.uiBg : 'transparent',
-                                    borderRadius: 16,
-                                    borderWidth: 1,
-                                    borderColor: isChatbotMode ? theme.primary : theme.border,
-                                }}
-                            >
-                                <Bot size={20} color={isChatbotMode ? theme.primary : theme.secondary} />
-                                <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>
-                                    {isChatbotMode ? "Switch to Reader" : "Open Chatbot"}
-                                </Text>
-                            </TouchableOpacity>
+                                {/* 2. Notes */}
+                                <TouchableOpacity 
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('notes'); setAppMode('idle'); }} 
+                                    style={[styles.menuItem, (activeTab === 'notes' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                >
+                                    <NotebookPen size={20} color={primaryColor} />
+                                    <Text style={[styles.menuItemText, { color: theme.text }]}>{uiData.staticText?.tabs?.notes || "Notes"}</Text>
+                                </TouchableOpacity>
 
-                            {/* Live Chatbot Mode & Silence Selection (Side menu version) */}
-                            {isChatbotMode && (
-                                <View style={{ marginTop: 8, flexDirection: 'row', gap: 8 }}>
+                                {/* 3. Chatbot */}
+                                <View>
                                     <TouchableOpacity
-                                        onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
-                                        style={{
-                                            flex: 1,
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            padding: 10,
-                                            backgroundColor: isLiveChatbotMode ? 'rgba(34, 197, 94, 0.1)' : theme.uiBg,
-                                            borderRadius: 12,
-                                            borderWidth: 1,
-                                            borderColor: isLiveChatbotMode ? '#22c55e' : theme.border,
-                                            gap: 8,
+                                        onPress={() => {
+                                            if (isChatbotMode) {
+                                                if (!isLiveChatbotMode) {
+                                                    endChatbotSession();
+                                                }
+                                                setIsChatbotMode(false);
+                                            } else {
+                                                setIsChatbotMode(true);
+                                            }
+                                            toggleSideMenu(false);
                                         }}
+                                        style={[styles.menuItem, isChatbotMode && { backgroundColor: theme.highlight }]}
                                     >
-                                        <PhoneCall size={18} color={isLiveChatbotMode ? '#22c55e' : theme.secondary} />
-                                        <Text style={{ fontSize: 13, color: isLiveChatbotMode ? '#22c55e' : theme.text, fontWeight: '600' }}>
-                                            Live Mode
+                                        <Bot size={20} color={primaryColor} />
+                                        <Text style={[styles.menuItemText, { color: theme.text }]}>
+                                            {isChatbotMode ? "Switch to Reader" : "Open Chatbot"}
                                         </Text>
                                     </TouchableOpacity>
 
-                                    {isLiveChatbotMode && (
-                                        <TouchableOpacity
-                                            onPress={() => setShowSilencePicker(true)}
-                                            style={{
-                                                paddingHorizontal: 12,
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                backgroundColor: theme.uiBg,
-                                                borderRadius: 12,
-                                                borderWidth: 1,
-                                                borderColor: theme.border,
-                                                flexDirection: 'row',
-                                                gap: 4
-                                            }}
-                                        >
-                                            <Clock size={16} color={theme.secondary} />
-                                            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>{silenceTimeoutMs / 1000}s</Text>
-                                        </TouchableOpacity>
+                                    {/* Sub-options for Chatbot (Minimalist) */}
+                                    {isChatbotMode && (
+                                        <View style={{ marginLeft: 44, marginTop: 4, gap: 4, marginBottom: 8 }}>
+                                            <TouchableOpacity
+                                                onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    gap: 10,
+                                                    paddingVertical: 8,
+                                                }}
+                                            >
+                                                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isLiveChatbotMode ? '#22c55e' : theme.secondary, opacity: isLiveChatbotMode ? 1 : 0.4 }} />
+                                                <Text style={{ fontSize: 13, color: isLiveChatbotMode ? '#22c55e' : theme.secondary, fontWeight: '600' }}>
+                                                    Live Chatbot Mode
+                                                </Text>
+                                            </TouchableOpacity>
+
+                                            {isLiveChatbotMode && (
+                                                <TouchableOpacity
+                                                    onPress={() => setShowSilencePicker(true)}
+                                                    style={{
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        gap: 10,
+                                                        paddingVertical: 4,
+                                                    }}
+                                                >
+                                                    <Clock size={14} color={theme.secondary} />
+                                                    <Text style={{ fontSize: 12, color: theme.secondary }}>Silence Timeout: {silenceTimeoutMs / 1000}s</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
                                     )}
                                 </View>
-                            )}
-                        </View>
 
-                        <ScrollView style={{ paddingHorizontal: 4 }}>
+                                {/* 4. Dictionary */}
+                                <TouchableOpacity 
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }} 
+                                    style={[styles.menuItem, (activeTab === 'dictionary' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                >
+                                    <BookA size={20} color={primaryColor} />
+                                    <Text style={[styles.menuItemText, { color: theme.text }]}>{uiData.staticText?.tabs?.dictionary || "Dictionary"}</Text>
+                                </TouchableOpacity>
+
+                                {/* 5. Quiz */}
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        toggleSideMenu(false);
+                                        const allTools = getAllTools();
+                                        const tool = allTools.find(t => t.id === 'examiner');
+                                        if (tool) {
+                                            setSelectedScenario(tool);
+                                            const targetSubject = lastQuizSubject || "General";
+                                            saveSchoolConfig({ input: "", subject: targetSubject });
+                                            setAppMode('setup');
+                                        }
+                                    }}
+                                    style={[styles.menuItem, (appMode === 'setup' && selectedScenario?.id === 'examiner' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                >
+                                    <BrainCircuit size={20} color={primaryColor} />
+                                    <Text style={[styles.menuItemText, { color: theme.text }]}>{uiData.tools?.find((t: any) => t.id === 'examiner')?.title || "Quiz"}</Text>
+                                </TouchableOpacity>
+
+                                {/* 6. Studio */}
+                                <TouchableOpacity 
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('story'); setAppMode('idle'); }} 
+                                    style={[styles.menuItem, (activeTab === 'story' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                >
+                                    <BookAudio size={20} color={primaryColor} />
+                                    <Text style={[styles.menuItemText, { color: theme.text }]}>{uiData.staticText?.tabs?.studio || "Studio"}</Text>
+                                </TouchableOpacity>
+
+                                {/* 7. Library */}
+                                <TouchableOpacity 
+                                    onPress={() => { toggleSideMenu(false); setActiveTab('library'); setAppMode('idle'); }} 
+                                    style={[styles.menuItem, (activeTab === 'library' && !isChatbotMode) && { backgroundColor: theme.highlight }]}
+                                >
+                                    <Library size={20} color={primaryColor} />
+                                    <Text style={[styles.menuItemText, { color: theme.text }]}>{uiData.staticText?.tabs?.library || "Library"}</Text>
+                                </TouchableOpacity>
+                            </View>
+
                             {renderGroup("Today", groups.today)}
                             {renderGroup("Yesterday", groups.yesterday)}
                             {renderGroup("Previous 7 Days", groups.previous7)}
@@ -33357,54 +33381,6 @@ Review the following raw transcribed text:
 
                     {/* RENDER GLOBAL MINI PLAYER */}
                     {renderMiniPlayer()}
-
-                    {/* UPDATED: Show Footer in Idle OR Examiner Setup Mode */}
-                    {
-                        (appMode === 'idle' || (appMode === 'setup' && selectedScenario?.id === 'examiner')) && (
-                            <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
-                                <TouchableOpacity onPress={() => { setActiveTab('story'); setAppMode('idle'); }} style={styles.tabItem}>
-                                    <BookAudio size={28} color={activeTab === 'story' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'story' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'story' ? '600' : '400' }}>{uiData.staticText?.tabs?.studio || "Studio"}</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity onPress={() => { setActiveTab('dictionary'); setAppMode('idle'); setVisibleWordCount(25); }} style={styles.tabItem}>
-                                    <BookA size={28} color={activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'dictionary' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'dictionary' ? '600' : '400' }}>{uiData.staticText?.tabs?.dictionary || "Dictionary"}</Text>
-                                </TouchableOpacity>
-
-                                {/* Quiz Button (Moved from Home Screen Grid) */}
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        // Find examiner tool and trigger setup
-                                        const allTools = getAllTools();
-                                        const tool = allTools.find(t => t.id === 'examiner');
-                                        if (tool) {
-                                            setSelectedScenario(tool);
-                                            // Use remembered subject for examiner
-                                            const targetSubject = lastQuizSubject || "General";
-                                            saveSchoolConfig({ input: "", subject: targetSubject });
-                                            setAppMode('setup');
-                                        }
-                                    }}
-                                    style={styles.tabItem}
-                                >
-                                    <BrainCircuit size={28} color={(appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: (appMode === 'setup' && selectedScenario?.id === 'examiner') ? '600' : '400' }}>{uiData.tools?.find((t: any) => t.id === 'examiner')?.title || "Quiz"}</Text>
-                                </TouchableOpacity>
-
-
-
-                                <TouchableOpacity onPress={() => { setActiveTab('notes'); setAppMode('idle'); }} style={styles.tabItem}>
-                                    <NotebookPen size={28} color={activeTab === 'notes' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'notes' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'notes' ? '600' : '400' }}>{uiData.staticText?.tabs?.notes || "Notes"}</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => { setActiveTab('library'); setAppMode('idle'); }} style={styles.tabItem}>
-                                    <Library size={28} color={activeTab === 'library' ? theme.bubbleUser : theme.secondary} />
-                                    <Text style={{ color: activeTab === 'library' ? theme.bubbleUser : theme.secondary, fontSize: 11, marginTop: 2, fontWeight: activeTab === 'library' ? '600' : '400' }}>{uiData.staticText?.tabs?.library || "Library"}</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )
-                    }
 
                 </View >
 
