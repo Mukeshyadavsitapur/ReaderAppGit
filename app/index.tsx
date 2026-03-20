@@ -168,6 +168,8 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+const isWeb = Platform.OS === 'web';
+
 
 // ---- GLOBAL ASYNCSTORAGE SAFETY PROXY ----
 // SQLite (AsyncStorage's backend) can throw SQLITE_FULL (code 13) even during READ operations
@@ -2105,13 +2107,18 @@ const SPEECH_RECORDING_OPTIONS: any = {
 
 // HELPER: FileSystem Storage for Recent Searches
 const getRecentSearchesPath = () => {
+    if (isWeb) return 'recentSearches_web'; // AsyncStorage key
     return FileSystem.documentDirectory + 'recentSearches.json';
 };
 
 const saveRecentSearchesToFile = async (searches: any[]) => {
     try {
         const path = getRecentSearchesPath();
-        await FileSystem.writeAsStringAsync(path, JSON.stringify(searches));
+        if (isWeb) {
+            await AsyncStorage.setItem(path, JSON.stringify(searches));
+        } else {
+            await FileSystem.writeAsStringAsync(path, JSON.stringify(searches));
+        }
     } catch (e) {
         console.error("Failed to save recent searches to file:", e);
     }
@@ -2120,11 +2127,19 @@ const saveRecentSearchesToFile = async (searches: any[]) => {
 const loadRecentSearchesFromFile = async () => {
     try {
         const path = getRecentSearchesPath();
-        const info = await FileSystem.getInfoAsync(path);
-        if (info.exists) {
-            const content = await FileSystem.readAsStringAsync(path);
-            const parsed = JSON.parse(content);
-            return Array.isArray(parsed) ? parsed : [];
+        if (isWeb) {
+            const content = await AsyncStorage.getItem(path);
+            if (content) {
+                const parsed = JSON.parse(content);
+                return Array.isArray(parsed) ? parsed : [];
+            }
+        } else {
+            const info = await FileSystem.getInfoAsync(path);
+            if (info.exists) {
+                const content = await FileSystem.readAsStringAsync(path);
+                const parsed = JSON.parse(content);
+                return Array.isArray(parsed) ? parsed : [];
+            }
         }
         return [];
     } catch (e) {
@@ -6126,7 +6141,7 @@ export default function App() {
                 // A typical long chapter might be 10-20KB, so 100KB represents a VERY long conversation.
                 const ARCHIVE_THRESHOLD = 100 * 1024;
 
-                if (content.length > ARCHIVE_THRESHOLD) {
+                if (content.length > ARCHIVE_THRESHOLD && !isWeb) {
                     console.log(`Session ${sessionToSave.id} exceeded size limit (${(content.length / 1024).toFixed(1)}KB). Archiving...`);
 
                     // Strategy: Keep the last 20% (context) + Title, Archive the rest.
@@ -6182,7 +6197,7 @@ export default function App() {
                 // But for now assume standard save.
                 // Check if we should use file storage for Main Session too (if > 50KB or has images)
                 const currentContent = sessionToSave.messages?.[0]?.content || "";
-                if (currentContent.length > 50 * 1024) {
+                if (currentContent.length > 50 * 1024 && !isWeb) {
                     const docDir = fs.documentDirectory || FileSystem.documentDirectory;
                     const filename = `content_${sessionToSave.id}.txt`;
                     const path = `${docDir}${filename}`;
@@ -7522,6 +7537,7 @@ export default function App() {
     const currentSound = useRef<any>(null);
     const onlineTTSBroken = useRef(false);
     const [showAppearance, setShowAppearance] = useState(false);
+    const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [libraryTab, setLibraryTab] = useState("chats");
     const [showWordModal, setShowWordModal] = useState(false);
@@ -8110,6 +8126,8 @@ export default function App() {
     useEffect(() => { dictionaryCacheRef.current = dictionaryCache; }, [dictionaryCache]);
     useEffect(() => { savedWordsRef.current = savedWords; }, [savedWords]);
     useEffect(() => { displaySettingsRef.current = displaySettings; }, [displaySettings]);
+    useEffect(() => { chatSessionsRef.current = chatSessions; }, [chatSessions]);
+    useEffect(() => { quizStateRef.current = quizState; }, [quizState]);
 
     const dictionarySuggestions = useMemo(() => {
         if (!dictionaryInput.trim()) return [];
@@ -8143,6 +8161,15 @@ export default function App() {
         if (activeTab === 'settings') {
             const calculateStorage = async () => {
                 try {
+                    if (isWeb) {
+                        // Fallback for Web: skip native disk free/read directory
+                        const used = JSON.stringify(chatSessions).length +
+                            JSON.stringify(savedWords).length +
+                            JSON.stringify(savedQuestions).length +
+                            JSON.stringify(recentSearches).length;
+                        setStorageStats({ free: 0, used, audio: 0 }); // free 0 as placeholder
+                        return;
+                    }
                     const free = await fs.getFreeDiskStorageAsync();
                     // Calculate JSON Data Size
                     const used = JSON.stringify(chatSessions).length +
@@ -9751,7 +9778,6 @@ export default function App() {
                         smartBio: parsed.smartBio || ""
                     }));
                 }
-                setIsSettingsLoaded(true);
 
                 const storedKey = await AsyncStorage.getItem('apiKey');
                 if (storedKey) setCustomApiKey(storedKey);
@@ -9787,42 +9813,51 @@ export default function App() {
                 }
 
                 // --- DICTIONARY MIGRATION & LOADING LOGIC ---
-                const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-                const indexUri = docDir + 'dictionary_index.json';
+                const docDir = (isWeb ? null : (fs.documentDirectory || FileSystem.documentDirectory));
+                const indexUri = docDir ? (docDir + 'dictionary_index.json') : null;
+                const webIndexKey = 'dictionary_index_web';
                 let wordsList = [];
                 let loadedFromFile = false;
 
-                // 1. Try loading Index from File System (Unlimited Size)
+                // 1. Try loading Index from File System (Unlimited Size) or AsyncStorage (Web)
                 try {
-                    const fileInfo = await fs.getInfoAsync(indexUri);
-                    if (fileInfo.exists) {
-                        const content = await fs.readAsStringAsync(indexUri);
-                        wordsList = JSON.parse(content);
-                        loadedFromFile = true;
+                    if (isWeb) {
+                        const content = await AsyncStorage.getItem(webIndexKey);
+                        if (content) {
+                            wordsList = JSON.parse(content);
+                            loadedFromFile = true;
+                        }
+                    } else if (indexUri) {
+                        const fileInfo = await fs.getInfoAsync(indexUri);
+                        if (fileInfo.exists) {
+                            const content = await fs.readAsStringAsync(indexUri);
+                            wordsList = JSON.parse(content);
+                            loadedFromFile = true;
+                        }
                     }
                 } catch (e: any) { console.warn("Index load failed", e); }
 
-                // 2. If file missing, check AsyncStorage (Migration from DB to File)
+                // 2. If file missing, check AsyncStorage (Migration from DB to File/WebStorage)
                 if (!loadedFromFile) {
                     // Check Legacy Monolithic Data
                     const legacyWordsJson = await AsyncStorage.getItem('savedWords');
                     if (legacyWordsJson) {
                         try {
                             const legacyWords = JSON.parse(legacyWordsJson);
-                            console.log(`Migrating ${legacyWords.length} words to file system...`);
+                            console.log(`Migrating ${legacyWords.length} words to ${isWeb ? 'web storage' : 'file system'}...`);
 
                             const newIndex: any[] = [];
 
-                            // Migrate each word to a file
+                            // Migrate each word to a file or nested storage
                             await Promise.all(legacyWords.map(async (wordObj: any) => {
                                 const id = wordObj.id || generateId();
-                                const fileName = `word_${id}.json`;
-
-                                // Ensure ID exists in object
                                 const fullData = { ...wordObj, id };
 
-                                // Save Full Data to File
-                                await fs.writeAsStringAsync(docDir + fileName, JSON.stringify(fullData));
+                                if (isWeb) {
+                                    await AsyncStorage.setItem(`word_${id}`, JSON.stringify(fullData));
+                                } else if (docDir) {
+                                    await fs.writeAsStringAsync(docDir + `word_${id}.json`, JSON.stringify(fullData));
+                                }
 
                                 // Create Lite Entry for Index
                                 newIndex.push({
@@ -9836,8 +9871,12 @@ export default function App() {
                             }));
 
                             wordsList = newIndex;
-                            // Save new index to FILE
-                            await fs.writeAsStringAsync(indexUri, JSON.stringify(newIndex));
+                            // Save new index
+                            if (isWeb) {
+                                await AsyncStorage.setItem(webIndexKey, JSON.stringify(newIndex));
+                            } else if (indexUri) {
+                                await fs.writeAsStringAsync(indexUri, JSON.stringify(newIndex));
+                            }
 
                             // Remove legacy key
                             await AsyncStorage.removeItem('savedWords');
@@ -9861,7 +9900,11 @@ export default function App() {
                                 translations: { "English": w }
                             };
 
-                            await fs.writeAsStringAsync(docDir + `word_${id}.json`, JSON.stringify(fullData));
+                            if (isWeb) {
+                                await AsyncStorage.setItem(`word_${id}`, JSON.stringify(fullData));
+                            } else if (docDir) {
+                                await fs.writeAsStringAsync(docDir + `word_${id}.json`, JSON.stringify(fullData));
+                            }
 
                             newIndex.push({
                                 id,
@@ -9874,7 +9917,11 @@ export default function App() {
                         }));
 
                         wordsList = newIndex;
-                        await fs.writeAsStringAsync(indexUri, JSON.stringify(newIndex));
+                        if (isWeb) {
+                            await AsyncStorage.setItem(webIndexKey, JSON.stringify(newIndex));
+                        } else if (indexUri) {
+                            await fs.writeAsStringAsync(indexUri, JSON.stringify(newIndex));
+                        }
                     }
                 }
                 setSavedWords(wordsList);
@@ -10072,6 +10119,7 @@ export default function App() {
 
                 let splitSessions: Record<string, any> = {};
                 const corruptKeys: string[] = []; // NEW: Track bad keys
+                let metaLoaded = false;
                 try {
                     try {
                         // STRATEGY: Monolithic Metadata Index (Dictionary Style)
@@ -10113,7 +10161,7 @@ export default function App() {
                                 setAllSessionIds(ids);
                                 setChatSessions(metaMap);
                                 setLoadedSessionCount(ids.length);
-                                return; // EXIT: Success!
+                                metaLoaded = true;
                             }
                         }
 
@@ -10123,9 +10171,10 @@ export default function App() {
                         console.log("⚠️ Metadata Index check failed (Desync/Error). Proceeding to crawl...", metaCheckError);
                     }
 
-                    // FALLBACK / MIGRATION: No Index Found (First run or post-restore)
-                    // We must crawl all individual keys to build the index.
-                    console.log("Starting migration crawl...");
+                    if (!metaLoaded) {
+                        // FALLBACK / MIGRATION: No Index Found (First run or post-restore)
+                        // We must crawl all individual keys to build the index.
+                        console.log("Starting migration crawl...");
                     try {
                         const indexJson = await AsyncStorage.getItem('session_index');
                         if (indexJson) {
@@ -10185,8 +10234,9 @@ export default function App() {
                                 setLoadedSessionCount(reversedIds.length);
                             }
                         }
-                    } catch (crawlError) {
-                        console.error("Crawl logic failed:", crawlError);
+                        } catch (crawlError) {
+                            console.error("Crawl logic failed:", crawlError);
+                        }
                     }
 
                 } catch (e) {
@@ -10196,6 +10246,7 @@ export default function App() {
             } catch (err) {
                 console.error("Critical Data Load Error:", err);
             }
+            setIsSettingsLoaded(true);
         };
         loadData();
     }, []);
@@ -10980,7 +11031,7 @@ export default function App() {
             // BUG FIX: Use 'fullSession' (potentially deep loaded) instead of 'session' (potentially Lite)
             let loadedSession = { ...fullSession };
 
-            if (loadedSession.contentPath) {
+            if (loadedSession.contentPath && !isWeb) {
                 try {
                     // BUG FIX: Ensure we have a full URI. If it's just a filename, prepend documentDirectory.
                     const docDir = fs.documentDirectory || FileSystem.documentDirectory;
@@ -11402,9 +11453,11 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
                     // 4. Handle Audio Cleanup if it's an audio player session
                     if (sessionToDelete.toolId === 'audio_player' && sessionToDelete.audioUri) {
                         try {
-                            const exists = await FileSystem.getInfoAsync(sessionToDelete.audioUri);
-                            if (exists.exists) {
-                                await FileSystem.deleteAsync(sessionToDelete.audioUri);
+                            if (!isWeb) {
+                                const exists = await FileSystem.getInfoAsync(sessionToDelete.audioUri);
+                                if (exists.exists) {
+                                    await FileSystem.deleteAsync(sessionToDelete.audioUri);
+                                }
                             }
                         } catch (audioErr) {
                             console.error("Audio deletion error during single delete", audioErr);
@@ -11414,8 +11467,10 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
                     // 5. Handle Custom Uploaded Audio Cleanup
                     if (customAudioUris[id]) {
                         try {
-                            const audioUri = customAudioUris[id];
-                            await FileSystem.deleteAsync(audioUri, { idempotent: true });
+                            if (!isWeb) {
+                                const audioUri = customAudioUris[id];
+                                await FileSystem.deleteAsync(audioUri, { idempotent: true });
+                            }
 
                             const newAudioUris = { ...customAudioUris };
                             delete newAudioUris[id];
@@ -11452,17 +11507,26 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
 
     const deleteSavedWord = async (id: string) => {
         try {
-            // 1. Remove File
-            const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-            const fileName = `word_${id}.json`;
-            await fs.deleteAsync(docDir + fileName, { idempotent: true });
+            const docDir = (isWeb ? null : (fs.documentDirectory || FileSystem.documentDirectory));
+            const webIndexKey = 'dictionary_index_web';
+
+            // 1. Remove File or Key
+            if (isWeb) {
+                await AsyncStorage.removeItem(`word_${id}`);
+            } else if (docDir) {
+                await fs.deleteAsync(docDir + `word_${id}.json`, { idempotent: true });
+            }
 
             // 2. Update Index
             const newWords = savedWords.filter(w => w.id !== id);
             setSavedWords(newWords);
 
-            // 3. Save Index to File System
-            await fs.writeAsStringAsync(docDir + 'dictionary_index.json', JSON.stringify(newWords));
+            // 3. Save Index
+            if (isWeb) {
+                await AsyncStorage.setItem(webIndexKey, JSON.stringify(newWords));
+            } else if (docDir) {
+                await fs.writeAsStringAsync(docDir + 'dictionary_index.json', JSON.stringify(newWords));
+            }
         } catch (e) {
             console.error("Error deleting word", e);
             Alert.alert("Error", "Could not delete word.");
@@ -11550,16 +11614,26 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
             };
 
             try {
-                const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-                // 1. Write Full Data File
-                await fs.writeAsStringAsync(docDir + `word_${id}.json`, JSON.stringify(fullData));
+                const docDir = (isWeb ? null : (fs.documentDirectory || FileSystem.documentDirectory));
+                const webIndexKey = 'dictionary_index_web';
+
+                // 1. Write Full Data File or Key
+                if (isWeb) {
+                    await AsyncStorage.setItem(`word_${id}`, JSON.stringify(fullData));
+                } else if (docDir) {
+                    await fs.writeAsStringAsync(docDir + `word_${id}.json`, JSON.stringify(fullData));
+                }
 
                 // 2. Update Index in Memory
                 const newWords = [...currentWords, liteData];
                 setSavedWords(newWords);
 
-                // 3. Save Index to File System
-                await fs.writeAsStringAsync(docDir + 'dictionary_index.json', JSON.stringify(newWords));
+                // 3. Save Index
+                if (isWeb) {
+                    await AsyncStorage.setItem(webIndexKey, JSON.stringify(newWords));
+                } else if (docDir) {
+                    await fs.writeAsStringAsync(docDir + 'dictionary_index.json', JSON.stringify(newWords));
+                }
             } catch (e: any) { // Cast e to any as per instruction
                 console.error("Save Word Error", e);
                 Alert.alert("Error", "Could not save word to storage.");
@@ -23165,7 +23239,6 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
 
 
-                        <AppearanceButton />
                         <TouchableOpacity onPress={() => setActiveTab('settings')} style={[styles.iconBtn, { backgroundColor: isDay ? 'rgba(255, 255, 255, 0.2)' : theme.buttonBg, borderColor: 'transparent', marginLeft: 10 }]}>
                             <Settings size={20} color={isDay ? '#ffffff' : theme.text} />
                         </TouchableOpacity>
@@ -23209,111 +23282,10 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             </TouchableOpacity>
                         )}
 
-                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
                             <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, flexShrink: 1 }]} numberOfLines={1}>
-                                {displayTitle.length > 25 ? displayTitle.substring(0, 25) + '...' : displayTitle}
+                                {displayTitle.length > 30 ? displayTitle.substring(0, 30) + '...' : displayTitle}
                             </Text>
-                            {activeTab === 'home' && (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                    {!isChatbotMode && (
-                                        <TouchableOpacity
-                                            onPress={handleDownloadDictionary}
-                                            style={{ padding: 4, marginLeft: 2 }}
-                                        >
-                                            <DownloadCloud size={18} color={headerIconColor} />
-                                        </TouchableOpacity>
-                                    )}
-
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            if (isChatbotMode) {
-                                                if (isLiveChatbotMode) {
-                                                    // In live mode, we don't end the session when switching back to reader.
-                                                    // It keeps running in the background.
-                                                    setIsChatbotMode(false);
-                                                } else {
-                                                    endChatbotSession();
-                                                    setIsChatbotMode(false);
-                                                }
-                                            } else {
-                                                setIsChatbotMode(true);
-                                            }
-                                        }}
-                                        style={{
-                                            padding: 6,
-                                            paddingHorizontal: 12,
-                                            backgroundColor: isDay
-                                                ? 'rgba(255,255,255,0.2)'
-                                                : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight),
-                                            borderRadius: 20,
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            borderWidth: 1,
-                                            borderColor: isDay ? 'rgba(255,255,255,0.3)' : theme.border
-                                        }}
-                                    >
-                                        <Bot size={20} color={headerIconColor} />
-                                        <Text style={{
-                                            color: headerTextColor,
-                                            fontWeight: 'bold',
-                                            fontSize: 13,
-                                            letterSpacing: 0.5
-                                        }}>
-                                            {isChatbotMode ? "Reader" : "Chatbot"}
-                                        </Text>
-                                    </TouchableOpacity>
-
-                                    {/* NEW: Live Chatbot Mode Toggle (Only visible in Chatbot Mode) */}
-                                    {isChatbotMode && (
-                                        <>
-                                            {isLiveChatbotMode && (
-                                                <TouchableOpacity
-                                                    onPress={() => setShowSilencePicker(true)}
-                                                    style={{
-                                                        padding: 6,
-                                                        paddingHorizontal: 12,
-                                                        backgroundColor: isDay ? 'rgba(255,255,255,0.2)' : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight),
-                                                        borderRadius: 20,
-                                                        borderWidth: 1,
-                                                        borderColor: isDay ? 'rgba(255,255,255,0.3)' : theme.border,
-                                                        flexDirection: 'row',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: 4,
-                                                    }}
-                                                >
-                                                    <Clock size={16} color={headerIconColor} />
-                                                    <Text style={{ color: headerTextColor, fontSize: 13, fontWeight: 'bold' }}>
-                                                        {silenceTimeoutMs / 1000}s
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            )}
-                                            <TouchableOpacity
-                                                onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
-                                                style={{
-                                                    padding: 6,
-                                                    paddingHorizontal: 12,
-                                                    backgroundColor: isLiveChatbotMode
-                                                        ? 'rgba(34, 197, 94, 0.2)'
-                                                        : (isDay ? 'rgba(255,255,255,0.2)' : (theme.id === 'night' || theme.id === 'midnight' || theme.id === 'coffee' || theme.id === 'nord' ? 'rgba(255,255,255,0.1)' : theme.highlight)),
-                                                    borderRadius: 20,
-                                                    borderWidth: 1,
-                                                    borderColor: isLiveChatbotMode
-                                                        ? '#22c55e'
-                                                        : (isDay ? 'rgba(255,255,255,0.3)' : theme.border),
-                                                    flexDirection: 'row',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    gap: 8,
-                                                }}
-                                            >
-                                                <PhoneCall size={20} color={isLiveChatbotMode ? '#22c55e' : headerIconColor} />
-                                            </TouchableOpacity>
-                                        </>
-                                    )}
-                                </View>
-                            )}
                         </View>
                     </View>
                 )}
@@ -23449,7 +23421,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 padding: 12,
                                 backgroundColor: theme.buttonBg,
                                 borderRadius: 25,
-                                marginBottom: 20,
+                                marginBottom: 12, // Reduced to make space for the toggle
                                 borderWidth: 1,
                                 borderColor: theme.border
                             }}
@@ -23457,6 +23429,86 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                             <Plus size={20} color={theme.primary} />
                             <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>New Session</Text>
                         </TouchableOpacity>
+
+                        {/* Chatbot Mode Toggle */}
+                        <View style={{ marginHorizontal: 16, marginBottom: 20 }}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (isChatbotMode) {
+                                        if (isLiveChatbotMode) {
+                                            setIsChatbotMode(false);
+                                        } else {
+                                            endChatbotSession();
+                                            setIsChatbotMode(false);
+                                        }
+                                    } else {
+                                        setIsChatbotMode(true);
+                                    }
+                                    toggleSideMenu(false); // Close menu when switching modes
+                                }}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: 12,
+                                    backgroundColor: isChatbotMode ? theme.uiBg : 'transparent',
+                                    borderRadius: 16,
+                                    borderWidth: 1,
+                                    borderColor: isChatbotMode ? theme.primary : theme.border,
+                                }}
+                            >
+                                <Bot size={20} color={isChatbotMode ? theme.primary : theme.secondary} />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>
+                                    {isChatbotMode ? "Switch to Reader" : "Open Chatbot"}
+                                </Text>
+                            </TouchableOpacity>
+
+                            {/* Live Chatbot Mode & Silence Selection (Side menu version) */}
+                            {isChatbotMode && (
+                                <View style={{ marginTop: 8, flexDirection: 'row', gap: 8 }}>
+                                    <TouchableOpacity
+                                        onPress={() => setIsLiveChatbotMode(!isLiveChatbotMode)}
+                                        style={{
+                                            flex: 1,
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            padding: 10,
+                                            backgroundColor: isLiveChatbotMode ? 'rgba(34, 197, 94, 0.1)' : theme.uiBg,
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: isLiveChatbotMode ? '#22c55e' : theme.border,
+                                            gap: 8,
+                                        }}
+                                    >
+                                        <PhoneCall size={18} color={isLiveChatbotMode ? '#22c55e' : theme.secondary} />
+                                        <Text style={{ fontSize: 13, color: isLiveChatbotMode ? '#22c55e' : theme.text, fontWeight: '600' }}>
+                                            Live Mode
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    {isLiveChatbotMode && (
+                                        <TouchableOpacity
+                                            onPress={() => setShowSilencePicker(true)}
+                                            style={{
+                                                paddingHorizontal: 12,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                backgroundColor: theme.uiBg,
+                                                borderRadius: 12,
+                                                borderWidth: 1,
+                                                borderColor: theme.border,
+                                                flexDirection: 'row',
+                                                gap: 4
+                                            }}
+                                        >
+                                            <Clock size={16} color={theme.secondary} />
+                                            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>{silenceTimeoutMs / 1000}s</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            )}
+                        </View>
 
                         <ScrollView style={{ paddingHorizontal: 4 }}>
                             {renderGroup("Today", groups.today)}
@@ -23529,6 +23581,31 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                     </View>
                                 </View>
                             )}
+                            <View style={{ marginTop: 24, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 16, paddingHorizontal: 12, marginBottom: 20 }}>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Tools</Text>
+                                <TouchableOpacity
+                                    onPress={handleDownloadDictionary}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 12,
+                                        paddingVertical: 4
+                                    }}
+                                >
+                                    <View style={{
+                                        width: 32, height: 32,
+                                        borderRadius: 8,
+                                        backgroundColor: theme.buttonBg,
+                                        alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        <DownloadCloud size={18} color={theme.primary} />
+                                    </View>
+                                    <View>
+                                        <Text style={{ fontSize: 14, color: theme.text, fontWeight: '600' }}>Offline Dictionary</Text>
+                                        <Text style={{ fontSize: 11, color: theme.secondary }}>Download for offline use</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
                         </ScrollView>
                     </View>
                 </Animated.View>
@@ -25792,6 +25869,39 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     )}
                 </View>
 
+                {/* --- APPEARANCE SETTINGS --- */}
+                <View style={[styles.settingsCard, { backgroundColor: theme.bg, borderColor: theme.border, marginBottom: 20 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15, paddingHorizontal: 5 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Palette size={20} color={primaryColor} style={{ marginRight: 10 }} />
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: theme.secondary, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                                Appearance
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setShowAppearance(true)}
+                            style={{
+                                backgroundColor: theme.buttonBg,
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: theme.border,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 6
+                            }}
+                        >
+                            <PenLine size={14} color={primaryColor} />
+                            <Text style={{ color: primaryColor, fontWeight: 'bold', fontSize: 12 }}>Customize</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 15 }} />
+                    <Text style={{ fontSize: 13, color: theme.secondary, lineHeight: 18, opacity: 0.8 }}>
+                        Change the visual theme, font family, text size, and paragraph styles to suit your reading preference.
+                    </Text>
+                </View>
+
                 {/* 1. CLOUD API SETTINGS */}
                 <View style={[styles.settingsCard, { backgroundColor: theme.bg, borderColor: theme.border }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
@@ -27902,6 +28012,15 @@ Review the following raw transcribed text:
         } else {
             activeStatusBarStyle = "light-content"; // Keep light text for dark themes
         }
+    }
+
+    if (!isSettingsLoaded) {
+        return (
+            <View style={{ flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={{ marginTop: 20, color: theme.secondary, fontWeight: 'bold' }}>Restoring Activity...</Text>
+            </View>
+        );
     }
 
     return (
@@ -33243,157 +33362,75 @@ Review the following raw transcribed text:
                                 {/* VISUAL THEME SECTION */}
                                 <View style={styles.appearanceSection}>
                                     <Text style={[styles.appearanceSectionTitle, { color: theme.secondary }]}>{uiData.staticText?.settings?.theme || "VISUAL THEME"}</Text>
-                                    <ScrollView
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        style={{ marginBottom: 20 }}
-                                        contentContainerStyle={{ gap: 12 }}
-                                    >
-                                        {[
+                                    {(() => {
+                                        const themes = [
+                                            { id: 'day', label: 'Day', bg: '#ffffff', text: '#1a1a1a', icon: Sun },
+                                            { id: 'night', label: 'Night', bg: '#121212', text: '#e5e5e5', icon: Moon },
                                             { id: 'forest', label: 'Forest', bg: '#f0fdf4', text: '#14532d', icon: Leaf },
                                             { id: 'coffee', label: 'Coffee', bg: '#201a16', text: '#d6c4b0', icon: Coffee },
-                                            { id: 'nord', label: 'Nord', bg: '#2e3440', text: '#d8dee9', icon: Cpu },
-                                            { id: 'slate', label: 'Slate', bg: '#f8fafc', text: '#334155', icon: Feather },
-                                            { id: 'ocean', label: 'Ocean', bg: '#f0f9ff', text: '#0c4a6e', icon: Globe },
                                             { id: 'sepia', label: 'Sepia', bg: '#f8f1e3', text: '#5b4636', icon: BookOpen },
-                                            { id: 'night', label: 'Night', bg: '#121212', text: '#e5e5e5', icon: Moon },
-                                            { id: 'lavender', label: 'Lavender', bg: '#faf5ff', text: '#581c87', icon: Flower },
-                                            { id: 'day', label: 'Day', bg: '#ffffff', text: '#1a1a1a', icon: Sun },
                                             { id: 'yellow', label: 'Sunny', bg: '#fefce8', text: '#422006', icon: CloudSun },
-                                            { id: 'pink', label: 'Pink', bg: '#fdf2f8', text: '#831843', icon: Heart },
-                                            { id: 'midnight', label: 'Midnight', bg: '#0f172a', text: '#cbd5e1', icon: MoonStar },
-                                        ].map((t) => {
-                                            const isActive = displaySettings.theme === t.id;
-                                            return (
+                                        ];
+                                        const currentThemeObj = themes.find(t => t.id === displaySettings.theme) || themes[0];
+
+                                        return (
+                                            <View style={{ marginBottom: 20 }}>
                                                 <TouchableOpacity
-                                                    key={t.id}
-                                                    onPress={() => {
-                                                        // Toggle logic: Modern -> Classic, Classic -> Modern, Others -> Modern
-                                                        const currentFont = displaySettings.fontFamily;
-                                                        let nextFont = 'Modern';
-                                                        if (currentFont === 'Modern') {
-                                                            nextFont = 'Classic';
-                                                        }
-                                                        saveSettings({ theme: t.id, fontFamily: nextFont });
-                                                    }}
+                                                    activeOpacity={0.8}
+                                                    onPress={() => setIsThemeSelectorOpen(!isThemeSelectorOpen)}
                                                     style={{
-                                                        width: 100,
-                                                        height: 110,
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        backgroundColor: theme.uiBg,
+                                                        padding: 14,
                                                         borderRadius: 16,
-                                                        backgroundColor: t.bg,
-                                                        borderWidth: isActive ? 2 : 1,
-                                                        borderColor: isActive ? primaryColor : theme.border,
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        shadowColor: "#000",
-                                                        shadowOffset: { width: 0, height: 2 },
-                                                        shadowOpacity: 0.1,
-                                                        shadowRadius: 4,
-                                                        elevation: 3
-                                                    }}
-                                                >
-                                                    <t.icon size={24} color={isActive ? primaryColor : t.text} style={{ marginBottom: 8 }} />
-                                                    <Text style={{ color: t.text, fontWeight: 'bold', fontSize: 13 }}>{t.label}</Text>
-                                                    {isActive && <View style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: primaryColor }} />}
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
-
-                                    <Text style={[styles.appearanceSectionTitle, { color: theme.secondary }]}>FONT FAMILY</Text>
-
-                                    <ScrollView
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        style={{ marginBottom: 20 }}
-                                        contentContainerStyle={{ gap: 10, alignItems: 'center' }}
-                                    >
-                                        {['Modern', 'Classic', 'Typewriter', 'Rounded', 'Elegant', 'Compact', 'Minimalist', 'Casual'].map((f) => {
-                                            const isActive = displaySettings.fontFamily === f;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={f}
-                                                    onPress={() => saveSettings({ fontFamily: f })}
-                                                    style={{
-                                                        paddingHorizontal: 16,
-                                                        paddingVertical: 10,
-                                                        borderRadius: 20,
-                                                        backgroundColor: isActive ? primaryColor : theme.buttonBg,
                                                         borderWidth: 1,
-                                                        borderColor: isActive ? primaryColor : theme.border,
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        minWidth: 80
+                                                        borderColor: theme.border,
+                                                        justifyContent: 'space-between'
                                                     }}
                                                 >
-                                                    <Text style={{
-                                                        color: isActive ? 'white' : theme.text,
-                                                        fontWeight: 'bold',
-                                                        fontFamily: getFontFamily(f),
-                                                        fontSize: 14
-                                                    }}>
-                                                        {f === 'Typewriter' ? 'Mono' : f}
-                                                    </Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                        <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: currentThemeObj.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}>
+                                                            <currentThemeObj.icon size={18} color={currentThemeObj.text} />
+                                                        </View>
+                                                        <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text }}>{currentThemeObj.label}</Text>
+                                                    </View>
+                                                    {isThemeSelectorOpen ? <ChevronUp size={20} color={theme.secondary} /> : <ChevronDown size={20} color={theme.secondary} />}
                                                 </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
 
-                                    <Text style={[styles.appearanceSectionTitle, { color: theme.secondary }]}>TEXT STYLE</Text>
+                                                {isThemeSelectorOpen && (
+                                                    <View style={{ marginTop: 8, backgroundColor: theme.uiBg, borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' }}>
+                                                        {themes.map((t, idx) => (
+                                                            <TouchableOpacity
+                                                                key={t.id}
+                                                                onPress={() => {
+                                                                    saveSettings({ theme: t.id, fontFamily: 'Modern' });
+                                                                    setIsThemeSelectorOpen(false);
+                                                                }}
+                                                                style={{
+                                                                    flexDirection: 'row',
+                                                                    alignItems: 'center',
+                                                                    padding: 12,
+                                                                    backgroundColor: displaySettings.theme === t.id ? theme.highlight : 'transparent',
+                                                                    gap: 12,
+                                                                    borderBottomWidth: idx === themes.length - 1 ? 0 : 1,
+                                                                    borderBottomColor: theme.border
+                                                                }}
+                                                            >
+                                                                <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}>
+                                                                    <t.icon size={16} color={t.text} />
+                                                                </View>
+                                                                <Text style={{ fontSize: 15, color: theme.text, flex: 1 }}>{t.label}</Text>
+                                                                {displaySettings.theme === t.id && <Check size={18} color={primaryColor} />}
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                )}
+                                            </View>
+                                        );
+                                    })()}
 
-                                    <ScrollView
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        style={{ marginBottom: 20 }}
-                                        contentContainerStyle={{ gap: 10, alignItems: 'center' }}
-                                    >
-                                        {['Bold', 'Italic', 'Underlined', 'Strikethrough'].map((f) => {
-                                            const isActive = (displaySettings.textStyles || []).includes(f);
 
-                                            // Determine label style
-                                            let labelStyle = {
-                                                color: isActive ? 'white' : theme.text,
-                                                fontSize: 14,
-                                                fontFamily: getFontFamily(displaySettings.fontFamily), // Use current family
-                                                // Apply preview style for modifier types
-                                                fontWeight: f === 'Bold' ? 'bold' : 'normal',
-                                                fontStyle: f === 'Italic' ? 'italic' : 'normal',
-                                                textDecorationLine: f === 'Underlined' ? 'underline' : (f === 'Strikethrough' ? 'line-through' : 'none'),
-                                                letterSpacing: 0
-                                            };
-
-                                            return (
-                                                <TouchableOpacity
-                                                    key={f}
-                                                    onPress={() => {
-                                                        const current = displaySettings.textStyles || [];
-                                                        let newStyles;
-                                                        if (current.includes(f)) {
-                                                            newStyles = current.filter((s: string) => s !== f);
-                                                        } else {
-                                                            newStyles = [...current, f];
-                                                        }
-                                                        saveSettings({ textStyles: newStyles });
-                                                    }}
-                                                    style={{
-                                                        paddingHorizontal: 16,
-                                                        paddingVertical: 10,
-                                                        borderRadius: 20,
-                                                        backgroundColor: isActive ? primaryColor : theme.buttonBg,
-                                                        borderWidth: 1,
-                                                        borderColor: isActive ? primaryColor : theme.border,
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        minWidth: 80
-                                                    }}
-                                                >
-                                                    <Text style={labelStyle as any}>
-                                                        {f}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
 
                                     <CleanSlider
                                         label="TEXT SIZE"
@@ -33452,47 +33489,6 @@ Review the following raw transcribed text:
                                                 }} />
                                                 {!displaySettings.tapToDefine && (
                                                     <Text style={{ color: theme.secondary, fontSize: 10, fontWeight: 'bold', marginLeft: 6 }}>OFF</Text>
-                                                )}
-                                            </TouchableOpacity>
-                                        </View>
-
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View style={{ flex: 1, marginRight: 10 }}>
-                                                <Text style={{ fontSize: 15, fontWeight: '600', color: theme.text }}>Recent Words Flashcards</Text>
-                                                <Text style={{ fontSize: 12, color: theme.secondary }}>Show recent words on Home</Text>
-                                            </View>
-                                            <TouchableOpacity
-                                                activeOpacity={0.8}
-                                                onPress={() => saveSettings({ showPersonalDictionary: !displaySettings.showPersonalDictionary })}
-                                                style={{
-                                                    width: 60,
-                                                    height: 32,
-                                                    backgroundColor: displaySettings.showPersonalDictionary ? '#22c55e' : theme.buttonBg,
-                                                    borderRadius: 16,
-                                                    borderWidth: 1,
-                                                    borderColor: displaySettings.showPersonalDictionary ? '#22c55e' : theme.border,
-                                                    flexDirection: 'row',
-                                                    alignItems: 'center',
-                                                    paddingHorizontal: 4,
-                                                    justifyContent: displaySettings.showPersonalDictionary ? 'flex-end' : 'flex-start'
-                                                }}
-                                            >
-                                                {displaySettings.showPersonalDictionary && (
-                                                    <Eye size={12} color="white" style={{ marginRight: 6 }} />
-                                                )}
-                                                <View style={{
-                                                    width: 24,
-                                                    height: 24,
-                                                    borderRadius: 12,
-                                                    backgroundColor: 'white',
-                                                    shadowColor: "#000",
-                                                    shadowOffset: { width: 0, height: 1 },
-                                                    shadowOpacity: 0.2,
-                                                    shadowRadius: 1,
-                                                    elevation: 2
-                                                }} />
-                                                {!displaySettings.showPersonalDictionary && (
-                                                    <EyeOff size={12} color={theme.secondary} style={{ marginLeft: 6 }} />
                                                 )}
                                             </TouchableOpacity>
                                         </View>
