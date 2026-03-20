@@ -26126,103 +26126,48 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         <Text style={{ fontSize: 14, fontWeight: '700', color: theme.secondary, letterSpacing: 1 }}>STORAGE & DATA</Text>
                     </View>
 
-                    <View style={{ backgroundColor: theme.uiBg, borderRadius: 12, padding: 15, marginBottom: 20 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
-                            <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }}>System Status</Text>
-                            <Text style={{ color: primaryColor, fontWeight: 'bold', fontSize: 13 }}>Healthy</Text>
-                        </View>
-
-                        {/* NEW: Detailed Storage Stats */}
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <Text style={{ color: theme.secondary, fontSize: 12 }}>Text Data</Text>
-                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600' }}>
-                                {(storageStats.used / 1024).toFixed(0)} KB
-                            </Text>
-                        </View>
-
-                        {/* NEW: Audio Size Row */}
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <Text style={{ color: theme.secondary, fontSize: 12 }}>Audio Downloads</Text>
-                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600' }}>
-                                {(storageStats.audio / 1024 / 1024).toFixed(1)} MB
-                            </Text>
-                        </View>
-
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                            <Text style={{ color: theme.secondary, fontSize: 12 }}>Device Free Space</Text>
-                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600' }}>
-                                {(storageStats.free / 1024 / 1024).toFixed(0)} MB
-                            </Text>
-                        </View>
-
-                        <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 12 }} />
-
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: theme.highlight, alignItems: 'center', justifyContent: 'center' }}>
-                                <StickyNote size={16} color={primaryColor} />
-                            </View>
-                            <View>
-                                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 13 }}>
-                                    ~{estimatedNoteCapacity.toLocaleString()} Notes Capacity
-                                </Text>
-                                <Text style={{ color: theme.secondary, fontSize: 10 }}>
-                                    Estimated based on available storage
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-
-
-
-                    {/* NEW: Full Data Backup Actions */}
+                    {/* Simplified Backup/Restore Actions */}
                     <View style={{ marginBottom: 20 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 8, textTransform: 'uppercase' }}>FULL DATA BACKUP (LIBRARY + NOTES+ DICTIONARY)</Text>
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             <TouchableOpacity
                                 onPress={handleExportAllData}
-                                style={{ flex: 1, backgroundColor: isDay ? '#f0f9ff' : 'rgba(14, 165, 233, 0.1)', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: isDay ? '#bae6fd' : 'rgba(14, 165, 233, 0.3)' }}
+                                style={{
+                                    flex: 1,
+                                    backgroundColor: isDay ? '#f0f9ff' : 'rgba(14, 165, 233, 0.1)',
+                                    padding: 14,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    borderWidth: 1,
+                                    borderColor: isDay ? '#bae6fd' : 'rgba(14, 165, 233, 0.3)'
+                                }}
                             >
-                                <Upload size={16} color={isDay ? '#0284c7' : '#38bdf8'} />
-                                <Text style={{ color: isDay ? '#0284c7' : '#38bdf8', fontWeight: '600', fontSize: 13 }}>Backup All Data</Text>
+                                <Upload size={18} color={isDay ? '#0284c7' : '#38bdf8'} />
+                                <Text style={{ color: isDay ? '#0284c7' : '#38bdf8', fontWeight: 'bold', fontSize: 13 }}>Backup All Data</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
                                 onPress={handleImportAllData}
-                                style={{ flex: 1, backgroundColor: isDay ? '#f0f9ff' : 'rgba(14, 165, 233, 0.1)', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: isDay ? '#bae6fd' : 'rgba(14, 165, 233, 0.3)' }}
+                                style={{
+                                    flex: 1,
+                                    backgroundColor: isDay ? '#f0f9ff' : 'rgba(14, 165, 233, 0.1)',
+                                    padding: 14,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    borderWidth: 1,
+                                    borderColor: isDay ? '#bae6fd' : 'rgba(14, 165, 233, 0.3)'
+                                }}
                             >
-                                <FileDown size={16} color={isDay ? '#0284c7' : '#38bdf8'} />
-                                <Text style={{ color: isDay ? '#0284c7' : '#38bdf8', fontWeight: '600', fontSize: 13 }}>Restore Data</Text>
+                                <FileDown size={18} color={isDay ? '#0284c7' : '#38bdf8'} />
+                                <Text style={{ color: isDay ? '#0284c7' : '#38bdf8', fontWeight: 'bold', fontSize: 13 }}>Restore Data</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
-
-                    {/* NEW: Data Limits Section */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-                        <HardDrive size={20} color={theme.text} style={{ marginRight: 10 }} />
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: theme.secondary, letterSpacing: 1 }}>DATA LIMITS</Text>
-                    </View>
-
-                    <IntSlider
-                        label="Dictionary History"
-                        usageText={`Used: ${dictHistoryUsed} • Free: ${dictHistoryFree}`}
-                        value={displaySettings.dictionaryLimit}
-                        min={1000} max={10000}
-                        step={500}
-                        onValueChange={(val) => saveSettings({ dictionaryLimit: val })}
-                        theme={theme}
-                        formatValue={formatK}
-                    />
-
-                    <IntSlider
-                        label="Library Limit (Journals)"
-                        usageText={`Used: ${journalsCount} Jrnls • ${notesCount} Notes (Unlimited)\nFree: ${freeSessions} Jrnls • ${freeWords} Words • ${freeQs} Qs`}
-                        value={displaySettings.libraryLimit}
-                        min={50} max={2000}
-                        step={50}
-                        onValueChange={(val) => saveSettings({ libraryLimit: val })}
-                        theme={theme}
-                        formatValue={formatK}
-                    />
 
                     <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 20 }} />
 
@@ -26246,9 +26191,13 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         }}
                     >
                         <RefreshCcw size={18} color="#ef4444" />
-                        <Text style={{ color: "#ef4444", fontWeight: 'bold', fontSize: 14 }}>{uiData.staticText?.settings?.clearData || "Reset All Data"}</Text>
+                        <Text style={{ color: "#ef4444", fontWeight: 'bold', fontSize: 14 }}>Reset ALL data</Text>
                     </TouchableOpacity>
                 </View>
+
+                {/* Gap for next section */}
+                <View style={{ height: 20 }} />
+
 
                 {/* 4. INTEGRATED SUPPORT & DEVELOPER */}
                 <View style={[styles.settingsCard, { backgroundColor: theme.bg, borderColor: theme.border, overflow: 'hidden', padding: 0 }]}>

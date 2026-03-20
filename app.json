@@ -2,15 +2,14 @@
   "expo": {
     "name": "ReaderApp",
     "slug": "ReaderApp",
-    "version": "16.1.9",
+    "version": "16.1.10",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "readerapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "16.1.9",
+      "buildNumber": "16.1.10",
       "bundleIdentifier": "com.mkysitapur.ReaderApp",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "The app accesses your photos to let you analyze text and images from your library.",
@@ -39,10 +38,9 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.mkysitapur.ReaderApp",
-      "versionCode": 36,
+      "versionCode": 37,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
@@ -77,7 +75,17 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "pwa": {
+        "name": "ReaderApp",
+        "shortName": "ReaderApp",
+        "description": "A powerful reader application for documents and images.",
+        "themeColor": "#E6F4FE",
+        "backgroundColor": "#ffffff",
+        "display": "standalone",
+        "orientation": "any",
+        "startUrl": "/"
+      }
     },
     "plugins": [
       "expo-router",
@@ -113,7 +121,9 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": true,
+      "newArchEnabled": true,
+      "edgeToEdgeEnabled": true
     },
     "extra": {
       "router": {},
