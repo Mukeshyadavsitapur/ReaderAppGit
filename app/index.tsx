@@ -23849,8 +23849,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
     const renderSetupScreen = () => {
         const fixedInputTools = ["ml_tutor", "teacher", "ai_for_everyone", "tech_guide", "ai_usage", "prompt_engineer", "grammar_guide", "writer", "idiom_guide", "editorial_writer", "greetings_gen"];
-        // UPDATED: Added selectedScenario?.isCustom to force fixed input mode for custom roles
-        const isFixedInputMode = fixedInputTools.includes(selectedScenario?.id) || selectedScenario?.isCustom;
+        // UPDATED: Fixed input mode for normal tools; Custom roles now use the unified standard pill-mode
+        const isFixedInputMode = fixedInputTools.includes(selectedScenario?.id);
         const expandedInputTools = ["journal_buddy", "summarizer"];
         const isExpandedInputMode = expandedInputTools.includes(selectedScenario?.id);
 
@@ -24353,7 +24353,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
         return (
             <View style={{ flex: 1, backgroundColor: theme.bg }}>
-                {selectedScenario?.id !== 'examiner' && (
+                {selectedScenario?.id !== 'examiner' && !selectedScenario?.isCustom && (
                     <View style={{ height: 90, borderBottomWidth: 1, borderColor: theme.border, backgroundColor: theme.uiBg }}>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'center' }}>
                             {/* COMBINED LIST: Custom Tools First + Standard Tools */}
@@ -25501,7 +25501,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     )}
                 </KeyboardAvoidingView>
 
-                {!isExpandedInputMode && !isFixedInputMode && selectedScenario?.id !== 'examiner' && (
+                {!isExpandedInputMode && !isFixedInputMode && selectedScenario?.id !== 'examiner' && !selectedScenario?.isCustom && (
                     <DraggableFAB
                         onPress={handleStartScenario}
                         label={selectedScenario?.actionLabel || "Start"}
