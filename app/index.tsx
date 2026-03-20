@@ -186,8 +186,14 @@ const handleStorageError = (e: any, action: string) => {
     if (isCurrentlyPruning) return; // Silent abort if already handling a crash
     const msg = String(e?.message ?? '');
     const code = String(e?.code ?? e?.cause?.code ?? '');
-    if (msg.includes('SQLITE_FULL') || msg.includes('database or disk is full') || code.includes('13')) {
-        console.warn(`[SafeStorage] ${action} intercepted SQLITE_FULL. Triggering auto-prune...`);
+    if (
+        msg.includes('SQLITE_FULL') || 
+        msg.includes('database or disk is full') || 
+        code.includes('13') ||
+        msg.includes('QuotaExceededError') ||
+        msg.includes('NS_ERROR_DOM_QUOTA_REACHED')
+    ) {
+        console.warn(`[SafeStorage] ${action} intercepted storage limit. Triggering auto-prune...`);
         if (globalAutoFreeStorage) {
             isCurrentlyPruning = true;
             globalAutoFreeStorage().finally(() => {
@@ -5954,10 +5960,66 @@ export default function App() {
     const storageFull_shown = useRef(false); // show the toast only once per session
     const autoFreeStorage = async (retrySave?: () => Promise<void>) => {
         try {
-            console.warn('SQLITE_FULL detected – but auto-pruning is disabled by user request.');
+            console.warn('Storage limit detected – auto-pruning oldest data...');
+
+            const metaIndexJson = await AsyncStorage.getItem('library_metadata_index');
+            let metaMap: Record<string, any> = {};
+            if (metaIndexJson) metaMap = JSON.parse(metaIndexJson);
+
+            // Find unpinned sessions
+            const unpinnedKeys = Object.keys(metaMap).filter(k => !metaMap[k].pinned);
+
+            if (unpinnedKeys.length === 0) {
+                console.warn('Cannot prune: All sessions are pinned or index is empty.');
+                if (!storageFull_shown.current) {
+                    storageFull_shown.current = true;
+                    showToast('⚠️ Storage is full. Please go to settings and clear some data.');
+                }
+                return;
+            }
+
+            // Sort by oldest timestamp first
+            unpinnedKeys.sort((a, b) => {
+                const ta = metaMap[a].lastOpened || metaMap[a].timestamp;
+                const tb = metaMap[b].lastOpened || metaMap[b].timestamp;
+                return new Date(ta).getTime() - new Date(tb).getTime();
+            });
+
+            // Select oldest 10 (or up to half if less than 20)
+            const numToPrune = Math.min(10, Math.ceil(unpinnedKeys.length / 2));
+            const keysToRemove = unpinnedKeys.slice(0, numToPrune);
+
+            console.log(`Auto-pruning ${keysToRemove.length} oldest sessions to free space...`);
+
+            // Remove from AsyncStorage
+            const storageKeysToRemove = keysToRemove.map(id => `session_${id}`);
+            await AsyncStorage.multiRemove(storageKeysToRemove);
+
+            // Remove from master index (session_index)
+            const masterIndexJson = await AsyncStorage.getItem('session_index');
+            if (masterIndexJson) {
+                let masterIndex = JSON.parse(masterIndexJson);
+                if (Array.isArray(masterIndex)) {
+                    masterIndex = masterIndex.filter((id: string) => !keysToRemove.includes(id));
+                    await AsyncStorage.setItem('session_index', JSON.stringify(masterIndex));
+                }
+            }
+
+            // Remove from metadata index
+            keysToRemove.forEach(k => delete metaMap[k]);
+            await AsyncStorage.setItem('library_metadata_index', JSON.stringify(metaMap));
+
+            // Optimistically update React state if possible without causing loops
+            setAllSessionIds?.(prev => prev.filter((id: string) => !keysToRemove.includes(id)));
+            setChatSessions?.((prev: any) => {
+                const next = { ...prev };
+                keysToRemove.forEach(k => delete next[k]);
+                return next;
+            });
+
             if (!storageFull_shown.current) {
                 storageFull_shown.current = true;
-                showToast('⚠️ Storage is full. Please go to settings and clear some data.');
+                showToast('🧹 Storage was full. Auto-deleted oldest data.');
             }
 
             // Retry the original save after freeing space (if provided)
@@ -9746,6 +9808,12 @@ export default function App() {
     };
 
     useEffect(() => {
+        let isCancelled = false;
+        // Safety net: forcibly dismiss loading screen after 5 seconds
+        const safetyTimeout = setTimeout(() => {
+            if (!isCancelled) setIsSettingsLoaded(true);
+        }, 5000);
+
         const loadData = async () => {
             try {
                 const storedSettings = await AsyncStorage.getItem('settings');
@@ -10260,9 +10328,17 @@ export default function App() {
             } catch (err) {
                 console.error("Critical Data Load Error:", err);
             }
-            setIsSettingsLoaded(true);
+            if (!isCancelled) {
+                clearTimeout(safetyTimeout);
+                setIsSettingsLoaded(true);
+            }
         };
         loadData();
+
+        return () => {
+            isCancelled = true;
+            clearTimeout(safetyTimeout);
+        };
     }, []);
 
     // Pagination Removed: loadMoreSessions & loadMoreLibrary deleted.
