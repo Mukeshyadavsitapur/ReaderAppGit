@@ -5,12 +5,15 @@ interface AppIconProps {
     size?: number;
     style?: StyleProp<ImageStyle>;
     tintColor?: string;
+    monochrome?: boolean;
 }
 
-const AppIcon: React.FC<AppIconProps> = ({ size = 24, style, tintColor }) => {
+const AppIcon: React.FC<AppIconProps> = ({ size = 24, style, tintColor, monochrome = false }) => {
     return (
         <Image 
-            source={require('../../assets/images/android-icon-background.png')}
+            source={monochrome 
+                ? require('../../assets/images/android-icon-monochrome.png')
+                : require('../../assets/images/icon.png')}
             style={[
                 { width: size, height: size },
                 style,

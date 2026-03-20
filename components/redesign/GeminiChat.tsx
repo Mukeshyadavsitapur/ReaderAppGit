@@ -18,7 +18,9 @@ import {
     Volume2,
     Square,
     Lightbulb,
-    CheckCircle
+    CheckCircle,
+    PhoneOff,
+    Keyboard as KeyboardIcon
 } from 'lucide-react-native';
 import AppIcon from '../common/AppIcon';
 import ResponsiveWrapper from '../common/ResponsiveWrapper';
@@ -83,6 +85,7 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
     scrollRef
 }) => {
     const isWeb = Platform.OS === 'web';
+    const [isKeyboardMode, setIsKeyboardMode] = React.useState(false);
 
     return (
         <KeyboardAvoidingView 
@@ -169,30 +172,74 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
                     )}
                 </ScrollView>
 
-                {/* Bottom Input Pill */}
+                {/* Bottom Control Area */}
                 <View style={[styles.inputContainer, { backgroundColor: theme.bg }]}>
-                    <View style={[styles.inputPill, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-                        <TextInput 
-                            style={[styles.input, { color: theme.text }]}
-                            placeholder="Message Assistant..."
-                            placeholderTextColor={theme.secondary}
-                            value={input}
-                            onChangeText={setInput}
-                            multiline
-                            onSubmitEditing={() => onSend(input)}
-                        />
-                        <View style={styles.inputActions}>
-                            <TouchableOpacity onPress={onVoiceToggle} style={[styles.micBtn, isRecording && { backgroundColor: '#ef4444' }]}>
-                                <Mic size={20} color={isRecording ? '#fff' : theme.secondary} />
+                    {!isKeyboardMode ? (
+                        <View style={styles.voiceControlWrapper}>
+                            <TouchableOpacity 
+                                onPress={() => setIsKeyboardMode(true)} 
+                                style={[styles.keyboardBtn, { borderColor: theme.border, borderWidth: 1 }]}
+                            >
+                                <KeyboardIcon size={24} color={theme.secondary} />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => onSend(input)} style={[styles.sendBtn, { backgroundColor: primaryColor }]}>
-                                <ArrowRight size={20} color="#fff" />
+                            
+                            <TouchableOpacity 
+                                onPress={onVoiceToggle} 
+                                style={[
+                                    styles.micRectangleBtn, 
+                                    { 
+                                        backgroundColor: 'transparent',
+                                        borderColor: isRecording ? '#ef4444' : theme.border,
+                                        borderWidth: 1
+                                    }
+                                ]}
+                                activeOpacity={0.7}
+                            >
+                                <Mic size={28} color={isRecording ? "#ef4444" : primaryColor} fill={isRecording ? "rgba(239, 68, 68, 0.1)" : "transparent"} />
+                                {isRecording && <ActivityIndicator size="small" color="#ef4444" style={{ marginLeft: 10 }} />}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                onPress={onEndSession} 
+                                style={[styles.cutCallBtn, { borderColor: theme.border, borderWidth: 1 }]}
+                            >
+                                <PhoneOff size={24} color="#ef4444" />
                             </TouchableOpacity>
                         </View>
-                    </View>
-                    <TouchableOpacity onPress={onEndSession} style={styles.endBtn}>
-                        <X size={20} color="#ef4444" />
-                    </TouchableOpacity>
+                    ) : (
+                        <View style={[styles.inputPill, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+                            <TextInput 
+                                style={[styles.input, { color: theme.text }]}
+                                placeholder="Message Assistant..."
+                                placeholderTextColor={theme.secondary}
+                                value={input}
+                                onChangeText={setInput}
+                                multiline
+                                autoFocus
+                                onSubmitEditing={() => onSend(input)}
+                            />
+                            <View style={styles.inputActions}>
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        onVoiceToggle();
+                                        setIsKeyboardMode(false);
+                                    }} 
+                                    style={[styles.micBtn, isRecording && { backgroundColor: '#ef4444' }]}
+                                >
+                                    <Mic size={20} color={isRecording ? '#fff' : theme.secondary} fill={isRecording ? "#fff" : "transparent"} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => onSend(input)} style={[styles.sendBtn, { backgroundColor: primaryColor }]}>
+                                    <ArrowRight size={20} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+                    
+                    {isKeyboardMode && (
+                        <TouchableOpacity onPress={onEndSession} style={styles.endBtn}>
+                            <X size={20} color="#ef4444" />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </ResponsiveWrapper>
         </KeyboardAvoidingView>
@@ -317,6 +364,35 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 1,
         borderColor: 'rgba(239, 68, 68, 0.2)',
+    },
+    voiceControlWrapper: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+    },
+    cutCallBtn: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    micRectangleBtn: {
+        flex: 1,
+        height: 56,
+        borderRadius: 28,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    keyboardBtn: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
     }
 });
 

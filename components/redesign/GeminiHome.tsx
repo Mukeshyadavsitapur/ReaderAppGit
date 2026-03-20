@@ -71,7 +71,17 @@ const GeminiHome: React.FC<GeminiHomeProps> = ({
             <View style={[styles.blob, { bottom: 100, right: -100, backgroundColor: primaryColor + '08' }]} />
             
             <View style={styles.watermarkContainer}>
-                <AppIcon size={320} style={{ opacity: theme.id === 'day' ? 0.06 : 0.08, transform: [{ rotate: '-15deg' }] }} />
+                <AppIcon 
+                    size={320} 
+                    tintColor={theme.text}
+                    monochrome={true}
+                    style={{ 
+                        opacity: theme.id === 'day' ? 0.05 : 0.04, 
+                        transform: [{ rotate: '-15deg' }],
+                        borderRadius: 160,
+                        overflow: 'hidden'
+                    }} 
+                />
             </View>
             
             <ResponsiveWrapper maxWidth={1000} style={styles.mainContent}>

@@ -23226,7 +23226,17 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 <View style={{ position: 'absolute', bottom: 100, right: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: primaryColor + '08', zIndex: 1 }} />
                 
                 <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-                    <AppIcon size={320} style={{ opacity: isDay ? 0.06 : 0.08, transform: [{ rotate: '-15deg' }] }} />
+                    <AppIcon 
+                        size={320} 
+                        tintColor={theme.text}
+                        monochrome={true}
+                        style={{ 
+                            opacity: isDay ? 0.05 : 0.04, 
+                            transform: [{ rotate: '-15deg' }],
+                            borderRadius: 160,
+                            overflow: 'hidden'
+                        }} 
+                    />
                 </View>
 
                 <View style={{ flex: 1, zIndex: 10 }}>
