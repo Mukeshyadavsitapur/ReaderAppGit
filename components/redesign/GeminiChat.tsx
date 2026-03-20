@@ -115,7 +115,9 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
                                 
                                 <View style={[
                                     styles.bubble,
-                                    isUser ? { backgroundColor: primaryColor, borderBottomRightRadius: 4 } : { backgroundColor: 'transparent' }
+                                    isUser 
+                                        ? { backgroundColor: primaryColor, borderBottomRightRadius: 4 } 
+                                        : { backgroundColor: theme.bubbleAI, borderBottomLeftRadius: 4, marginLeft: 12 }
                                 ]}>
                                     <InteractiveText 
                                         rawText={msg.content}
@@ -160,7 +162,9 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
                             <View style={[styles.avatar, { backgroundColor: theme.uiBg }]}>
                                 <AppIcon size={20} />
                             </View>
-                            <ActivityIndicator size="small" color={primaryColor} style={{ marginLeft: 12 }} />
+                            <View style={[styles.bubble, { backgroundColor: theme.bubbleAI, borderBottomLeftRadius: 4, marginLeft: 12, paddingVertical: 10, paddingHorizontal: 16 }]}>
+                                <ActivityIndicator size="small" color={primaryColor} />
+                            </View>
                         </View>
                     )}
                 </ScrollView>
@@ -223,8 +227,8 @@ const styles = StyleSheet.create({
     bubble: {
         maxWidth: '85%',
         padding: 12,
-        borderRadius: 18,
-        marginLeft: 12,
+        paddingHorizontal: 16,
+        borderRadius: 20,
     },
     userBubble: {
         paddingHorizontal: 16,

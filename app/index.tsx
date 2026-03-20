@@ -12,6 +12,7 @@ import * as Sharing from 'expo-sharing';
 import * as Speech from 'expo-speech';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import {
+    Activity,
     AlertTriangle,
     ArrowLeft,
     ArrowLeftRight,
@@ -128,7 +129,8 @@ import {
     Wrench,
     X,
     XCircle,
-    Youtube
+    Youtube,
+    Zap
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -1522,7 +1524,12 @@ const ICON_MAP: { [key: string]: any } = {
     'Plane': Plane,
     'Drama': Drama,
     'Palette': Palette,
-    'Leaf': Leaf
+    'Leaf': Leaf,
+    'Activity': Activity,
+    'Zap': Zap,
+    'BookOpen': BookOpen,
+    'Languages': Languages,
+    'BookA': BookA
 };
 
 // Color palette for auto-assignment to custom roles
@@ -1973,6 +1980,7 @@ const CHATBOT_CHARACTERS: any[] = [
         title: 'Shorty (Quick Answers)',
         role: 'Brevity Specialist',
         prompt: 'Act as Shorty, a brevity specialist. Your goal is to provide short and concise answers while maintaining a helpful tone.\n\nTone: Direct and brief.\n\nVocabulary Control: Use CEFR A1–B2 levels. Prioritize A2 and B1 words for accessibility.\n\nThe Closer: Always end every response with a quick question and do not use special characters and emoji in conversation.\n\nConstraint: TOTAL response MUST NOT exceed 400 characters. DO NOT use ellipsis for cutting off; prioritize brevity. Remember chat history for context.',
+        iconName: 'Zap',
         color: ['#f59e0b', '#d97706'], // Amber/Orange
         greeting: "Hi! I'm Shorty. I give quick answers. What's on your mind?"
     },
@@ -1981,7 +1989,7 @@ const CHATBOT_CHARACTERS: any[] = [
         title: 'Wordy (Vocab Tutor)',
         role: 'Recent Words Practice',
         prompt: 'Act as Wordy, a vocab tutor. Your goal is to help the user practice words.\n\nFormat: according to user instructions.\n\nTone: Supportive and educational.\n\nVocabulary Control: Use CEFR A1–B2 levels. Prioritize A2 and B1 words.\n\nRules:ask questions to user according to practice word If user give answer your question then provide feedback for user answer.\n- Every response must end with a follow-up question and do not use special characters and emoji in conversation.\n\nConstraint: Responses must stay under 600 characters.',
-        iconName: 'BookOpen',
+        iconName: 'BookA',
         color: ['#3b82f6', '#2563eb'], // Blue
         greeting: "Hello! I'm Wordy. Let's practice the words you recently searched!"
     },
@@ -23257,23 +23265,14 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         style={{
                                             flexDirection: 'row',
                                             alignItems: 'center',
-                                            paddingVertical: 12,
+                                            paddingVertical: 14,
                                             paddingHorizontal: 16,
-                                            backgroundColor: isDay ? 'rgba(255,255,255,0.4)' : 'rgba(30,30,30,0.3)',
                                             borderRadius: 16,
+                                            borderWidth: 0,
                                             gap: 14,
                                         }}
                                     >
-                                        <View style={{ 
-                                            width: 44, 
-                                            height: 44, 
-                                            borderRadius: 12, 
-                                            alignItems: 'center', 
-                                            justifyContent: 'center',
-                                            backgroundColor: char.color[0] + '20' // Subtle tint of character color
-                                        }}>
-                                            <IconComponent size={22} color={char.color[0]} />
-                                        </View>
+                                        <IconComponent size={24} color={char.color[0]} />
                                         <View style={{ flex: 1 }}>
                                             <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 2 }}>{char.title}</Text>
                                             <Text style={{ fontSize: 12, color: theme.secondary, opacity: 0.7 }} numberOfLines={1}>{char.role}</Text>
