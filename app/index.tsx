@@ -169,6 +169,7 @@ import InteractiveText from '../components/common/InteractiveText';
 import ResponsiveWrapper from '../components/common/ResponsiveWrapper';
 import GeminiHome from '../components/redesign/GeminiHome';
 import GeminiChat from '../components/redesign/GeminiChat';
+import AppIcon from '../components/common/AppIcon';
 
 const isWeb = Platform.OS === 'web';
 
@@ -23202,68 +23203,88 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     };
 
     const renderChatbotHome = () => {
+        const isDay = theme.id === 'day';
+        
         return (
-            <View style={{ flex: 1, padding: 20 }}>
-                <View style={{ alignItems: 'center', marginBottom: 32, marginTop: 10 }}>
-                    <Text style={{
-                        fontSize: 28,
-                        fontWeight: '900',
-                        color: theme.text,
-                        marginBottom: 8,
-                        letterSpacing: 0.5,
-                        textAlign: 'center'
-                    }}>
-                        Live Character
-                    </Text>
-                    <View style={{ height: 4, width: 40, backgroundColor: theme.primary, borderRadius: 2, marginBottom: 12 }} />
-                    <Text style={{
-                        fontSize: 15,
-                        color: theme.secondary,
-                        textAlign: 'center',
-                        maxWidth: '90%',
-                        lineHeight: 22
-                    }}>
-                        Select a companion to help you practice your language skills.
-                    </Text>
+            <View style={{ flex: 1, overflow: 'hidden' }}>
+                {/* Full-screen subtle gradient/tint */}
+                <LinearGradient
+                    colors={[theme.bg, isDay ? '#f8faff' : theme.uiBg]}
+                    style={[StyleSheet.absoluteFill, { zIndex: 0 }]}
+                />
+
+                {/* Aesthetic Background Blobs & Watermark */}
+                <View style={{ position: 'absolute', top: -100, left: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: primaryColor + '10', zIndex: 1 }} />
+                <View style={{ position: 'absolute', bottom: 100, right: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: primaryColor + '08', zIndex: 1 }} />
+                
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                    <AppIcon size={320} style={{ opacity: isDay ? 0.06 : 0.08, transform: [{ rotate: '-15deg' }] }} />
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false}>
-                    <View style={{ gap: 16 }}>
-                        {CHATBOT_CHARACTERS.map((char) => {
-                            const IconComponent = ICON_MAP[char.iconName] || Bot;
-                            return (
-                                <TouchableOpacity
-                                    key={char.id}
-                                    onPress={() => handleChatbotCharSelect(char)}
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        padding: 16,
-                                        backgroundColor: theme.uiBg,
-                                        borderRadius: 20,
-                                        borderWidth: 1,
-                                        borderColor: theme.border,
-                                        gap: 16,
-                                        shadowColor: "#000",
-                                        shadowOffset: { width: 0, height: 2 },
-                                        shadowOpacity: 0.05,
-                                        shadowRadius: 4,
-                                        elevation: 2
-                                    }}
-                                >
-                                    <LinearGradient colors={char.color} style={{ width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
-                                        <IconComponent size={28} color="white" />
-                                    </LinearGradient>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginBottom: 4 }}>{char.title}</Text>
-                                        <Text style={{ fontSize: 13, color: theme.secondary }}>{char.role}</Text>
-                                    </View>
-                                    <ChevronRight size={20} color={theme.secondary} opacity={0.5} />
-                                </TouchableOpacity>
-                            );
-                        })}
+                <View style={{ flex: 1, zIndex: 10 }}>
+                    <View style={{ alignItems: 'center', marginBottom: 24, marginTop: 40, paddingHorizontal: 20 }}>
+                        <Text style={{
+                            fontSize: 24,
+                            fontWeight: '900',
+                            color: theme.text,
+                            marginBottom: 8,
+                            letterSpacing: -0.5,
+                            textAlign: 'center'
+                        }}>
+                            Character Picker
+                        </Text>
+                        <Text style={{
+                            fontSize: 14,
+                            color: theme.secondary,
+                            textAlign: 'center',
+                            maxWidth: '85%',
+                            lineHeight: 20,
+                            opacity: 0.8
+                        }}>
+                            Practice with a specialized companion.
+                        </Text>
                     </View>
-                </ScrollView>
+
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+                        <View style={{ gap: 8, paddingHorizontal: 16 }}>
+                            {CHATBOT_CHARACTERS.map((char) => {
+                                const IconComponent = ICON_MAP[char.iconName] || Bot;
+                                return (
+                                    <TouchableOpacity
+                                        key={char.id}
+                                        onPress={() => handleChatbotCharSelect(char)}
+                                        activeOpacity={0.7}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingVertical: 12,
+                                            paddingHorizontal: 16,
+                                            backgroundColor: isDay ? 'rgba(255,255,255,0.4)' : 'rgba(30,30,30,0.3)',
+                                            borderRadius: 16,
+                                            gap: 14,
+                                        }}
+                                    >
+                                        <View style={{ 
+                                            width: 44, 
+                                            height: 44, 
+                                            borderRadius: 12, 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center',
+                                            backgroundColor: char.color[0] + '20' // Subtle tint of character color
+                                        }}>
+                                            <IconComponent size={22} color={char.color[0]} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 2 }}>{char.title}</Text>
+                                            <Text style={{ fontSize: 12, color: theme.secondary, opacity: 0.7 }} numberOfLines={1}>{char.role}</Text>
+                                        </View>
+                                        <ChevronRight size={18} color={theme.secondary} opacity={0.3} />
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </ScrollView>
+                </View>
             </View>
         );
     };
