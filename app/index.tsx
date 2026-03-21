@@ -23472,9 +23472,15 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                         </Text>
                     </View>
 
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-                        <View style={{ gap: 8, paddingHorizontal: 16 }}>
-                            {/* Unified List: Custom first, then defaults */}
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 16 }}>
+                        <View style={{ 
+                            flexDirection: 'row', 
+                            flexWrap: 'wrap', 
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            marginTop: 10
+                        }}>
+                            {/* Unified Grid: Custom first, then defaults */}
                             {[...customChatbotCharacters, ...CHATBOT_CHARACTERS].map((char) => {
                                 const IconComponent = ICON_MAP[char.iconName] || Bot;
                                 return (
@@ -23484,50 +23490,60 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         onLongPress={() => char.isCustom && handleLongPressCustomCharacter(char)}
                                         activeOpacity={0.7}
                                         style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            paddingVertical: 14,
-                                            paddingHorizontal: 16,
-                                            borderRadius: 16,
-                                            backgroundColor: isDay ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)',
-                                            gap: 14,
+                                            width: '48%',
+                                            aspectRatio: 1,
+                                            borderRadius: 24,
+                                            backgroundColor: isDay ? '#ffffff' : theme.uiBg,
+                                            padding: 16,
+                                            borderWidth: 1,
+                                            borderColor: theme.border,
+                                            justifyContent: 'space-between',
+                                            shadowColor: "#000",
+                                            shadowOffset: { width: 0, height: 2 },
+                                            shadowOpacity: 0.03,
+                                            shadowRadius: 4,
+                                            elevation: 2,
                                         }}
                                     >
                                         <View style={{
-                                            width: 40,
-                                            height: 40,
-                                            borderRadius: 20,
-                                            backgroundColor: char.color[0] + '10',
+                                            width: 48,
+                                            height: 48,
+                                            borderRadius: 16,
+                                            backgroundColor: theme.highlight,
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            borderWidth: 1.5,
+                                            borderWidth: char.isCustom ? 1.5 : 0,
                                             borderColor: char.color[0] + '30'
                                         }}>
                                             {char.isCustom ? (
-                                                <Text style={{ fontSize: 18, fontWeight: '700', color: char.color[0] }}>
+                                                <Text style={{ fontSize: 24, fontWeight: '700', color: char.color[0] }}>
                                                     {char.title.charAt(0).toUpperCase()}
                                                 </Text>
                                             ) : (
-                                                <IconComponent size={20} color={char.color[0]} />
+                                                <IconComponent size={24} color={char.color[0]} />
                                             )}
                                         </View>
-                                        <View style={{ flex: 1 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>{char.title}</Text>
+                                        
+                                        <View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                                <Text style={{ fontSize: 16, fontWeight: '900', color: theme.text, letterSpacing: -0.3 }} numberOfLines={1}>{char.title}</Text>
                                                 {char.isCustom && (
-                                                    <View style={{ backgroundColor: primaryColor + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                                                        <Text style={{ fontSize: 9, color: primaryColor, fontWeight: 'bold' }}>CUSTOM</Text>
+                                                    <View style={{ backgroundColor: primaryColor + '20', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                                                        <Text style={{ fontSize: 8, color: primaryColor, fontWeight: 'bold' }}>CUSTOM</Text>
                                                     </View>
                                                 )}
                                             </View>
-                                            <Text style={{ fontSize: 12, color: theme.secondary, opacity: 0.7 }} numberOfLines={1}>{char.role}</Text>
+                                            <Text style={{ fontSize: 11, color: theme.secondary, opacity: 0.7, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{char.role}</Text>
                                         </View>
-                                        <ChevronRight size={18} color={theme.secondary} opacity={0.3} />
+                                        
+                                        <View style={{ position: 'absolute', bottom: 12, right: 12 }}>
+                                            <ArrowRight size={14} color={theme.secondary} opacity={0.3} />
+                                        </View>
                                     </TouchableOpacity>
                                 );
                             })}
 
-                            {/* Add New Character Button */}
+                            {/* Add New Character Button - Grid Format */}
                             <TouchableOpacity
                                 onPress={() => {
                                     setEditingId(null);
@@ -23537,32 +23553,33 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                 }}
                                 activeOpacity={0.7}
                                 style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingVertical: 16,
-                                    paddingHorizontal: 16,
-                                    borderRadius: 16,
-                                    borderWidth: 1,
+                                    width: '48%',
+                                    aspectRatio: 1,
+                                    borderRadius: 24,
+                                    padding: 16,
+                                    borderWidth: 1.5,
                                     borderStyle: 'dashed',
                                     borderColor: theme.border,
-                                    gap: 14,
-                                    marginTop: 12,
-                                    backgroundColor: isDay ? 'transparent' : 'rgba(255,255,255,0.02)'
+                                    justifyContent: 'space-between',
+                                    backgroundColor: isDay ? 'transparent' : 'rgba(255,255,255,0.01)',
+                                    alignItems: 'flex-start'
                                 }}
                             >
                                 <View style={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: 20,
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: 16,
                                     backgroundColor: theme.uiBg,
                                     alignItems: 'center',
-                                    justifyContent: 'center'
+                                    justifyContent: 'center',
+                                    borderWidth: 1,
+                                    borderColor: theme.border
                                 }}>
-                                    <Plus size={20} color={theme.secondary} />
+                                    <Plus size={24} color={theme.secondary} />
                                 </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>Add New Character</Text>
-                                    <Text style={{ fontSize: 12, color: theme.secondary, opacity: 0.7 }}>Create your own specialized AI</Text>
+                                <View>
+                                    <Text style={{ fontSize: 15, fontWeight: '800', color: theme.text, letterSpacing: -0.2 }}>Create New</Text>
+                                    <Text style={{ fontSize: 10, color: theme.secondary, opacity: 0.7, marginTop: 2 }}>Specialized AI</Text>
                                 </View>
                             </TouchableOpacity>
                         </View>
