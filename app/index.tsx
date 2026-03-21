@@ -12302,36 +12302,47 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
 
         if (provider === 'groq') key = displaySettings.groqApiKey;
 
-
-        if (!key) {
+        if (!key || !key.trim()) {
             setApiConnectionStatus("failed");
             Alert.alert("Failed", `Please enter your ${provider === 'groq' ? 'Groq' : 'Gemini'} API Key first.`);
             return;
         }
+
+        // Helper: use native XHR to bypass the react-native-fetch-api streaming polyfill
+        const xhrPost = (url: string, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> =>
+            new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url);
+                Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+                xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
+                xhr.onerror = () => reject(new Error('Network request failed'));
+                xhr.ontimeout = () => reject(new Error('Request timed out'));
+                xhr.timeout = 15000;
+                xhr.send(body);
+            });
 
         if (provider === 'groq') {
             let groqTestModels = [...new Set([...GROQ_MODELS, ...(displaySettings.groqModels || [])])];
 
             for (const groqModel of groqTestModels) {
                 try {
-                    const response = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                        body: JSON.stringify({ model: groqModel, messages: [{ role: "user", content: "Hello" }] })
-                    });
-                    if (response.ok) {
+                    const result = await xhrPost(
+                        `https://api.groq.com/openai/v1/chat/completions`,
+                        { "Content-Type": "application/json", "Authorization": `Bearer ${key.trim()}` },
+                        JSON.stringify({ model: groqModel, messages: [{ role: "user", content: "Hi" }], max_tokens: 5 })
+                    );
+                    if (result.status === 200) {
                         setApiConnectionStatus("success");
                         Alert.alert("Success", `Connection established!`);
                         if (!displaySettings.smartBio) generateSmartBio();
                         return;
                     }
-                    const errText = await response.text();
-                    if (response.status === 401 || response.status === 403) {
+                    if (result.status === 401 || result.status === 403) {
                         setApiConnectionStatus("failed");
                         Alert.alert("Failed", "Invalid Groq API Key.");
                         return;
                     }
-                    console.log(`Groq test: model ${groqModel} failed (${response.status}), trying next...`);
+                    console.log(`Groq test: model ${groqModel} failed (${result.status}), trying next...`);
                 } catch (e) {
                     console.log(`Groq test: ${groqModel} threw error, trying next...`);
                 }
@@ -12341,27 +12352,31 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             return;
         }
 
-
-        // Custom model first, otherwise try latest → oldest (GEMINI_MODELS order - Merged)
+        // Gemini test
         let testModels = [...new Set([...GEMINI_MODELS, ...(displaySettings.textModels || [])])];
 
         for (const testModel of testModels) {
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${key}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{ role: "user", parts: [{ text: "Hello" }] }]
-                    })
-                });
-
-                if (response.ok) {
+                const result = await xhrPost(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${key.trim()}`,
+                    { "Content-Type": "application/json" },
+                    JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Hi" }] }] })
+                );
+                if (result.status === 200) {
                     setApiConnectionStatus("success");
-                    saveSettings({ nameLocked: true })
-                    return; // Stop check after success
+                    saveSettings({ nameLocked: true });
+                    Alert.alert("Success", "Connection established!");
+                    if (!displaySettings.smartBio) generateSmartBio();
+                    return;
                 }
+                if (result.status === 400 || result.status === 401 || result.status === 403) {
+                    setApiConnectionStatus("failed");
+                    Alert.alert("Failed", "Invalid API Key or Network Issue. Could not connect to any supported model.");
+                    return;
+                }
+                console.log(`Gemini test: model ${testModel} failed (${result.status}), trying next...`);
             } catch (e) {
-                console.log(`Connection test failed for ${testModel}, trying next...`);
+                console.log(`Gemini test: Connection test failed for ${testModel}, trying next...`);
             }
         }
 

@@ -36,6 +36,31 @@ Functions responsible for calling LLMs or testing connections must also use the 
 let groqTestModels = [...new Set([...GROQ_MODELS, ...(displaySettings.groqModels || [])])];
 ```
 
+## ⚠️ CRITICAL: Streaming Polyfill Conflict
+`app/index.tsx` globally replaces `fetch` with the `react-native-fetch-api` streaming polyfill at startup:
+```typescript
+global.fetch = fetchPolyfill as any; // line ~15 in app/index.tsx
+```
+This polyfill **only works correctly for streaming responses**. Any plain `POST` request made via the global `fetch()` (e.g., for connection testing, non-streaming calls) will **silently fail or behave incorrectly**.
+
+### Rule: Never use `fetch()` for connection tests or one-shot requests
+Instead, use native **`XMLHttpRequest`** which is not affected by the polyfill:
+```typescript
+const xhrPost = (url: string, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> =>
+    new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+        xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
+        xhr.onerror = () => reject(new Error('Network request failed'));
+        xhr.ontimeout = () => reject(new Error('Request timed out'));
+        xhr.timeout = 15000;
+        xhr.send(body);
+    });
+```
+
+This pattern is already used in `handleTestConnection` in `app/index.tsx`. Any future connection testing or health-check logic should follow this same pattern.
+
 ## Updating Models
 When a new model is released or an old one is deprecated:
 1.  **Update `constants/models.ts`**: Add the new model ID at the top of the relevant array.
@@ -43,5 +68,5 @@ When a new model is released or an old one is deprecated:
 
 ## Why Centralize and Merge?
 - **Consistency**: Prevents different parts of the app from using different (or outdated) models.
-- **Resilience**: A user's local settings won't break the app if model IDs change server-side; the app will always have the latest valid IDs as fallback.
+- **Resilience**: A user's local settings won't break the app if model IDs change; the app will always have the latest valid IDs as fallback.
 - **Maintainability**: Single point of update for all AI features.
