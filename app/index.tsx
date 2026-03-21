@@ -4579,7 +4579,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.05)',
         marginVertical: 15
     },
-    searchBar: { flexDirection: 'row', width: '100%', minHeight: 50, maxHeight: 150, borderRadius: 25, borderWidth: 1, alignItems: 'center', paddingLeft: 5, paddingRight: 5, marginBottom: 30, paddingVertical: 4 },
+    searchBar: { flexDirection: 'row', width: '100%', minHeight: 50, maxHeight: 150, borderRadius: 30, borderWidth: 1, alignItems: 'center', paddingLeft: 5, paddingRight: 5, marginBottom: 30, paddingVertical: 4 },
     // searchInput: { flex: 1, fontSize: 16, paddingHorizontal: 8 }, // Duplicate removed
     // NEW STYLES FOR ADVERTISEMENT
     adContainer: {
@@ -14086,7 +14086,8 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
     `;
 
         try {
-            const rawContent = await callLLM(prompt, "Personal Tutor");
+            const personaName = selectedScenario?.title || "Personal Tutor";
+            const rawContent = await callLLM(prompt, personaName);
 
             // NEW: Check for error before proceeding (This catches Network/API errors, NOT missing key)
             // If key is missing, callLLM returns the Markdown Help Guide (starting with #), which bypasses this block.
@@ -14164,12 +14165,15 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 image = await generateImage(imgPrompt);
             }
 
+            const personaName = selectedScenario?.title || "Personal Tutor";
+            const targetToolId = selectedScenario?.id || 'ai_tutor';
+
             const newSession = {
                 id: generateId(),
                 timestamp: new Date().toISOString(),
                 messages: [{ role: "ai", content }],
                 title: `Ask: ${queryToUse}`,
-                toolId: 'ai_tutor',
+                toolId: targetToolId,
                 image: image,
                 translations: { [displaySettings.language]: content },
                 language: displaySettings.language
@@ -31050,7 +31054,7 @@ Review the following raw transcribed text:
                                                             justifyContent: 'center',
                                                             paddingVertical: 8,
                                                             backgroundColor: theme.buttonBg,
-                                                            borderRadius: 12
+                                                            borderRadius: 30
                                                         }}
                                                     >
                                                         <Search size={14} color={theme.secondary} style={{ marginRight: 6 }} />
