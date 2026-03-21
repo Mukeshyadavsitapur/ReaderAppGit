@@ -11822,6 +11822,39 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         return API_KEY_HELP_MARKDOWN.trim();
     };
 
+    // NEW: Streaming version of callLLM
+    const callLLM_Stream = async (contents: any, systemInstruction: any, onChunk: (text: string) => void, modelOverride: string | null = null) => {
+        const geminiKey = (customApiKey || apiKey)?.trim();
+        const groqKey = displaySettings.groqApiKey?.trim();
+
+        const primaryProvider = displaySettings.llmProvider || 'gemini';
+        const secondaryProvider = primaryProvider === 'groq' ? 'gemini' : 'groq';
+
+        const primaryKey = primaryProvider === 'groq' ? groqKey : geminiKey;
+        const secondaryKey = secondaryProvider === 'groq' ? groqKey : geminiKey;
+
+        if (primaryKey && primaryKey.trim() !== '') {
+            console.log(`[LLM Stream] Primary Provider: ${primaryProvider}`);
+            try {
+                return await callLLM_Internal_Stream(contents, systemInstruction, onChunk, modelOverride, primaryProvider, primaryKey);
+            } catch (err) {
+                if (secondaryKey && secondaryKey.trim() !== '') {
+                    console.warn(`[LLM Stream] ${primaryProvider} failed, falling back to ${secondaryProvider}...`);
+                    showToast(`Switching to ${secondaryProvider === 'groq' ? 'Groq' : 'Gemini'}...`);
+                    return await callLLM_Internal_Stream(contents, systemInstruction, onChunk, modelOverride, secondaryProvider, secondaryKey);
+                }
+                throw err;
+            }
+        }
+
+        if (secondaryKey && secondaryKey.trim() !== '') {
+            console.log(`[LLM Stream] Primary key missing, trying Secondary Provider: ${secondaryProvider}`);
+            return await callLLM_Internal_Stream(contents, systemInstruction, onChunk, modelOverride, secondaryProvider, secondaryKey);
+        }
+
+        throw new Error("API Key Required");
+    };
+
     // Helper to avoid recursion and handle actual calls
     const callLLM_Internal = async (contents: any, systemInstruction: any, jsonMode: boolean, modelOverride: string | null, provider: string, key: string) => {
 
@@ -12067,6 +12100,166 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
         setIsRateLimited(true);
         return "Error: Unable to get a response. Details: " + (lastError ? ((lastError as any).message || lastError.toString()) : "Unknown Error");
     };
+
+    // Helper for Internal Stream Call
+    const callLLM_Internal_Stream = async (contents: any, systemInstruction: string, onChunk: (text: string) => void, modelOverride: string | null, provider: string, key: string) => {
+        const userProfile = (displaySettings.userName || displaySettings.userProfession || displaySettings.userGoal || displaySettings.userBio)
+            ? `\nCRITICAL USER CONTEXT:
+- Name: "${displaySettings.userName || 'User'}"
+- Profession: "${displaySettings.userProfession || 'N/A'}"
+- Goal/Purpose: "${displaySettings.userGoal || 'N/A'}"
+- Specific AI Instructions/Bio: "${displaySettings.userBio || 'N/A'}"
+
+STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above all standard rules or tool defaults. Adjust your examples and technical depth to match the user's profession and profile.`
+            : "";
+
+        const languageInstruction = ` Respond in ${displaySettings.language}.`;
+        const formattingInstruction = ` 
+    STRICT FORMATTING RULES:
+    1. Do NOT use the dollar sign ($) as a delimiter for math. Use it ONLY for currency (e.g. $50). NEVER use $...$ or $$...$$ for formulas.
+    2. **PHYSICS/MATH FORMULAS**: Use clear UNICODE characters and standard text notation. No LaTeX.
+    3. Start DIRECTLY with the answer. No meta-commentary.
+    `;
+        const fullSystemInstruction = systemInstruction + userProfile + languageInstruction + formattingInstruction;
+
+        if (provider === 'groq') {
+            let openAiMessages: any[] = [{ role: "system", content: fullSystemInstruction }];
+            if (Array.isArray(contents)) {
+                contents.forEach((c: any) => {
+                    const r = c.role === 'model' ? 'assistant' : 'user';
+                    const t = (c.parts || []).map((p: any) => p.text || '').filter(Boolean).join('\n') || "";
+                    openAiMessages.push({ role: r, content: t });
+                });
+            } else {
+                openAiMessages.push({ role: "user", content: String(contents) });
+            }
+
+            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...(displaySettings.groqModels || GROQ_MODELS)];
+            
+            for (const groqModel of groqModelsToTry) {
+                try {
+                    console.log(`[LLM Stream] Attempting Groq: ${groqModel}`);
+                    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                        body: JSON.stringify({
+                            model: groqModel,
+                            messages: openAiMessages,
+                            stream: true,
+                            max_tokens: 8192,
+                            temperature: 0.7
+                        })
+                    });
+
+                    if (!response.ok) continue;
+
+                    const reader = response.body?.getReader();
+                    if (!reader) throw new Error("Stream reader not available");
+
+                    const decoder = new TextDecoder();
+                    let fullText = "";
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+                        for (const line of lines) {
+                            if (line.includes('[DONE]')) break;
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    const delta = data.choices[0]?.delta?.content || "";
+                                    if (delta) {
+                                        fullText += delta;
+                                        onChunk(fullText);
+                                    }
+                                } catch (e) { }
+                            }
+                        }
+                    }
+                    return fullText;
+                } catch (e) {
+                    console.warn(`Groq stream model ${groqModel} failed`, e);
+                }
+            }
+            throw new Error("All Groq models failed for streaming");
+        }
+
+        // Gemini Stream
+        let modelsToTry = [...(displaySettings.textModels || TEXT_MODELS)];
+        if (modelOverride) {
+            modelsToTry = [modelOverride, ...modelsToTry.filter(m => m !== modelOverride)];
+        }
+
+        for (const modelId of modelsToTry) {
+            try {
+                console.log(`[LLM Stream] Attempting Gemini: ${modelId}`);
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?key=${key}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: fullSystemInstruction }] },
+                        contents: Array.isArray(contents) ? contents : [{ role: "user", parts: [{ text: contents }] }]
+                    })
+                });
+
+                if (!response.ok) continue;
+
+                const reader = response.body?.getReader();
+                if (!reader) throw new Error("Stream reader not available");
+
+                const decoder = new TextDecoder();
+                let fullText = "";
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    
+                    let startIndex = buffer.indexOf('{');
+                    while (startIndex !== -1) {
+                        let bracketCount = 0;
+                        let endIndex = -1;
+                        for (let i = startIndex; i < buffer.length; i++) {
+                            if (buffer[i] === '{') bracketCount++;
+                            else if (buffer[i] === '}') bracketCount--;
+                            
+                            if (bracketCount === 0) {
+                                endIndex = i;
+                                break;
+                            }
+                        }
+                        
+                        if (endIndex !== -1) {
+                            const objStr = buffer.substring(startIndex, endIndex + 1);
+                            try {
+                                const data = JSON.parse(objStr);
+                                const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                                if (txt) {
+                                    fullText += txt;
+                                    onChunk(fullText.replace(/\$\$/g, ''));
+                                }
+                            } catch (e) { }
+                            buffer = buffer.substring(endIndex + 1);
+                            startIndex = buffer.indexOf('{');
+                        } else {
+                            break; // Wait for more data
+                        }
+                    }
+                }
+                return fullText.replace(/\$\$/g, '');
+            } catch (e) {
+                console.warn(`Gemini stream model ${modelId} failed`, e);
+            }
+        }
+        throw new Error("All Gemini models failed for streaming");
+    };
+
 
     const handleTestConnection = async () => {
         setApiConnectionStatus("testing");
@@ -26849,50 +27042,44 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                 contents = [{ role: 'user', parts: [{ text: userMsg.content }] }];
             }
 
-            let response;
-            try {
-                response = await callLLM_Internal(
-                    contents,
-                    activeChatbotChar.prompt,
-                    false, // jsonMode
-                    null, // modelOverride
-                    providerToUse,
-                    keyToUse
-                );
-            } catch (err) {
-                // If Groq failed and we have Gemini, fallback
-                if (providerToUse === 'groq' && geminiKey) {
-                    console.warn("Groq failed in chatbot, falling back to Gemini...");
-                    response = await callLLM_Internal(
-                        contents,
-                        activeChatbotChar.prompt,
-                        false,
-                        null,
-                        'gemini',
-                        geminiKey
-                    );
-                } else {
-                    throw err;
-                }
-            }
-
-            let aiText = typeof response === 'string' ? response : (response?.text ?? "I'm sorry, I couldn't process that.");
-
-            // REMOVED: Hard truncation (Letting LLM prompts handle brevity instead)
-
-            const aiMsg: Message = {
-                id: 'ai_' + Date.now(),
+            let aiMsgId = 'ai_' + Date.now();
+            let aiMsg: Message = {
+                id: aiMsgId,
                 role: 'assistant',
-                content: aiText,
+                content: "",
                 timestamp: new Date().toISOString()
             };
 
+            // Add placeholder message first
             setChatbotMessages(prev => [...prev, aiMsg]);
+
+            let finalAiText = "";
+            try {
+                finalAiText = await callLLM_Stream(
+                    contents,
+                    activeChatbotChar.prompt,
+                    (chunk) => {
+                        finalAiText = chunk;
+                        setChatbotMessages(prev => prev.map(m => 
+                            m.id === aiMsgId ? { ...m, content: chunk } : m
+                        ));
+                    },
+                    null // modelOverride
+                );
+            } catch (err) {
+                console.error("Chatbot streaming failed", err);
+                // Fallback to non-streaming if needed or show error
+                finalAiText = "I'm sorry, I encountered an error while generating the response.";
+                setChatbotMessages(prev => prev.map(m => 
+                    m.id === aiMsgId ? { ...m, content: finalAiText } : m
+                ));
+            }
+
             setIsChatbotTyping(false);
 
             // Automated TTS response (FORCED OFFLINE for flow)
-            if (aiText) {
-                let textToSpeak = aiText;
+            if (finalAiText) {
+                let textToSpeak = finalAiText;
 
                 // Refinement: If Wordy, skip the pronunciation line for audio (to avoid IPA spelling)
                 if (activeChatbotChar?.id === 'wordy_bot') {
