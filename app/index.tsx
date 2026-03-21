@@ -28,6 +28,15 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Sharing from 'expo-sharing';
 import * as Speech from 'expo-speech';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { 
+    GEMINI_MODELS, 
+    GROQ_MODELS, 
+    IMAGE_MODELS, 
+    TTS_MODELS, 
+    GROQ_TTS_MODELS, 
+    STT_GROQ_MODELS,
+    STT_GEMINI_MODELS,
+} from '@/constants/models';
 import {
     Activity,
     AlertTriangle,
@@ -1421,40 +1430,7 @@ If you're not ready to connect yet, enjoy features that work **100% offline**:
 // FIX: Replaced static image with code-generated gradient banner
 // const AD_IMAGE = require("./assets/banner.jpg");
 
-const TEXT_MODELS = [
-    "gemini-2.5-flash",         //move "gemini-2.5-flash" as first priority modeel due to error keep only working model
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash-preview-09-2025"
-];
-
-// Groq models ordered by specific priority request
-const GROQ_MODELS = [
-    // Top Priority
-    "openai/gpt-oss-20b",                            // GPT-OSS 20B (first priority)
-    "openai/gpt-oss-120b",                           // GPT-OSS 120B (second priority)
-
-    // Fallback support models
-    "openai/gpt-oss-safeguard-20b",                  // Safety GPT OSS 20B
-    "moonshotai/kimi-k2-instruct-0905",              // Kimi K2 Instruct
-    "meta-llama/llama-4-maverick-17b-128e-instruct", // Llama 4 Maverick
-    "meta-llama/llama-4-scout-17b-16e-instruct"      // Llama 4 Scout
-];
-
-// Cleaned Image Models List - Removed deprecated 404 models
-const IMAGE_MODELS = [
-    "imagen-4.0-generate-001",
-    "imagen-3.0-generate-001"
-];
-
-const TTS_MODELS = [
-    "gemini-2.5-flash-preview-tts", // Only confirmed-working model as of Feb 2026
-];
-
-
-// Groq TTS Models - Prioritized
-const GROQ_TTS_MODELS = [
-    "canopylabs/orpheus-v1-english"
-];
+// AI Model lists now centralized in constants/models.ts
 
 // ... (other code) ...
 
@@ -4984,13 +4960,13 @@ export default function App() {
         smartBio: "", // NEW: AI-generated summary
         offlineTtsLanguage: "en-GB", // NEW: Default to English (UK) as per user observation
         offlineVoice: "", // NEW: Specific voice identifier
-        textModels: [...TEXT_MODELS], // NEW: Initialize with defaults
-        groqModels: [...GROQ_MODELS], // NEW: Initialize with defaults
-        imageModels: [...IMAGE_MODELS], // NEW
-        ttsModels: [...TTS_MODELS], // NEW
-        groqTtsModels: [...GROQ_TTS_MODELS], // NEW
-        sttGroqModels: ['whisper-large-v3-turbo', 'whisper-large-v3'], // NEW
-        sttGeminiModels: ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'], // NEW
+        textModels: [...GEMINI_MODELS], // Centralized
+        groqModels: [...GROQ_MODELS], // Centralized
+        imageModels: [...IMAGE_MODELS], // Centralized
+        ttsModels: [...TTS_MODELS], // Centralized
+        groqTtsModels: [...GROQ_TTS_MODELS], // Centralized
+        sttGroqModels: [...STT_GROQ_MODELS], // Centralized
+        sttGeminiModels: ['gemini-3.1-pro', 'gemini-3-flash', 'gemini-3.1-flash-lite'], // Updated for March 2026
     });
 
     const [isSideMenuVisible, setIsSideMenuVisible] = useState(false);
@@ -8083,7 +8059,7 @@ export default function App() {
                         });
                         recoveryOk = res.ok;
                     } else {
-                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODELS[0]}:generateContent?key=${recoverKey}`, {
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELS[0]}:generateContent?key=${recoverKey}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
@@ -9275,13 +9251,13 @@ export default function App() {
                         onlineTtsEnabled: parsed.onlineTtsEnabled !== undefined ? parsed.onlineTtsEnabled : true,
                         imageGenerationEnabled: parsed.imageGenerationEnabled !== undefined ? parsed.imageGenerationEnabled : true,
                         tapToDefine: parsed.tapToDefine !== undefined ? parsed.tapToDefine : true,
-                        textModels: parsed.textModels || [...TEXT_MODELS],
-                        groqModels: parsed.groqModels || [...GROQ_MODELS],
-                        imageModels: parsed.imageModels || [...IMAGE_MODELS],
-                        ttsModels: parsed.ttsModels || [...TTS_MODELS],
-                        groqTtsModels: parsed.groqTtsModels || [...GROQ_TTS_MODELS],
-                        sttGroqModels: parsed.sttGroqModels || ['whisper-large-v3-turbo', 'whisper-large-v3'],
-                        sttGeminiModels: parsed.sttGeminiModels || ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
+                        textModels: [...new Set([...GEMINI_MODELS, ...(parsed.textModels || [])])],
+                        groqModels: [...new Set([...GROQ_MODELS, ...(parsed.groqModels || [])])],
+                        imageModels: [...new Set([...IMAGE_MODELS, ...(parsed.imageModels || [])])],
+                        ttsModels: [...new Set([...TTS_MODELS, ...(parsed.ttsModels || [])])],
+                        groqTtsModels: [...new Set([...GROQ_TTS_MODELS, ...(parsed.groqTtsModels || [])])],
+                        sttGroqModels: [...new Set([...STT_GROQ_MODELS, ...(parsed.sttGroqModels || [])])],
+                        sttGeminiModels: [...new Set([...STT_GEMINI_MODELS, ...(parsed.sttGeminiModels || [])])],
                         keepLabelsEnglish: parsed.keepLabelsEnglish !== undefined ? parsed.keepLabelsEnglish : false,
                         userName: parsed.userName || "",
                         userProfession: parsed.userProfession || "",
@@ -11977,7 +11953,7 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             }
 
             // NEW: Ignore Gemini model overrides when routing to Groq
-            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...(displaySettings.groqModels || GROQ_MODELS)];
+            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...new Set([...GROQ_MODELS, ...(displaySettings.groqModels || [])])];
 
             let lastGroqError: any = null;
             for (const groqModel of groqModelsToTry) {
@@ -12051,8 +12027,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
             return `Error: Unable to get a response from Groq. Details: ${lastGroqError?.message || lastGroqError}`;
         }
 
-        // Determine model order based on priority (Gemini Fallback)
-        let modelsToTry = [...(displaySettings.textModels || TEXT_MODELS)];
+        // Determine model order based on priority (Gemini Fallback - Merged with storage)
+        const effectiveGeminiModels = [...new Set([...GEMINI_MODELS, ...(displaySettings.textModels || [])])];
+        let modelsToTry = [...effectiveGeminiModels];
 
         // NEW: Handle Model Override (High Priority)
         if (modelOverride) {
@@ -12186,7 +12163,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 openAiMessages.push({ role: "user", content: String(contents) });
             }
 
-            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...(displaySettings.groqModels || GROQ_MODELS)];
+            let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...new Set([...GROQ_MODELS, ...(displaySettings.groqModels || [])])];
 
             for (const groqModel of groqModelsToTry) {
                 try {
@@ -12242,8 +12219,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             throw new Error("All Groq models failed for streaming");
         }
 
-        // Gemini Stream
-        let modelsToTry = [...(displaySettings.textModels || TEXT_MODELS)];
+        // Gemini Stream (Merged with storage)
+        const effectiveGeminiModels = [...new Set([...GEMINI_MODELS, ...(displaySettings.textModels || [])])];
+        let modelsToTry = [...effectiveGeminiModels];
         if (modelOverride) {
             modelsToTry = [modelOverride, ...modelsToTry.filter(m => m !== modelOverride)];
         }
@@ -12332,7 +12310,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         }
 
         if (provider === 'groq') {
-            let groqTestModels = [...(displaySettings.groqModels || GROQ_MODELS)];
+            let groqTestModels = [...new Set([...GROQ_MODELS, ...(displaySettings.groqModels || [])])];
 
             for (const groqModel of groqTestModels) {
                 try {
@@ -12364,8 +12342,8 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         }
 
 
-        // Custom model first, otherwise try latest → oldest (TEXT_MODELS order)
-        let testModels = [...(displaySettings.textModels || TEXT_MODELS)];
+        // Custom model first, otherwise try latest → oldest (GEMINI_MODELS order - Merged)
+        let testModels = [...new Set([...GEMINI_MODELS, ...(displaySettings.textModels || [])])];
 
         for (const testModel of testModels) {
             try {
@@ -26410,16 +26388,16 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
 
                             <EditableSelectionList
                                 label="GEMINI TEXT MODELS"
-                                items={displaySettings.textModels || [...TEXT_MODELS]}
+                                items={displaySettings.textModels || [...GEMINI_MODELS]}
                                 onSelect={() => { }} // Management only, no selection change here
                                 onAdd={(model: string) => {
-                                    const current = displaySettings.textModels || [...TEXT_MODELS];
+                                    const current = displaySettings.textModels || [...GEMINI_MODELS];
                                     if (!current.includes(model)) {
                                         saveSettings({ textModels: [model, ...current] });
                                     }
                                 }}
                                 onDelete={(model: string) => {
-                                    const current = displaySettings.textModels || [...TEXT_MODELS];
+                                    const current = displaySettings.textModels || [...GEMINI_MODELS];
                                     saveSettings({ textModels: current.filter((m: string) => m !== model) });
                                 }}
                                 theme={theme}
