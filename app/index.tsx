@@ -36,6 +36,8 @@ import {
     GROQ_TTS_MODELS, 
     STT_GROQ_MODELS,
     STT_GEMINI_MODELS,
+    GEMINI_IMAGE_MODELS,
+    GROQ_IMAGE_MODELS
 } from '@/constants/models';
 import {
     Activity,
@@ -7828,9 +7830,7 @@ export default function App() {
         let textBuffer: any[] = [];
         let textStartOffset = 0;
 
-        let nextTableHidden = false;
         let nextTableLabel = "Show Answers";
-        let hasSkippedHeader = false;
 
         const flushTextBuffer = () => {
             if (textBuffer.length > 0) {
@@ -7849,13 +7849,6 @@ export default function App() {
             const trimmed = line.trim();
             const cleanLineContent = cleanTextForDisplay(line);
             const lenToAdd = cleanLineContent.length > 0 ? cleanLineContent.length + 1 : 0;
-
-            if (!hasSkippedHeader && trimmed.startsWith('#')) {
-                flushTextBuffer();
-                hasSkippedHeader = true;
-                offset += lenToAdd;
-                return;
-            }
 
             const toggleMatch = trimmed.match(/^\[\[TOGGLE_TABLE(?::(.*))?\]\]$/);
             if (toggleMatch) {
@@ -7946,6 +7939,13 @@ export default function App() {
                     tableBuffer = [];
                     inTable = false;
                 }
+                
+                if (trimmed.length === 0) {
+                    if (textBuffer.length > 0) {
+                        flushTextBuffer();
+                    }
+                    return;
+                }
 
                 if (textBuffer.length === 0) {
                     textStartOffset = offset;
@@ -7955,10 +7955,6 @@ export default function App() {
 
                 if (cleanLineContent.length > 0) {
                     offset += lenToAdd;
-                }
-
-                if (textBuffer.length >= 1) {
-                    flushTextBuffer();
                 }
             }
         });
@@ -14027,69 +14023,129 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
     };
 
     const generateImage = async (prompt: string, forceOverride = false) => {
-        // Check if image generation is enabled in settings or forced (e.g. by manual tap)
         if (!displaySettings.imageGenerationEnabled && !forceOverride) return null;
 
-        const key = customApiKey || apiKey;
-        if (!key) return null;
+        const geminiKey = (customApiKey || apiKey)?.trim();
+        const groqKey = displaySettings.groqApiKey?.trim();
+        const preferred = displaySettings.llmProvider || 'gemini';
 
-        // Retry configuration
+        let providersToTry = [];
+        if (preferred === 'groq' && groqKey) {
+            providersToTry.push({ id: 'groq', key: groqKey });
+            if (geminiKey) providersToTry.push({ id: 'gemini', key: geminiKey });
+        } else {
+            if (geminiKey) providersToTry.push({ id: 'gemini', key: geminiKey });
+            if (groqKey) providersToTry.push({ id: 'groq', key: groqKey });
+        }
+
+        if (providersToTry.length === 0) return null;
+
         const MAX_RETRIES = 3;
 
-        for (const modelId of (displaySettings.imageModels || IMAGE_MODELS)) {
-            let attempts = 0;
+        // Helper: use native XHR for non-streaming requests to bypass fetch polyfill issues
+        const xhrPost = (url: string, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> =>
+            new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url);
+                Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+                xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
+                xhr.onerror = () => reject(new Error('Network request failed'));
+                xhr.ontimeout = () => reject(new Error('Request timed out'));
+                xhr.timeout = 25000; // 25s timeout for images
+                xhr.send(body);
+            });
 
-            while (attempts <= MAX_RETRIES) {
-                try {
-                    console.log(`Attempting Image Generation with: ${modelId} (Attempt ${attempts + 1})`);
+        for (const provider of providersToTry) {
+            let modelsToTry: string[] = [];
+            if (provider.id === 'gemini') {
+                modelsToTry = (displaySettings.imageModels || IMAGE_MODELS).filter((m: string) => GEMINI_IMAGE_MODELS.includes(m) || m.includes('imagen'));
+                if (modelsToTry.length === 0) modelsToTry = GEMINI_IMAGE_MODELS;
+            } else {
+                modelsToTry = (displaySettings.imageModels || IMAGE_MODELS).filter((m: string) => GROQ_IMAGE_MODELS.includes(m) || !m.includes('imagen'));
+                if (modelsToTry.length === 0) modelsToTry = GROQ_IMAGE_MODELS;
+            }
 
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:predict?key=${key}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            instances: [{ prompt: prompt }],
-                            parameters: { sampleCount: 1 }
-                        })
-                    });
+            for (const modelId of modelsToTry) {
+                let attempts = 0;
+                while (attempts <= MAX_RETRIES) {
+                    try {
+                        console.log(`Attempting Image Gen with: ${modelId} via ${provider.id} (Attempt ${attempts + 1})`);
 
-                    if (response.status === 429) {
-                        console.warn(`Image Model ${modelId} limit reached (429).`);
-                        break; // Rate limit usually applies to key, retrying immediately might not help
-                    }
+                        if (provider.id === 'groq') {
+                            const result = await xhrPost(
+                                `https://api.groq.com/openai/v1/images/generations`,
+                                { "Content-Type": "application/json", "Authorization": `Bearer ${provider.key}` },
+                                JSON.stringify({ prompt: prompt, model: modelId, response_format: 'b64_json', n: 1 })
+                            );
 
-                    if (response.status === 503) {
-                        console.warn(`Image Model ${modelId} service unavailable (503). Retrying...`);
+                            if (result.status === 429) {
+                                console.warn(`Image Model ${modelId} limit reached (429).`);
+                                break; 
+                            }
+                            if (result.status === 503 || result.status >= 500) {
+                                attempts++;
+                                if (attempts <= MAX_RETRIES) {
+                                    await new Promise(r => setTimeout(r, Math.pow(2, attempts) * 1000));
+                                    continue;
+                                }
+                                break;
+                            }
+                            if (result.status !== 200) {
+                                console.warn(`Groq Image failed: ${result.status} ${result.text}`);
+                                break; 
+                            }
+
+                            const data = JSON.parse(result.text);
+                            const base64 = data.data?.[0]?.b64_json;
+                            if (base64) return `data:image/png;base64,${base64}`;
+                            break; 
+                        } else {
+                            // Gemini
+                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:predict?key=${provider.key}`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    instances: [{ prompt: prompt }],
+                                    parameters: { sampleCount: 1 }
+                                })
+                            });
+
+                            if (response.status === 429) {
+                                console.warn(`Image Model ${modelId} limit reached (429).`);
+                                break;
+                            }
+                            if (response.status === 503 || response.status >= 500) {
+                                console.warn(`Image Model ${modelId} service error (${response.status}). Retrying...`);
+                                attempts++;
+                                if (attempts <= MAX_RETRIES) {
+                                    await new Promise(r => setTimeout(r, Math.pow(2, attempts) * 1000));
+                                    continue;
+                                }
+                                break;
+                            }
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                console.warn(`Image Model ${modelId} failed with ${response.status}: ${errorText}`);
+                                break; // Non-retriable error
+                            }
+
+                            const data = await response.json();
+                            const base64 = data.predictions?.[0]?.bytesBase64Encoded;
+                            if (base64) {
+                                if (isRateLimited) setIsRateLimited(false);
+                                return `data:image/png;base64,${base64}`;
+                            } else {
+                                break; // Valid response but no image
+                            }
+                        }
+                    } catch (e: any) {
+                        console.error(`Image Gen Connection Error with ${modelId}:`, e);
                         attempts++;
                         if (attempts <= MAX_RETRIES) {
-                            const delay = Math.pow(2, attempts) * 1000; // 2s, 4s, 8s
-                            await new Promise(r => setTimeout(r, delay));
-                            continue; // Retry loop
+                            await new Promise(r => setTimeout(r, 2000));
                         } else {
-                            break; // Give up on this model
+                            break;
                         }
-                    }
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.warn(`Image Model ${modelId} failed with ${response.status}: ${errorText}`);
-                        break; // Non-retriable error
-                    }
-
-                    const data = await response.json();
-                    const base64 = data.predictions?.[0]?.bytesBase64Encoded;
-                    if (base64) {
-                        if (isRateLimited) setIsRateLimited(false);
-                        return `data:image/png;base64,${base64}`;
-                    } else {
-                        break; // Valid response but no image
-                    }
-                } catch (e: any) {
-                    console.error(`Image Gen Connection Error with ${modelId}:`, e);
-                    attempts++;
-                    if (attempts <= MAX_RETRIES) {
-                        await new Promise(r => setTimeout(r, 2000));
-                    } else {
-                        break;
                     }
                 }
             }
@@ -22606,9 +22662,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                     styles.articleText,
                     {
                         color: theme.text,
-                        fontSize: 16 * displaySettings.fontSize,
-                        lineHeight: 28 * displaySettings.fontSize,
-                        marginBottom: 24,
+                        fontSize: 18 * displaySettings.fontSize,
+                        lineHeight: 32 * displaySettings.fontSize,
+                        marginBottom: 32,
                         ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles)
                     }
                 ]}
@@ -30737,10 +30793,11 @@ Review the following raw transcribed text:
                                             rawText={generationData || "Thinking..."}
                                             theme={theme}
                                             style={{
-                                                fontSize: 18,
+                                                fontSize: 18 * displaySettings.fontSize,
                                                 color: theme.text,
-                                                lineHeight: 26,
-                                                textAlign: 'left'
+                                                lineHeight: 32 * displaySettings.fontSize,
+                                                textAlign: 'left',
+                                                ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles)
                                             }}
                                             tapToDefineEnabled={false}
                                         />

@@ -22,9 +22,17 @@ export const GROQ_MODELS = [
     "meta-llama/llama-4-scout-17b-16e-instruct"
 ];
 
-export const IMAGE_MODELS = [
-    "imagen-3.5",
+export const GEMINI_IMAGE_MODELS = [
+    "imagen-3.5"
+];
+
+export const GROQ_IMAGE_MODELS = [
     "dall-e-3"
+];
+
+export const IMAGE_MODELS = [
+    ...GEMINI_IMAGE_MODELS,
+    ...GROQ_IMAGE_MODELS
 ];
 
 export const TTS_MODELS = [

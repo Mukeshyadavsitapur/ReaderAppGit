@@ -267,6 +267,7 @@ const InteractiveText = React.memo(({
                 let dynamicWeight = flatStyle.fontWeight || 'normal';
                 let dynamicSize = flatStyle.fontSize || 16;
                 let dynamicMargin = 0;
+                let dynamicMarginBottom = 0;
                 let dynamicStyle = flatStyle.fontStyle || 'normal';
                 let dynamicTextAlign = 'justify';
 
@@ -274,7 +275,8 @@ const InteractiveText = React.memo(({
                     dynamicColor = theme.primary;
                     dynamicWeight = 'bold';
                     dynamicSize *= 1.25;
-                    dynamicMargin = 16;
+                    dynamicMargin = 24;
+                    dynamicMarginBottom = 16;
                 } else if (type === 'formula') {
                     dynamicTextAlign = 'center';
                     dynamicStyle = 'italic';
@@ -288,7 +290,7 @@ const InteractiveText = React.memo(({
                 }
 
                 return (
-                    <Text key={key} style={{ marginTop: dynamicMargin, textAlign: dynamicTextAlign as any, width: '100%', lineHeight: flatStyle.lineHeight }} selectable={!isHighlightMode}>
+                    <Text key={key} style={{ marginTop: dynamicMargin, marginBottom: dynamicMarginBottom, textAlign: dynamicTextAlign as any, width: '100%', lineHeight: flatStyle.lineHeight }} selectable={!isHighlightMode}>
                         {lineWords && (lineWords as any[]).map(({ word, start, end, isBold, isItalic, isMath, isLink, linkUrl, isGreen }, index) => {
                             if (!word) return null;
                             const globalStart = paragraphOffset + start;
