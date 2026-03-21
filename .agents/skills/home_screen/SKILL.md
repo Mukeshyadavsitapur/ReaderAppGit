@@ -19,6 +19,16 @@ The `activeTab === 'home'` view uses a `KeyboardAvoidingView` to wrap both the s
 Tools are rendered in a 2-column grid within the `ScrollView`.
 - **Logic**: Use `flexDirection: 'row'` and `flexWrap: 'wrap'` on a container view.
 - **Child Sizing**: Each tool card (`TouchableOpacity`) uses `width: '48%'` with `justifyContent: 'space-between'` and `gap: 12` to create the grid effect.
+- **Icons**: 
+    - **Standard Tools**: Use `tool.emoji` (size 24) for regular tools.
+    - **Custom Tools**: Use a circular background with the first character of the title.
+    ```tsx
+    <View style={[styles.toolIconContainer, { backgroundColor: theme.highlight, borderWidth: 1.5, borderColor: primaryColor + '30' }]}>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: primaryColor }}>
+            {tool.title.charAt(0).toUpperCase()}
+        </Text>
+    </View>
+    ```
 
 ### 3. Pill-Shaped Search Bar
 The search bar (`renderHomeSearchBar`) is a single `View` with:

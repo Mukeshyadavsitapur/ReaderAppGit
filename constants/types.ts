@@ -171,6 +171,7 @@ export interface Tool {
     actionLabel?: string;
     placeholder?: string;
     Icon?: any;
+    isCustom?: boolean;
 }
 
 export interface LibraryGroup {

@@ -1,0 +1,19 @@
+2012:    { id: "ai_tutor", title: "Personal Assistant", Icon: GraduationCap, role: "Personal Tutor", type: "lesson", actionLabel: "Start Learning", prompt: "You are a helpful AI assistant, similar to Google Gemini. Provide direct, quick, and easy-to-understand answers. For Machine Learning and educational chapters, provide deep details, examples, and beginner-friendly explanations. If the topic is complex, use diagrams (Mermaid or ASCII) and clear step-by-step breakdowns. When generating offline chapters, be extra descriptive with more details and examples to ensure perfect understanding. In machine learning notes, always use the chapter name suggested by the user. When providing an optional lab, first create the original lab and then add additional practice examples for better understanding.", placeholder: "Ask for study notes, explanations, or help...", color: ["#3b82f6", "#8b5cf6"] },
+14168:            const targetToolId = selectedScenario?.id || 'ai_tutor';
+19387:                // FIXED: Don't open Vision Modal if we are in Personal Assistant (ai_tutor)
+19389:                if (selectedScenario?.id !== 'ai_tutor') {
+20406:            case "ai_tutor":
+22919:                            if (item.toolId === 'ai_tutor') Icon = GraduationCap;
+24463:                                {!selectedScenario?.isCustom && selectedScenario?.id !== 'ai_tutor' && (
+24521:                                {(uiData.toolPrompts[selectedScenario?.id] || selectedScenario?.id === 'greetings_gen' || selectedScenario?.id === 'ai_tutor' || ['teacher', 'ai_for_everyone', 'grammar_guide', 'idiom_guide', 'ml_tutor', 'prompt_engineer', 'tech_guide', 'ai_usage'].includes(selectedScenario?.id) || selectedScenario?.isCustom || customToolPrompts[selectedScenario?.id]) && (
+24527:                                            {(selectedScenario?.id === 'writer' || selectedScenario?.id === 'health_guide' || selectedScenario?.id === 'greetings_gen' || selectedScenario?.id === 'work_organizer' || selectedScenario?.id === 'editorial_writer' || selectedScenario?.id === 'teacher' || selectedScenario?.id === 'ai_tutor' || ['ai_for_everyone', 'grammar_guide', 'idiom_guide', 'ml_tutor', 'prompt_engineer', 'tech_guide', 'ai_usage'].includes(selectedScenario?.id) || selectedScenario?.isCustom) && (
+24539:                                                        if (selectedScenario?.id === 'ai_tutor') mode = 'custom';
+24578:                                                if (selectedScenario?.id === 'ai_tutor') {
+24762:                                {selectedScenario?.id === 'ai_tutor' && (
+24924:                                {selectedScenario?.id !== 'ai_tutor' && !selectedScenario?.isCustom && (
+24959:                                                        else if (selectedScenario?.id === 'ai_tutor') mode = 'custom';
+25396:                                                // MODIFIED: Exclude default tool prompts for ai_tutor
+25399:                                                if (selectedScenario?.id !== 'ai_tutor') {
+25485:                            {(selectedScenario?.isCustom || selectedScenario?.id === 'ai_tutor') && (
+25554:                {!isExpandedInputMode && !isFixedInputMode && selectedScenario?.id !== 'examiner' && !selectedScenario?.isCustom && selectedScenario?.id !== 'ai_tutor' && (
+27697:                                                    return tools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner');

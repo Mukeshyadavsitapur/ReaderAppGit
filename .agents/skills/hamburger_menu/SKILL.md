@@ -65,7 +65,16 @@ Lists recent dictionary searches.
 
 - **Width**: Hardcoded to 280 for consistent experience.
 - **Active State**: Active items should use `theme.highlight` as a background color.
-- **Icons**: Use lucide icons (size 20) with `primaryColor`.
+- **Icons**: 
+    - **Standard Items**: Use lucide icons (size 20) with `primaryColor`.
+    - **Custom Features**: If `char.isCustom` is true, use a circular background with the first character of the title.
+    ```tsx
+    <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: primaryColor + '10', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: primaryColor + '20' }}>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor }}>
+            {feature.title.charAt(0).toUpperCase()}
+        </Text>
+    </View>
+    ```
 - **Text**: Primary labels use `theme.text`, secondary text uses `theme.secondary`.
 - **Buttons**: All buttons should be wrapped in `TouchableOpacity` with consistent padding.
 

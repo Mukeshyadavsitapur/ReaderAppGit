@@ -112,7 +112,15 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
                             ]}>
                                 {!isUser && (
                                     <View style={[styles.avatar, { backgroundColor: theme.uiBg }]}>
-                                        <AppIcon size={20} />
+                                        {activeChar?.isCustom ? (
+                                            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: (activeChar.color?.[0] || primaryColor) + '10', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: (activeChar.color?.[0] || primaryColor) + '20' }}>
+                                                <Text style={{ fontSize: 12, fontWeight: '700', color: activeChar.color?.[0] || primaryColor }}>
+                                                    {activeChar.title.charAt(0).toUpperCase()}
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            <AppIcon size={20} />
+                                        )}
                                     </View>
                                 )}
                                 

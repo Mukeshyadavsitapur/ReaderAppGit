@@ -132,8 +132,23 @@ const GeminiHome: React.FC<GeminiHomeProps> = ({
                                     { backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg, borderColor: theme.border }
                                 ]}
                             >
-                                <View style={[styles.toolIconContainer, { backgroundColor: theme.highlight }]}>
-                                    <Text style={{ fontSize: 24 }}>{tool.emoji}</Text>
+                                <View style={[
+                                    styles.toolIconContainer, 
+                                    { 
+                                        backgroundColor: theme.highlight,
+                                        borderWidth: tool.isCustom ? 1.5 : 0,
+                                        borderColor: primaryColor + '30',
+                                        justifyContent: 'center',
+                                        alignItems: 'center'
+                                    }
+                                ]}>
+                                    {tool.isCustom ? (
+                                        <Text style={{ fontSize: 18, fontWeight: '700', color: primaryColor }}>
+                                            {tool.title.charAt(0).toUpperCase()}
+                                        </Text>
+                                    ) : (
+                                        <Text style={{ fontSize: 24 }}>{tool.emoji}</Text>
+                                    )}
                                 </View>
                                 <View style={{ flex: 1, justifyContent: 'center' }}>
                                     <Text style={[styles.toolTitle, { color: theme.text }]} numberOfLines={2}>

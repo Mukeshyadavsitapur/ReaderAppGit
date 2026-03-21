@@ -23017,7 +23017,11 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                         onLongPress={() => handleLongPressCustomFeature(feature)}
                                         style={[styles.menuItem, (selectedScenario?.id === feature.id && appMode === 'setup') && { backgroundColor: theme.highlight }]}
                                     >
-                                        <Sparkles size={20} color={primaryColor} />
+                                        <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: primaryColor + '10', alignItems: 'center', justifyContent: 'center', marginRight: 2, borderWidth: 1, borderColor: primaryColor + '20' }}>
+                                            <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor }}>
+                                                {feature.title.charAt(0).toUpperCase()}
+                                            </Text>
+                                        </View>
                                         <Text style={[styles.menuItemText, { color: theme.text }]} numberOfLines={1}>{feature.title}</Text>
                                         <View style={{ backgroundColor: primaryColor + '15', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginLeft: 'auto' }}>
                                             <Text style={{ fontSize: 8, color: primaryColor, fontWeight: 'bold' }}>NEW</Text>
@@ -23493,11 +23497,19 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                                             width: 40,
                                             height: 40,
                                             borderRadius: 20,
-                                            backgroundColor: char.color[0] + '15',
+                                            backgroundColor: char.color[0] + '10',
                                             alignItems: 'center',
-                                            justifyContent: 'center'
+                                            justifyContent: 'center',
+                                            borderWidth: 1.5,
+                                            borderColor: char.color[0] + '30'
                                         }}>
-                                            <IconComponent size={20} color={char.color[0]} />
+                                            {char.isCustom ? (
+                                                <Text style={{ fontSize: 18, fontWeight: '700', color: char.color[0] }}>
+                                                    {char.title.charAt(0).toUpperCase()}
+                                                </Text>
+                                            ) : (
+                                                <IconComponent size={20} color={char.color[0]} />
+                                            )}
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
