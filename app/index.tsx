@@ -6489,7 +6489,7 @@ export default function App() {
 
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const isLandscape = windowWidth > windowHeight;
-    const [isReaderSearchExpanded, setIsReaderSearchExpanded] = useState(false);
+    const [isReaderSearchExpanded, setIsReaderSearchExpanded] = useState(true);
     const [isReaderMenuVisible, setIsReaderMenuVisible] = useState(false);
     const [isLocalSearchMode, setIsLocalSearchMode] = useState(false); // NEW: Missing state for Reader Sidebar
 
@@ -10520,11 +10520,14 @@ export default function App() {
 
     // UPDATED: Async loader to handle external file content
     const loadHistorySession = async (session: any, origin = 'idle') => {
-        // NEW: Instant load for help guides to skip loading screen
-        if (session.toolId === 'help_guide') {
+        // NEW: Instant load for help guides OR ready sessions to skip loading screen
+        const isReady = session.messages && session.messages.length > 0 && !session.contentPath && !session.isLite;
+
+        if (session.toolId === 'help_guide' || isReady) {
             setNavOrigin(origin);
             setReadingSession(session);
             setAppMode('reader');
+            setIsLoadingHistory(false); // Ensure it's off
             return;
         }
 
@@ -14192,7 +14195,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             case 'teacher':
                             case 'ml_tutor':
                             case 'tech_guide':
-                                detailedInstruction = "Explain this concept thoroughly like a lecture or tutorial. Use analogies, clear structure (headers/bullets), and ensure the user understands the 'why' and 'how'. Do not be brief.";
+                                detailedInstruction = "Explain this concept thoroughly like a lecture or tutorial. Use analogies, clear structure (headers/bullets), and ensure the user understands the 'why' and 'how'. Do not be brief. FORMULA RULE: Do NOT use LaTeX delimiters like $$ or \[. Use original mathematical symbols (e.g., f_{w,b}(x) = wx + b) and keep formulas on their own lines for readability.";
                                 break;
                             case 'writer':
                                 detailedInstruction = "Write creatively and professionally. Focus on flow, tone, and vivid description. If asked to write, produce a substantial piece, not a summary.";
@@ -30700,31 +30703,14 @@ Review the following raw transcribed text:
 
                         {appMode === 'generating' && (
                             <View style={{ flex: 1, backgroundColor: theme.bg, flexDirection: isLandscape ? 'row' : 'column' }}>
-                                {/* FIXED: Header area that matches reader header height */}
-                                <View style={{ 
-                                    width: isLandscape ? 300 : '100%', 
-                                    height: isLandscape ? '100%' : 75,
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    borderRightWidth: isLandscape ? 1 : 0,
-                                    borderBottomWidth: isLandscape ? 0 : 1,
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.bg,
-                                    zIndex: 10
-                                }}>
-                                    <ActivityIndicator size={isLandscape ? "large" : "small"} color={primaryColor} />
-                                    <Text style={{ fontSize: 10, color: theme.secondary, fontWeight: 'bold', marginTop: isLandscape ? 8 : 4, textTransform: 'uppercase' }}>
-                                        {isLandscape ? "Generating Content..." : "Generating..."}
-                                    </Text>
-                                </View>
-
+                                {/* Content Area */}
                                 <View style={{ flex: 1 }}>
                                     <ScrollView 
                                         style={{ flex: 1 }} 
                                         contentContainerStyle={[styles.articleContent, isLandscape ? { paddingHorizontal: 40 } : {}]}
                                         showsVerticalScrollIndicator={false}
                                     >
-                                        {/* Show Title during generation if available (matches reader header) */}
+                                        {/* Show Title during generation if available */}
                                         {readingSession?.title && (
                                             <Text style={[styles.articleTitle, { color: theme.text, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }]}>
                                                 {readingSession.title}
@@ -31118,191 +31104,171 @@ Review the following raw transcribed text:
                                                 }
                                             />
 
-                                            {/* NEW: Floating Controls when Sidebar is Hidden */}
-                                            {!isReaderSearchExpanded && (
-                                                <View style={{ position: 'absolute', top: 20, right: 20, flexDirection: 'row', gap: 12 }}>
-                                                    <TouchableOpacity
-                                                        onPress={() => setIsReaderSearchExpanded(true)}
-                                                        style={{
-                                                            backgroundColor: theme.buttonBg,
-                                                            padding: 12,
-                                                            borderRadius: 24,
-                                                            borderWidth: 1,
-                                                            borderColor: theme.border,
-                                                            shadowColor: "#000",
-                                                            shadowOffset: { width: 0, height: 2 },
-                                                            shadowOpacity: 0.1,
-                                                            shadowRadius: 4,
-                                                            elevation: 3
-                                                        }}
-                                                    >
-                                                        <LayoutGrid size={24} color={theme.text} />
-                                                    </TouchableOpacity>
-                                                </View>
-                                            )}
+
                                         </View>
 
                                         {/* RIGHT: Sidebar for Controls & Chat */}
-                                        {isReaderSearchExpanded && (
-                                            <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: theme.border, backgroundColor: theme.uiBg }}>
-                                                {/* Consistent Search/Control Logic (Same as Portrait) */}
-                                                {readingSession.toolId !== 'orphan_audio' && (
-                                                    <View style={{ paddingHorizontal: 20, paddingTop: 15, paddingBottom: 5, backgroundColor: theme.uiBg, zIndex: 10 }}>
-                                                        {/* NEW: Highlight Color Palette (Visible when Highlight Mode is ON) */}
-                                                        {isHighlightMode && (
-                                                            <View style={{ marginBottom: 15 }}>
-                                                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 20, alignItems: 'center' }}>
-                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 5 }}>
-                                                                        <Highlighter size={16} color={primaryColor} style={{ marginRight: 6 }} />
-                                                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.secondary, textTransform: 'uppercase' }}>Color</Text>
-                                                                    </View>
-                                                                    {Object.entries(HIGHLIGHT_COLORS).map(([key, value]: [string, any]) => {
-                                                                        const isSelected = activeHighlightColor === key;
-                                                                        return (
-                                                                            <TouchableOpacity
-                                                                                key={key}
-                                                                                onPress={() => setActiveHighlightColor(key)}
-                                                                                style={{
-                                                                                    width: 32,
-                                                                                    height: 32,
-                                                                                    borderRadius: 16,
-                                                                                    backgroundColor: value.code,
-                                                                                    borderWidth: isSelected ? 3 : 1,
-                                                                                    borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.1)',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    shadowColor: "#000",
-                                                                                    shadowOffset: { width: 0, height: 1 },
-                                                                                    shadowOpacity: 0.1,
-                                                                                    shadowRadius: 2,
-                                                                                    elevation: 2
-                                                                                }}
-                                                                            >
-                                                                                {isSelected && <Check size={16} color={key === 'yellow' || key === 'green' || key === 'pink' || key === 'blue' || key === 'orange' ? '#000' : '#fff'} strokeWidth={3} />}
-                                                                            </TouchableOpacity>
-                                                                        );
-                                                                    })}
-                                                                </ScrollView>
-                                                            </View>
-                                                        )}
-
-                                                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                                                            <View style={{ flex: 1 }}>
-                                                                <View style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border, marginBottom: 0 }]}>
-                                                                    <TextInput
-                                                                        style={[styles.searchInput, { color: theme.text, marginLeft: 10 }]}
-                                                                        placeholder={
-                                                                            readingSession.toolId !== 'orphan_audio'
-                                                                                ? "Ask anything..."
-                                                                                : "Ask follow-up..."
-                                                                        }
-                                                                        placeholderTextColor={theme.secondary}
-                                                                        value={quickSearchQuery}
-                                                                        onChangeText={setQuickSearchQuery}
-                                                                        onSubmitEditing={() => handleQuickSearch()}
-                                                                        multiline={true}
-                                                                    />
-
-                                                                    {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
-
-                                                                    <TouchableOpacity
-                                                                        onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
-                                                                        style={{
-                                                                            width: 38,
-                                                                            height: 38,
-                                                                            alignItems: 'center',
-                                                                            justifyContent: 'center',
-                                                                            marginRight: 4
-                                                                        }}
-                                                                    >
-                                                                        <Camera size={20} color={theme.text} />
-                                                                    </TouchableOpacity>
-
-                                                                    <TouchableOpacity disabled={isReaderQuerying} onPress={() => handleQuickSearch()} style={{
-                                                                        width: 38,
-                                                                        height: 38,
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center'
-                                                                    }}>
-                                                                        {isReaderQuerying ? (
-                                                                            <ActivityIndicator size="small" color={primaryColor} />
-                                                                        ) : (
-                                                                            quickSearchQuery.trim().length > 0 ? (
-                                                                                <ArrowRight size={20} color={primaryColor} />
-                                                                            ) : (
-                                                                                <Search size={20} color={theme.text} />
-                                                                            )
-                                                                        )}
-                                                                    </TouchableOpacity>
+                                                {/* RIGHT: Sidebar for Controls & Chat */}
+                                                <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: theme.border, backgroundColor: theme.uiBg }}>
+                                                    {/* Consistent Search/Control Logic (Same as Portrait) */}
+                                                    {readingSession.toolId !== 'orphan_audio' && (
+                                                        <View style={[{
+                                                            paddingHorizontal: 20,
+                                                            paddingTop: 15,
+                                                            paddingBottom: 5,
+                                                            backgroundColor: theme.uiBg,
+                                                            zIndex: 10
+                                                        }, Platform.OS === 'android' && isKeyboardVisible ? { paddingBottom: keyboardHeight } : null]}>
+                                                            {/* NEW: Highlight Color Palette (Visible when Highlight Mode is ON) */}
+                                                            {isHighlightMode && (
+                                                                <View style={{ marginBottom: 15 }}>
+                                                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 20, alignItems: 'center' }}>
+                                                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 5 }}>
+                                                                            <Highlighter size={16} color={primaryColor} style={{ marginRight: 6 }} />
+                                                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.secondary, textTransform: 'uppercase' }}>Color</Text>
+                                                                        </View>
+                                                                        {Object.entries(HIGHLIGHT_COLORS).map(([key, value]: [string, any]) => {
+                                                                            const isSelected = activeHighlightColor === key;
+                                                                            return (
+                                                                                <TouchableOpacity
+                                                                                    key={key}
+                                                                                    onPress={() => setActiveHighlightColor(key)}
+                                                                                    style={{
+                                                                                        width: 32,
+                                                                                        height: 32,
+                                                                                        borderRadius: 16,
+                                                                                        backgroundColor: value.code,
+                                                                                        borderWidth: isSelected ? 3 : 1,
+                                                                                        borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.1)',
+                                                                                        alignItems: 'center',
+                                                                                        justifyContent: 'center',
+                                                                                        shadowColor: "#000",
+                                                                                        shadowOffset: { width: 0, height: 1 },
+                                                                                        shadowOpacity: 0.1,
+                                                                                        shadowRadius: 2,
+                                                                                        elevation: 2
+                                                                                    }}
+                                                                                >
+                                                                                    {isSelected && <Check size={16} color={key === 'yellow' || key === 'green' || key === 'pink' || key === 'blue' || key === 'orange' ? '#000' : '#fff'} strokeWidth={3} />}
+                                                                                </TouchableOpacity>
+                                                                            );
+                                                                        })}
+                                                                    </ScrollView>
                                                                 </View>
+                                                            )}
 
-                                                                {/* Library Suggestions Dropdown */}
-                                                                {quickSearchQuery.trim().length > 0 && librarySuggestions.length > 0 && (
-                                                                    <View style={{
-                                                                        position: 'absolute',
-                                                                        top: 55, // Adjusted to be below the search bar within this flex container
-                                                                        left: 0,
-                                                                        right: 0,
-                                                                        backgroundColor: theme.uiBg,
-                                                                        borderRadius: 12,
-                                                                        borderWidth: 1,
-                                                                        borderColor: theme.border,
-                                                                        zIndex: 100,
+                                                            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                                                                <View style={{ flex: 1 }}>
+                                                                    <View style={[styles.searchBar, {
+                                                                        backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg,
+                                                                        borderColor: quickSearchQuery.trim().length > 0 ? primaryColor + '40' : theme.border,
+                                                                        borderRadius: 30, // Modern Pill Shape
+                                                                        height: 60,
+                                                                        borderWidth: 1.0,
+                                                                        paddingHorizontal: 12,
+                                                                        marginBottom: 0,
                                                                         shadowColor: "#000",
                                                                         shadowOffset: { width: 0, height: 4 },
                                                                         shadowOpacity: 0.1,
-                                                                        shadowRadius: 5,
-                                                                        elevation: 5
-                                                                    }}>
-                                                                        {librarySuggestions.map((session: any, idx: number) => (
-                                                                            <TouchableOpacity
-                                                                                key={idx}
-                                                                                onPress={() => {
-                                                                                    setQuickSearchQuery("");
-                                                                                    Keyboard.dismiss();
-                                                                                    // DIRECT OPEN from suggestions (Skip modal)
-                                                                                    if (readingSession) {
-                                                                                        setMinimizedSession(readingSession);
-                                                                                    }
-                                                                                    loadHistorySession(session, 'reader');
-                                                                                }}
-                                                                                style={{
-                                                                                    padding: 15,
-                                                                                    borderBottomWidth: idx === librarySuggestions.length - 1 ? 0 : 1,
-                                                                                    borderBottomColor: theme.border,
-                                                                                    flexDirection: 'row',
-                                                                                    alignItems: 'center'
-                                                                                }}
-                                                                            >
-                                                                                <BookOpen size={14} color={theme.secondary} style={{ marginRight: 10 }} />
-                                                                                <Text style={{ color: theme.text, fontSize: 16 }} numberOfLines={1}>{session.title}</Text>
-                                                                            </TouchableOpacity>
-                                                                        ))}
-                                                                    </View>
-                                                                )}
-                                                            </View>
+                                                                        shadowRadius: 12,
+                                                                        elevation: 8
+                                                                    }]}>
+                                                                        <TextInput
+                                                                            style={[styles.searchInput, { color: theme.text, marginLeft: 10 }]}
+                                                                            placeholder={
+                                                                                readingSession.toolId !== 'orphan_audio'
+                                                                                    ? "Ask anything..."
+                                                                                    : "Ask follow-up..."
+                                                                            }
+                                                                            placeholderTextColor={theme.secondary}
+                                                                            value={quickSearchQuery}
+                                                                            onChangeText={setQuickSearchQuery}
+                                                                            onSubmitEditing={() => handleQuickSearch()}
+                                                                            multiline={true}
+                                                                        />
 
-                                                            {/* Minimize Button */}
-                                                            <TouchableOpacity
-                                                                onPress={() => setIsReaderSearchExpanded(false)}
-                                                                style={{
-                                                                    width: 40,
-                                                                    height: 50, // Match search bar height
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    backgroundColor: theme.buttonBg,
-                                                                    borderRadius: 12,
-                                                                    borderWidth: 1,
-                                                                    borderColor: theme.border
-                                                                }}
-                                                            >
-                                                                <ChevronUp size={20} color={theme.secondary} />
-                                                            </TouchableOpacity>
+                                                                        {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
+
+                                                                        <TouchableOpacity
+                                                                            onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
+                                                                            style={{
+                                                                                width: 38,
+                                                                                height: 38,
+                                                                                alignItems: 'center',
+                                                                                justifyContent: 'center',
+                                                                                marginRight: 4
+                                                                            }}
+                                                                        >
+                                                                            <Camera size={20} color={theme.text} />
+                                                                        </TouchableOpacity>
+
+                                                                        <TouchableOpacity disabled={isReaderQuerying} onPress={() => handleQuickSearch()} style={{
+                                                                            width: 38,
+                                                                            height: 38,
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center'
+                                                                        }}>
+                                                                            {isReaderQuerying ? (
+                                                                                <ActivityIndicator size="small" color={primaryColor} />
+                                                                            ) : (
+                                                                                quickSearchQuery.trim().length > 0 ? (
+                                                                                    <ArrowRight size={20} color={primaryColor} />
+                                                                                ) : (
+                                                                                    <Search size={20} color={theme.text} />
+                                                                                )
+                                                                            )}
+                                                                        </TouchableOpacity>
+                                                                    </View>
+
+                                                                    {/* Library Suggestions Dropdown */}
+                                                                    {quickSearchQuery.trim().length > 0 && librarySuggestions.length > 0 && (
+                                                                        <View style={{
+                                                                            position: 'absolute',
+                                                                            top: 55, // Adjusted to be below the search bar within this flex container
+                                                                            left: 0,
+                                                                            right: 0,
+                                                                            backgroundColor: theme.uiBg,
+                                                                            borderRadius: 12,
+                                                                            borderWidth: 1,
+                                                                            borderColor: theme.border,
+                                                                            zIndex: 100,
+                                                                            shadowColor: "#000",
+                                                                            shadowOffset: { width: 0, height: 4 },
+                                                                            shadowOpacity: 0.1,
+                                                                            shadowRadius: 5,
+                                                                            elevation: 5
+                                                                        }}>
+                                                                            {librarySuggestions.map((session: any, idx: number) => (
+                                                                                <TouchableOpacity
+                                                                                    key={idx}
+                                                                                    onPress={() => {
+                                                                                        setQuickSearchQuery("");
+                                                                                        Keyboard.dismiss();
+                                                                                        // DIRECT OPEN from suggestions (Skip modal)
+                                                                                        if (readingSession) {
+                                                                                            setMinimizedSession(readingSession);
+                                                                                        }
+                                                                                        loadHistorySession(session, 'reader');
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: 15,
+                                                                                        borderBottomWidth: idx === librarySuggestions.length - 1 ? 0 : 1,
+                                                                                        borderBottomColor: theme.border,
+                                                                                        flexDirection: 'row',
+                                                                                        alignItems: 'center'
+                                                                                    }}
+                                                                                >
+                                                                                    <BookOpen size={14} color={theme.secondary} style={{ marginRight: 10 }} />
+                                                                                    <Text style={{ color: theme.text, fontSize: 16 }} numberOfLines={1}>{session.title}</Text>
+                                                                                </TouchableOpacity>
+                                                                            ))}
+                                                                        </View>
+                                                                    )}
+                                                                </View>
+                                                            </View>
                                                         </View>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        )}
+                                                    )}
+                                                </View>
 
                                         {/* Onboarding Preview Footer - LANDSCAPE MODE */}
                                         {isInOnboardingPreview && (
@@ -31338,201 +31304,11 @@ Review the following raw transcribed text:
                                 ) : (
                                     // Standard Portrait Layout (or Orphan Audio) - Existing Code wrapped
                                     <KeyboardAvoidingView
-                                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                                         style={{ flex: 1 }}
                                         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0} // Account for header/status bar
                                     >
-                                        {/* Only show search/controls header if NOT orphan audio */}
-                                        {readingSession.toolId !== 'orphan_audio' && (
-                                            <View style={{ paddingHorizontal: 20, paddingTop: isReaderSearchExpanded ? 15 : 10, paddingBottom: isReaderSearchExpanded ? 5 : 10, backgroundColor: theme.bg, zIndex: 10, borderBottomWidth: 1, borderBottomColor: theme.border }}>
-                                                {/* NEW: Highlight Color Palette (Visible when Highlight Mode is ON) */}
-                                                {isHighlightMode && (
-                                                    <View style={{ marginBottom: 15 }}>
-                                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 20, alignItems: 'center' }}>
-                                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 5 }}>
-                                                                <Highlighter size={16} color={primaryColor} style={{ marginRight: 6 }} />
-                                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.secondary, textTransform: 'uppercase' }}>Color</Text>
-                                                            </View>
-                                                            {Object.entries(HIGHLIGHT_COLORS).map(([key, value]: [string, any]) => {
-                                                                const isSelected = activeHighlightColor === key;
-                                                                return (
-                                                                    <TouchableOpacity
-                                                                        key={key}
-                                                                        onPress={() => setActiveHighlightColor(key)}
-                                                                        style={{
-                                                                            width: 32,
-                                                                            height: 32,
-                                                                            borderRadius: 16,
-                                                                            backgroundColor: value.code,
-                                                                            borderWidth: isSelected ? 3 : 1,
-                                                                            borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.1)',
-                                                                            alignItems: 'center',
-                                                                            justifyContent: 'center',
-                                                                            shadowColor: "#000",
-                                                                            shadowOffset: { width: 0, height: 1 },
-                                                                            shadowOpacity: 0.1,
-                                                                            shadowRadius: 2,
-                                                                            elevation: 2
-                                                                        }}
-                                                                    >
-                                                                        {isSelected && <Check size={16} color={key === 'yellow' || key === 'green' || key === 'pink' || key === 'blue' || key === 'orange' ? '#000' : '#fff'} strokeWidth={3} />}
-                                                                    </TouchableOpacity>
-                                                                );
-                                                            })}
-                                                        </ScrollView>
-                                                    </View>
-                                                )}
-
-                                                {isReaderSearchExpanded ? (
-                                                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                                                        <View style={{ flex: 1 }}>
-                                                            <View style={[styles.searchBar, {
-                                                                backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg,
-                                                                borderColor: quickSearchQuery.trim().length > 0 ? primaryColor + '40' : theme.border,
-                                                                borderRadius: 30, // Modern Pill Shape
-                                                                borderWidth: 1.5,
-                                                                paddingHorizontal: 8, // Adjusted for pill inner content
-                                                                marginBottom: 0,
-                                                                shadowColor: primaryColor,
-                                                                shadowOffset: { width: 0, height: 4 },
-                                                                shadowOpacity: quickSearchQuery.trim().length > 0 ? 0.1 : 0.05,
-                                                                shadowRadius: 10,
-                                                                elevation: 6
-                                                            }]}>
-                                                                {/* UNIFIED SEARCH: Toggle Button Removed. Logic defaults to AI, but shows suggestions for Library. */}
-
-                                                                <TextInput
-                                                                    style={[styles.searchInput, { color: theme.text, marginLeft: 10 }]} // Added marginLeft
-                                                                    // UPDATED: Unified Placeholder
-                                                                    placeholder={
-                                                                        readingSession.toolId !== 'orphan_audio'
-                                                                            ? "Ask anything..."
-                                                                            : "Ask follow-up..." //chage placeholder text ask anything and ask folloup due to space problem.
-                                                                    }
-                                                                    placeholderTextColor={theme.secondary}
-                                                                    value={quickSearchQuery}
-                                                                    onChangeText={setQuickSearchQuery}
-                                                                    onSubmitEditing={() => handleQuickSearch()}
-                                                                    multiline={true}
-                                                                />
-
-                                                                {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
-
-                                                                <TouchableOpacity
-                                                                    onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
-                                                                    style={{
-                                                                        width: 38,
-                                                                        height: 38,
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        marginRight: 4
-                                                                    }}
-                                                                >
-                                                                    <Camera size={20} color={theme.text} />
-                                                                </TouchableOpacity>
-
-                                                                <TouchableOpacity disabled={isReaderQuerying} onPress={() => handleQuickSearch()} style={{
-                                                                    width: 38,
-                                                                    height: 38,
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center'
-                                                                }}>
-                                                                    {/* UPDATED: Show spinner during Reader Query */}
-                                                                    {isReaderQuerying ? (
-                                                                        <ActivityIndicator size="small" color={primaryColor} />
-                                                                    ) : (
-                                                                        quickSearchQuery.trim().length > 0 ? (
-                                                                            <ArrowRight size={20} color={primaryColor} />
-                                                                        ) : (
-                                                                            <Search size={20} color={theme.text} />
-                                                                        )
-                                                                    )}
-                                                                </TouchableOpacity>
-                                                            </View>
-
-                                                            {/* NEW: Library Suggestions Dropdown */}
-                                                            {quickSearchQuery.trim().length > 0 && librarySuggestions.length > 0 && (
-                                                                <View style={{
-                                                                    position: 'absolute',
-                                                                    top: 55, // Adjusted to be below the search bar within this flex container
-                                                                    left: 0,
-                                                                    right: 0,
-                                                                    backgroundColor: theme.uiBg,
-                                                                    borderRadius: 12,
-                                                                    borderWidth: 1,
-                                                                    borderColor: theme.border,
-                                                                    zIndex: 100,
-                                                                    shadowColor: "#000",
-                                                                    shadowOffset: { width: 0, height: 4 },
-                                                                    shadowOpacity: 0.1,
-                                                                    shadowRadius: 5,
-                                                                    elevation: 5
-                                                                }}>
-                                                                    {librarySuggestions.map((session: any, idx: number) => (
-                                                                        <TouchableOpacity
-                                                                            key={idx}
-                                                                            onPress={() => {
-                                                                                setQuickSearchQuery("");
-                                                                                Keyboard.dismiss();
-                                                                                // DIRECT OPEN from suggestions (Skip modal)
-                                                                                if (readingSession) {
-                                                                                    setMinimizedSession(readingSession);
-                                                                                }
-                                                                                loadHistorySession(session, 'reader');
-                                                                            }}
-                                                                            style={{
-                                                                                padding: 15,
-                                                                                borderBottomWidth: idx === librarySuggestions.length - 1 ? 0 : 1,
-                                                                                borderBottomColor: theme.border,
-                                                                                flexDirection: 'row',
-                                                                                alignItems: 'center'
-                                                                            }}
-                                                                        >
-                                                                            <BookOpen size={14} color={theme.secondary} style={{ marginRight: 10 }} />
-                                                                            <Text style={{ color: theme.text, fontSize: 16 }} numberOfLines={1}>{session.title}</Text>
-                                                                        </TouchableOpacity>
-                                                                    ))}
-                                                                </View>
-                                                            )}
-                                                        </View>
-
-                                                        {/* Minimize Button */}
-                                                        <TouchableOpacity
-                                                            onPress={() => setIsReaderSearchExpanded(false)}
-                                                            style={{
-                                                                width: 40,
-                                                                height: 50, // Match search bar height
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                backgroundColor: theme.buttonBg,
-                                                                borderRadius: 12,
-                                                                borderWidth: 1,
-                                                                borderColor: theme.border
-                                                            }}
-                                                        >
-                                                            <ChevronUp size={20} color={theme.secondary} />
-                                                        </TouchableOpacity>
-                                                    </View>
-                                                ) : (
-                                                    /* Compact View when Minimized */
-                                                    <TouchableOpacity
-                                                        onPress={() => setIsReaderSearchExpanded(true)}
-                                                        style={{
-                                                            flexDirection: 'row',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            paddingVertical: 8,
-                                                            backgroundColor: theme.buttonBg,
-                                                            borderRadius: 30
-                                                        }}
-                                                    >
-                                                        <Search size={14} color={theme.secondary} style={{ marginRight: 6 }} />
-                                                        <Text style={{ color: theme.secondary, fontWeight: '600', fontSize: 12 }}>Search / Ask AI</Text>
-                                                        <ChevronDown size={14} color={theme.secondary} style={{ marginLeft: 6 }} />
-                                                    </TouchableOpacity>
-                                                )}
-                                            </View>
-                                        )}
+                                        {/* For Orphan Audio, provide a simple absolute close button since header is hidden */}
 
                                         {/* For Orphan Audio, provide a simple absolute close button since header is hidden */}
                                         {readingSession.toolId === 'orphan_audio' && (
@@ -32137,6 +31913,168 @@ Review the following raw transcribed text:
                                                 </View>
                                             }
                                         />
+
+                                        {/* NEW: Reader Controls moved to bottom (Gemini Style) */}
+                                        {readingSession.toolId !== 'orphan_audio' && (
+                                            <View style={[{
+                                                paddingHorizontal: 20,
+                                                paddingTop: 15,
+                                                paddingBottom: 25,
+                                                backgroundColor: theme.bg,
+                                                zIndex: 10,
+                                                borderTopWidth: 1,
+                                                borderTopColor: theme.border
+                                            }, Platform.OS === 'android' && isKeyboardVisible ? { paddingBottom: keyboardHeight } : null]}>
+                                                {/* NEW: Highlight Color Palette (Visible when Highlight Mode is ON) */}
+                                                {isHighlightMode && (
+                                                    <View style={{ marginBottom: 15 }}>
+                                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 20, alignItems: 'center' }}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 5 }}>
+                                                                <Highlighter size={16} color={primaryColor} style={{ marginRight: 6 }} />
+                                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.secondary, textTransform: 'uppercase' }}>Color</Text>
+                                                            </View>
+                                                            {Object.entries(HIGHLIGHT_COLORS).map(([key, value]: [string, any]) => {
+                                                                const isSelected = activeHighlightColor === key;
+                                                                return (
+                                                                    <TouchableOpacity
+                                                                        key={key}
+                                                                        onPress={() => setActiveHighlightColor(key)}
+                                                                        style={{
+                                                                            width: 32,
+                                                                            height: 32,
+                                                                            borderRadius: 16,
+                                                                            backgroundColor: value.code,
+                                                                            borderWidth: isSelected ? 3 : 1,
+                                                                            borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.1)',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            shadowColor: "#000",
+                                                                            shadowOffset: { width: 0, height: 1 },
+                                                                            shadowOpacity: 0.1,
+                                                                            shadowRadius: 2,
+                                                                            elevation: 2
+                                                                        }}
+                                                                    >
+                                                                        {isSelected && <Check size={16} color={key === 'yellow' || key === 'green' || key === 'pink' || key === 'blue' || key === 'orange' ? '#000' : '#fff'} strokeWidth={3} />}
+                                                                    </TouchableOpacity>
+                                                                );
+                                                            })}
+                                                        </ScrollView>
+                                                    </View>
+                                                )}
+
+                                                    <View style={[styles.searchBar, {
+                                                        backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg,
+                                                        borderColor: quickSearchQuery.trim().length > 0 ? primaryColor + '40' : theme.border,
+                                                        borderRadius: 30, // Modern Pill Shape
+                                                        height: 60,
+                                                        borderWidth: 1.0,
+                                                        paddingHorizontal: 12,
+                                                        marginBottom: 0,
+                                                        shadowColor: "#000",
+                                                        shadowOffset: { width: 0, height: 4 },
+                                                        shadowOpacity: 0.1,
+                                                        shadowRadius: 12,
+                                                        elevation: 8
+                                                    }]}>
+                                                        {/* UNIFIED SEARCH: Toggle Button Removed. Logic defaults to AI, but shows suggestions for Library. */}
+
+                                                        <TextInput
+                                                            style={[styles.searchInput, { color: theme.text, marginLeft: 10 }]} // Added marginLeft
+                                                            // UPDATED: Unified Placeholder
+                                                            placeholder={
+                                                                readingSession.toolId !== 'orphan_audio'
+                                                                    ? "Ask anything..."
+                                                                    : "Ask follow-up..." //chage placeholder text ask anything and ask folloup due to space problem.
+                                                            }
+                                                            placeholderTextColor={theme.secondary}
+                                                            value={quickSearchQuery}
+                                                            onChangeText={setQuickSearchQuery}
+                                                            onSubmitEditing={() => handleQuickSearch()}
+                                                            multiline={true}
+                                                        />
+
+                                                        {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
+
+                                                        <TouchableOpacity
+                                                            onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
+                                                            style={{
+                                                                width: 38,
+                                                                height: 38,
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                marginRight: 4
+                                                            }}
+                                                        >
+                                                            <Camera size={20} color={theme.text} />
+                                                        </TouchableOpacity>
+
+                                                        <TouchableOpacity disabled={isReaderQuerying} onPress={() => handleQuickSearch()} style={{
+                                                            width: 38,
+                                                            height: 38,
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center'
+                                                        }}>
+                                                            {/* UPDATED: Show spinner during Reader Query */}
+                                                            {isReaderQuerying ? (
+                                                                <ActivityIndicator size="small" color={primaryColor} />
+                                                            ) : (
+                                                                quickSearchQuery.trim().length > 0 ? (
+                                                                    <ArrowRight size={20} color={primaryColor} />
+                                                                ) : (
+                                                                    <Search size={20} color={theme.text} />
+                                                                )
+                                                            )}
+                                                        </TouchableOpacity>
+                                                    </View>
+
+                                                    {/* NEW: Library Suggestions Dropdown */}
+                                                    {quickSearchQuery.trim().length > 0 && librarySuggestions.length > 0 && (
+                                                        <View style={{
+                                                            position: 'absolute',
+                                                            bottom: 65, // Adjusted to be ABOVE the search bar
+                                                            left: 0,
+                                                            right: 0,
+                                                            backgroundColor: theme.uiBg,
+                                                            borderRadius: 12,
+                                                            borderWidth: 1,
+                                                            borderColor: theme.border,
+                                                            zIndex: 100,
+                                                            shadowColor: "#000",
+                                                            shadowOffset: { width: 0, height: -4 },
+                                                            shadowOpacity: 0.1,
+                                                            shadowRadius: 5,
+                                                            elevation: 5
+                                                        }}>
+                                                            {/* Suggestions should probably list upwards if at bottom */}
+                                                            {librarySuggestions.map((session: any, idx: number) => (
+                                                                <TouchableOpacity
+                                                                    key={idx}
+                                                                    onPress={() => {
+                                                                        setQuickSearchQuery("");
+                                                                        Keyboard.dismiss();
+                                                                        // DIRECT OPEN from suggestions (Skip modal)
+                                                                        if (readingSession) {
+                                                                            setMinimizedSession(readingSession);
+                                                                        }
+                                                                        loadHistorySession(session, 'reader');
+                                                                    }}
+                                                                    style={{
+                                                                        padding: 15,
+                                                                        borderBottomWidth: idx === librarySuggestions.length - 1 ? 0 : 1,
+                                                                        borderBottomColor: theme.border,
+                                                                        flexDirection: 'row',
+                                                                        alignItems: 'center'
+                                                                    }}
+                                                                >
+                                                                    <BookOpen size={14} color={theme.secondary} style={{ marginRight: 10 }} />
+                                                                    <Text style={{ color: theme.text, fontSize: 16 }} numberOfLines={1}>{session.title}</Text>
+                                                                </TouchableOpacity>
+                                                            ))}
+                                                        </View>
+                                                    )}
+                                            </View>
+                                        )}
 
                                         {/* UPDATED: Only show in-reader controls if the playing session matches the viewed session */}
                                         {ttsStatus !== 'stopped' && playingMeta?.id === readingSession?.id && (
