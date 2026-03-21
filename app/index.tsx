@@ -20581,13 +20581,29 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
 
             const visualPrompt = prompt + `\n\nVISUAL REQUIREMENT:\nAt the very end of your response, strictly on a new line, provide a detailed image generation prompt to create a relevant cover image, diagram, or infographic that visually explains the concept. Format: IMAGE_PROMPT: <prompt>`;
 
-            const rawContent = await callLLM(visualPrompt, selectedScenario.title);
+            // STREAM the response so text appears progressively
+            let rawContent = "";
+            try {
+                const callContents = [{ role: "user", parts: [{ text: visualPrompt }] }];
+                rawContent = await callLLM_Stream(
+                    callContents,
+                    selectedScenario.title,
+                    (chunk) => {
+                        // Strip any trailing IMAGE_PROMPT from visible streaming content
+                        const visibleChunk = chunk.replace(/IMAGE_PROMPT:.*$/is, '').trim();
+                        setGenerationData(visibleChunk || `${selectedScenario.title} is thinking...`);
+                    },
+                    null // modelOverride
+                );
+            } catch (err: any) {
+                rawContent = "Error: " + err.message;
+            }
 
-            if (rawContent.startsWith("Error")) {
+            if (!rawContent || rawContent.startsWith("Error")) {
                 setGenerationData(null);
                 setAppMode("setup");
                 setSchoolConfig((prev: any) => ({ ...prev, input: currentInput }));
-                Alert.alert("Generation Failed", rawContent);
+                Alert.alert("Generation Failed", rawContent || "Unknown error.");
                 return;
             }
 
@@ -20596,7 +20612,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             const imgMatch = content.match(/IMAGE_PROMPT:\s*(.*)/);
             if (imgMatch) {
                 const imgPrompt = imgMatch[1].trim();
-                content = content.replace(/IMAGE_PROMPT:.*$/, '').trim();
+                content = content.replace(/IMAGE_PROMPT:.*$/is, '').trim();
                 setGenerationData("Illustrating...");
                 image = await generateImage(imgPrompt);
             }

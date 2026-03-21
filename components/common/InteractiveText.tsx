@@ -267,7 +267,7 @@ const InteractiveText = React.memo(({
                 let dynamicSize = flatStyle.fontSize || 16;
                 let dynamicMargin = 0;
                 let dynamicStyle = flatStyle.fontStyle || 'normal';
-                let dynamicTextAlign = 'left';
+                let dynamicTextAlign = 'justify';
 
                 if (type === 'header') {
                     dynamicColor = theme.primary;
