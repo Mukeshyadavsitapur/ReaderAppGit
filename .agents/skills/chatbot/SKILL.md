@@ -43,7 +43,10 @@ The primary messaging interface, featuring real-time interaction and educational
 - **InteractiveText**: Used within bubbles to enable word lookups and natural reading.
 
 #### Action Row (Assistant)
-Contains tools for **TTS** (Text-to-Speech), **Language Switching**, and **Quick Ideas** (Brainstorming).
+The row below AI messages is balanced and informative:
+- **Left Side**: A subtle hint text (`styles.hintTextSmall`) saying *"tap any word to define"*.
+- **Right Side**: Grouped action buttons (`styles.rightActions`) for **TTS**, **Language Switching**, and **Quick Ideas**.
+- **Layout**: Uses `justifyContent: 'space-between'` and `width: '100%'`.
 
 #### Interaction Modes
 - **Keyboard Mode**: Standard text input.
@@ -56,12 +59,17 @@ The lightbulb icon triggers a "hint" generator that suggests the next best reply
 - **UI**: Displayed as an italicized `hintBubble` below the assistant's message.
 - **Color**: `#f59e0b` (Amber).
 
-### 2. Grammar Checker
+### 2. Language Switcher (Translation)
+Allows the user to see the AI's response in their preferred language.
+- **Loading State**: When `translatingMsgId === msg.id`, the badge replaces its text with an `ActivityIndicator`.
+- **UI**: Displayed as a `langBadge` showing the 2-letter language code (e.g., "EN", "ES").
+
+### 3. Grammar Checker
 The "check" button on user messages triggers a correction and teaching tip.
 - **UI**: Displayed as a `correctionBubble` below the user's message.
 - **Content**: Always includes a `Corrected:` version and a `Quick Tip:`.
 
-### 3. TTS-Synced Scrolling (Follow Voice)
+### 4. TTS-Synced Scrolling (Follow Voice)
 The chat interface automatically scrolls to keep the currently spoken word in the viewport.
 - **Logic**: Calculates `viewPosition` on the `FlatList` based on `speechRange.start / message.length`.
 - **Manual Override**: If `onScrollBeginDrag` is triggered, the follow logic pauses to allow the user to read history.

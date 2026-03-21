@@ -30699,9 +30699,51 @@ Review the following raw transcribed text:
                         {appMode === 'setup' && renderSetupScreen()}
 
                         {appMode === 'generating' && (
-                            <View style={styles.centerContent}>
-                                <ActivityIndicator size="large" color={primaryColor} />
-                                <Text style={[styles.loadingText, { color: theme.text }]}>{generationData || "Thinking..."}</Text>
+                            <View style={{ flex: 1, backgroundColor: theme.bg, flexDirection: isLandscape ? 'row' : 'column' }}>
+                                {/* FIXED: Header area that matches reader header height */}
+                                <View style={{ 
+                                    width: isLandscape ? 300 : '100%', 
+                                    height: isLandscape ? '100%' : 75,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    borderRightWidth: isLandscape ? 1 : 0,
+                                    borderBottomWidth: isLandscape ? 0 : 1,
+                                    borderColor: theme.border,
+                                    backgroundColor: theme.bg,
+                                    zIndex: 10
+                                }}>
+                                    <ActivityIndicator size={isLandscape ? "large" : "small"} color={primaryColor} />
+                                    <Text style={{ fontSize: 10, color: theme.secondary, fontWeight: 'bold', marginTop: isLandscape ? 8 : 4, textTransform: 'uppercase' }}>
+                                        {isLandscape ? "Generating Content..." : "Generating..."}
+                                    </Text>
+                                </View>
+
+                                <View style={{ flex: 1 }}>
+                                    <ScrollView 
+                                        style={{ flex: 1 }} 
+                                        contentContainerStyle={[styles.articleContent, isLandscape ? { paddingHorizontal: 40 } : {}]}
+                                        showsVerticalScrollIndicator={false}
+                                    >
+                                        {/* Show Title during generation if available (matches reader header) */}
+                                        {readingSession?.title && (
+                                            <Text style={[styles.articleTitle, { color: theme.text, ...getTypographyStyle(displaySettings.fontFamily, displaySettings.textStyles) }]}>
+                                                {readingSession.title}
+                                            </Text>
+                                        )}
+                                        
+                                        <InteractiveText
+                                            rawText={generationData || "Thinking..."}
+                                            theme={theme}
+                                            style={{
+                                                fontSize: 18,
+                                                color: theme.text,
+                                                lineHeight: 26,
+                                                textAlign: 'left'
+                                            }}
+                                            tapToDefineEnabled={false}
+                                        />
+                                    </ScrollView>
+                                </View>
                             </View>
                         )}
 
