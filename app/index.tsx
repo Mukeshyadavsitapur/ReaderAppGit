@@ -4,7 +4,7 @@ import 'react-native-url-polyfill/auto';
 // @ts-ignore - no types available for this polyfill package
 import { fetch as fetchPolyfill, Headers, Request, Response } from 'react-native-fetch-api';
 // @ts-ignore - no types available for this polyfill package
-import { TextEncoder, TextDecoder } from 'text-encoding';
+import { TextDecoder, TextEncoder } from 'text-encoding';
 
 if (typeof global.TextEncoder === 'undefined') {
     global.TextEncoder = TextEncoder;
@@ -182,13 +182,12 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { Theme, Message, Highlight, SpeechRange, Tool, ChatSession, LineWord, TextSegment, InteractiveTextProps } from '../constants/types';
-import { HIGHLIGHT_COLORS } from '../constants/highlights';
-import InteractiveText from '../components/common/InteractiveText';
-import ResponsiveWrapper from '../components/common/ResponsiveWrapper';
-import GeminiHome from '../components/redesign/GeminiHome';
-import GeminiChat from '../components/redesign/GeminiChat';
 import AppIcon from '../components/common/AppIcon';
+import InteractiveText from '../components/common/InteractiveText';
+import GeminiChat from '../components/redesign/GeminiChat';
+import GeminiHome from '../components/redesign/GeminiHome';
+import { HIGHLIGHT_COLORS } from '../constants/highlights';
+import { ChatSession, Message, Theme } from '../constants/types';
 
 const isWeb = Platform.OS === 'web';
 
@@ -212,8 +211,8 @@ const handleStorageError = (e: any, action: string) => {
     const msg = String(e?.message ?? '');
     const code = String(e?.code ?? e?.cause?.code ?? '');
     if (
-        msg.includes('SQLITE_FULL') || 
-        msg.includes('database or disk is full') || 
+        msg.includes('SQLITE_FULL') ||
+        msg.includes('database or disk is full') ||
         code.includes('13') ||
         msg.includes('QuotaExceededError') ||
         msg.includes('NS_ERROR_DOM_QUOTA_REACHED')
@@ -5268,7 +5267,7 @@ export default function App() {
 
     // --- CHATBOT MODE STATE ---
     const [isChatbotMode, setIsChatbotMode] = useState(false);
-    const [isLiveChatbotMode, setIsLiveChatbotMode] = useState(false);
+    const [isLiveChatbotMode, setIsLiveChatbotMode] = useState(true);
     const [chatbotMessages, setChatbotMessages] = useState<Message[]>([]);
     const [activeChatbotChar, setActiveChatbotChar] = useState<any>(null);
     const chatbotSilenceTimer = useRef<any>(null);
@@ -12184,7 +12183,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             }
 
             let groqModelsToTry = (modelOverride && !modelOverride.startsWith('gemini')) ? [modelOverride] : [...(displaySettings.groqModels || GROQ_MODELS)];
-            
+
             for (const groqModel of groqModelsToTry) {
                 try {
                     console.log(`[LLM Stream] Attempting Groq: ${groqModel}`);
@@ -12273,7 +12272,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                     if (done) break;
 
                     buffer += decoder.decode(value, { stream: true });
-                    
+
                     let startIndex = buffer.indexOf('{');
                     while (startIndex !== -1) {
                         let bracketCount = 0;
@@ -12281,13 +12280,13 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         for (let i = startIndex; i < buffer.length; i++) {
                             if (buffer[i] === '{') bracketCount++;
                             else if (buffer[i] === '}') bracketCount--;
-                            
+
                             if (bracketCount === 0) {
                                 endIndex = i;
                                 break;
                             }
                         }
-                        
+
                         if (endIndex !== -1) {
                             const objStr = buffer.substring(startIndex, endIndex + 1);
                             try {
@@ -13832,7 +13831,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             if (!text) return;
             const newText = text.trim();
             if (!newText) return;
-            
+
             if (currentTarget === 'note_title') setCurrentNoteTitle((prev: any) => (prev ? prev + " " : "") + newText);
             else if (currentTarget === 'note_prompt') setCustomNotePrompt((prev: any) => (prev ? prev + " " : "") + newText);
             else if (currentTarget === 'note_body') setCurrentNoteInput((prev: any) => (prev ? prev + " " : "") + newText);
@@ -21697,34 +21696,34 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             
             FORMAT: Plain text. Do not use JSON or complex markdown structures. Ensure the definition is clear and the examples are useful.
             `;
-            
+
             let rawStreamText = "";
             try {
-                 const streamContents = [{ role: "user", parts: [{ text: streamPrompt }] }];
-                 rawStreamText = await callLLM_Stream(
-                     streamContents,
-                     "Dictionary",
-                     (chunk) => {
-                         onProgress(chunk);
-                     },
-                     null // modelOverride
-                 );
-                 
-                 if (!rawStreamText || rawStreamText.startsWith("Error")) {
-                     return [{ error: rawStreamText }];
-                 }
-                 
-                 return [{
-                     word: words[0],
-                     definition: rawStreamText, // Fallback field
-                     simple: { definition: rawStreamText, examples: [] },
-                     advanced: { definition: rawStreamText, examples: [], collocations: [], nuances: "" },
-                     phonetic: "",
-                     partOfSpeech: "",
-                     forms: [],
-                     synonyms: [],
-                     antonyms: []
-                 }];
+                const streamContents = [{ role: "user", parts: [{ text: streamPrompt }] }];
+                rawStreamText = await callLLM_Stream(
+                    streamContents,
+                    "Dictionary",
+                    (chunk) => {
+                        onProgress(chunk);
+                    },
+                    null // modelOverride
+                );
+
+                if (!rawStreamText || rawStreamText.startsWith("Error")) {
+                    return [{ error: rawStreamText }];
+                }
+
+                return [{
+                    word: words[0],
+                    definition: rawStreamText, // Fallback field
+                    simple: { definition: rawStreamText, examples: [] },
+                    advanced: { definition: rawStreamText, examples: [], collocations: [], nuances: "" },
+                    phonetic: "",
+                    partOfSpeech: "",
+                    forms: [],
+                    synonyms: [],
+                    antonyms: []
+                }];
 
             } catch (err: any) {
                 console.error("Dictionary Stream Error:", err);
@@ -22055,15 +22054,15 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         setWordData(skeletonData);
 
         const data = await getDictionaryData(cleanWordInput, null, (chunkText: string) => {
-             // On each chunk, update the definition field of the skeleton
-             setWordData((prev: any) => ({
-                 ...prev,
-                 word: prev?.word || cleanWordInput,
-                 simple: {
-                     ...prev?.simple,
-                     definition: chunkText
-                 }
-             }));
+            // On each chunk, update the definition field of the skeleton
+            setWordData((prev: any) => ({
+                ...prev,
+                word: prev?.word || cleanWordInput,
+                simple: {
+                    ...prev?.simple,
+                    definition: chunkText
+                }
+            }));
         });
 
         if (!data.error) {
@@ -23197,7 +23196,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         const headerBg = isDay ? theme.primary : theme.uiBg;
         const headerTextColor = isDay ? '#ffffff' : theme.text;
         const headerIconColor = isDay ? '#ffffff' : theme.text;
-        
+
         // Remove borders as requested
         const borderColor = 'transparent';
         const borderBottomWidth = 0;
@@ -23246,8 +23245,8 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 {/* CENTER section */}
                 <View style={{ flex: 3, alignItems: 'center' }}>
                     <Text style={[styles.appTitle, { color: headerTextColor, marginBottom: 0, textAlign: 'center', fontSize: 18, fontWeight: '700' }]} numberOfLines={1}>
-                        {appMode === 'reader' && readingSession?.title 
-                            ? (readingSession.title.length > 28 ? readingSession.title.substring(0, 28) + '...' : readingSession.title) 
+                        {appMode === 'reader' && readingSession?.title
+                            ? (readingSession.title.length > 28 ? readingSession.title.substring(0, 28) + '...' : readingSession.title)
                             : (displayTitle.length > 28 ? displayTitle.substring(0, 28) + '...' : displayTitle)}
                     </Text>
                 </View>
@@ -23445,7 +23444,12 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                                     endChatbotSession();
                                                 }
                                                 setIsChatbotMode(false);
+                                                if (readingSession) {
+                                                    setAppMode('reader');
+                                                }
                                             } else {
+                                                setAppMode('idle');
+                                                setActiveTab('home');
                                                 setIsChatbotMode(true);
                                             }
                                             toggleSideMenu(false);
@@ -23454,7 +23458,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                     >
                                         <Bot size={20} color={primaryColor} />
                                         <Text style={[styles.menuItemText, { color: theme.text }]}>
-                                            {isChatbotMode ? "Switch to Reader" : "Chatbot"}
+                                            {isChatbotMode ? (readingSession ? "Switch to Reader" : "Switch to Home") : "Chatbot"}
                                         </Text>
                                     </TouchableOpacity>
 
@@ -23699,10 +23703,10 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         }
 
         if (editingId) {
-            setCustomChatbotCharacters(prev => prev.map(c => 
-                c.id === editingId 
-                ? { ...c, title: newCharName.trim(), prompt: newCharPrompt.trim(), greeting: `Hello! I'm ${newCharName.trim()}. How can I help you today?` }
-                : c
+            setCustomChatbotCharacters(prev => prev.map(c =>
+                c.id === editingId
+                    ? { ...c, title: newCharName.trim(), prompt: newCharPrompt.trim(), greeting: `Hello! I'm ${newCharName.trim()}. How can I help you today?` }
+                    : c
             ));
             showToast("Character updated!");
         } else {
@@ -23732,8 +23736,8 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             char.title,
             [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Edit", 
+                {
+                    text: "Edit",
                     onPress: () => {
                         setNewCharName(char.title);
                         setNewCharPrompt(char.prompt);
@@ -23741,9 +23745,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         setShowAddCharacterModal(true);
                     }
                 },
-                { 
-                    text: "Delete", 
-                    style: "destructive", 
+                {
+                    text: "Delete",
+                    style: "destructive",
                     onPress: () => {
                         setCustomChatbotCharacters(prev => prev.filter(c => c.id !== char.id));
                         showToast("Character deleted.");
@@ -23760,10 +23764,10 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         }
 
         if (editingId) {
-            setCustomMenuFeatures(prev => prev.map(f => 
-                f.id === editingId 
-                ? { ...f, title: newCharName.trim(), prompt: newCharPrompt.trim(), systemPrompt: newCharPrompt.trim(), emoji: '✨', type: 'assistant', greeting: `Hello! I'm your ${newCharName.trim()} assistant. How can I help you?` }
-                : f
+            setCustomMenuFeatures(prev => prev.map(f =>
+                f.id === editingId
+                    ? { ...f, title: newCharName.trim(), prompt: newCharPrompt.trim(), systemPrompt: newCharPrompt.trim(), emoji: '✨', type: 'assistant', greeting: `Hello! I'm your ${newCharName.trim()} assistant. How can I help you?` }
+                    : f
             ));
             showToast("Feature updated!");
         } else {
@@ -23796,8 +23800,8 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             feature.title,
             [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Edit", 
+                {
+                    text: "Edit",
                     onPress: () => {
                         setNewCharName(feature.title);
                         setNewCharPrompt(feature.prompt);
@@ -23805,9 +23809,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         setShowAddMenuFeatureModal(true);
                     }
                 },
-                { 
-                    text: "Delete", 
-                    style: "destructive", 
+                {
+                    text: "Delete",
+                    style: "destructive",
                     onPress: () => {
                         setCustomMenuFeatures(prev => prev.filter(f => f.id !== feature.id));
                         showToast("Feature removed.");
@@ -23819,7 +23823,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
 
     const renderChatbotHome = () => {
         const isDay = theme.id === 'day';
-        
+
         return (
             <View style={{ flex: 1, overflow: 'hidden' }}>
                 {/* Full-screen subtle gradient/tint */}
@@ -23831,18 +23835,18 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 {/* Aesthetic Background Blobs & Watermark */}
                 <View style={{ position: 'absolute', top: -100, left: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: primaryColor + '10', zIndex: 1 }} />
                 <View style={{ position: 'absolute', bottom: 100, right: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: primaryColor + '08', zIndex: 1 }} />
-                
+
                 <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-                    <AppIcon 
-                        size={320} 
+                    <AppIcon
+                        size={320}
                         tintColor={theme.text}
                         monochrome={true}
-                        style={{ 
-                            opacity: isDay ? 0.05 : 0.04, 
+                        style={{
+                            opacity: isDay ? 0.05 : 0.04,
                             transform: [{ rotate: '-15deg' }],
                             borderRadius: 160,
                             overflow: 'hidden'
-                        }} 
+                        }}
                     />
                 </View>
 
@@ -23871,9 +23875,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 16 }}>
-                        <View style={{ 
-                            flexDirection: 'row', 
-                            flexWrap: 'wrap', 
+                        <View style={{
+                            flexDirection: 'row',
+                            flexWrap: 'wrap',
                             justifyContent: 'space-between',
                             gap: 12,
                             marginTop: 10
@@ -23921,7 +23925,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                                 <IconComponent size={24} color={char.color[0]} />
                                             )}
                                         </View>
-                                        
+
                                         <View>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                                                 <Text style={{ fontSize: 16, fontWeight: '900', color: theme.text, letterSpacing: -0.3 }} numberOfLines={1}>{char.title}</Text>
@@ -23933,7 +23937,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                             </View>
                                             <Text style={{ fontSize: 11, color: theme.secondary, opacity: 0.7, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{char.role}</Text>
                                         </View>
-                                        
+
                                         <View style={{ position: 'absolute', bottom: 12, right: 12 }}>
                                             <ArrowRight size={14} color={theme.secondary} opacity={0.3} />
                                         </View>
@@ -24888,32 +24892,32 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                     </View>
                                 )}
                                 {!selectedScenario?.isCustom && selectedScenario?.id !== 'ai_tutor' && (
-                                <View style={{ marginBottom: 20 }}>
-                                    <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>INPUT</Text>
-                                    <View>
-                                        <TextInput
-                                            style={[styles.textArea, {
-                                                color: theme.text,
-                                                borderColor: theme.border,
-                                                backgroundColor: theme.inputBg,
-                                                marginBottom: 0,
-                                                fontSize: 16,
-                                                textAlignVertical: 'top',
-                                                paddingTop: 14,
-                                                height: 150 // Fixed height for input in this mode
-                                            }]}
-                                            placeholder={selectedScenario?.placeholder}
-                                            placeholderTextColor={theme.secondary}
-                                            value={schoolConfig.input}
-                                            onChangeText={(text) => setSchoolConfig({ ...schoolConfig, input: text })}
-                                            multiline
-                                        />
-                                        {renderMicButton('setup_input', { position: 'absolute', bottom: 10, right: 10, backgroundColor: theme.uiBg })}
+                                    <View style={{ marginBottom: 20 }}>
+                                        <Text style={{ color: theme.secondary, fontWeight: '700', fontSize: 11, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>INPUT</Text>
+                                        <View>
+                                            <TextInput
+                                                style={[styles.textArea, {
+                                                    color: theme.text,
+                                                    borderColor: theme.border,
+                                                    backgroundColor: theme.inputBg,
+                                                    marginBottom: 0,
+                                                    fontSize: 16,
+                                                    textAlignVertical: 'top',
+                                                    paddingTop: 14,
+                                                    height: 150 // Fixed height for input in this mode
+                                                }]}
+                                                placeholder={selectedScenario?.placeholder}
+                                                placeholderTextColor={theme.secondary}
+                                                value={schoolConfig.input}
+                                                onChangeText={(text) => setSchoolConfig({ ...schoolConfig, input: text })}
+                                                multiline
+                                            />
+                                            {renderMicButton('setup_input', { position: 'absolute', bottom: 10, right: 10, backgroundColor: theme.uiBg })}
+                                        </View>
                                     </View>
-                                </View>
-                            )}
-                        </View>
-                        <ScrollView
+                                )}
+                            </View>
+                            <ScrollView
                                 contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
                                 keyboardShouldPersistTaps="handled"
                                 showsVerticalScrollIndicator={false}
@@ -27265,7 +27269,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                     activeChatbotChar.prompt,
                     (chunk) => {
                         finalAiText = chunk;
-                        setChatbotMessages(prev => prev.map(m => 
+                        setChatbotMessages(prev => prev.map(m =>
                             m.id === aiMsgId ? { ...m, content: chunk } : m
                         ));
                     },
@@ -27275,7 +27279,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 console.error("Chatbot streaming failed", err);
                 // Fallback to non-streaming if needed or show error
                 finalAiText = "I'm sorry, I encountered an error while generating the response.";
-                setChatbotMessages(prev => prev.map(m => 
+                setChatbotMessages(prev => prev.map(m =>
                     m.id === aiMsgId ? { ...m, content: finalAiText } : m
                 ));
             }
@@ -31337,9 +31341,9 @@ Review the following raw transcribed text:
                                                 {isReaderSearchExpanded ? (
                                                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                                                         <View style={{ flex: 1 }}>
-                                                            <View style={[styles.searchBar, { 
-                                                                backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg, 
-                                                                borderColor: quickSearchQuery.trim().length > 0 ? primaryColor + '40' : theme.border, 
+                                                            <View style={[styles.searchBar, {
+                                                                backgroundColor: theme.id === 'day' ? '#ffffff' : theme.uiBg,
+                                                                borderColor: quickSearchQuery.trim().length > 0 ? primaryColor + '40' : theme.border,
                                                                 borderRadius: 30, // Modern Pill Shape
                                                                 borderWidth: 1.5,
                                                                 paddingHorizontal: 8, // Adjusted for pill inner content
@@ -31367,7 +31371,7 @@ Review the following raw transcribed text:
                                                                     multiline={true}
                                                                 />
 
-                                                                    {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
+                                                                {renderMicButton('search', { marginRight: 4, elevation: 0, shadowOpacity: 0 }, 20)}
 
                                                                 <TouchableOpacity
                                                                     onPress={() => { setImagePickerMode('vision'); setVisionDraft({ uris: [], prompt: quickSearchQuery }); setShowImageSourceModal(true); }}
