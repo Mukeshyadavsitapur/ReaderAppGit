@@ -1,4 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// --- POLYFILLS FOR STREAMING FETCH ---
+import 'react-native-url-polyfill/auto';
+// @ts-ignore - no types available for this polyfill package
+import { fetch as fetchPolyfill, Headers, Request, Response } from 'react-native-fetch-api';
+// @ts-ignore - no types available for this polyfill package
+import { TextEncoder, TextDecoder } from 'text-encoding';
+
+if (typeof global.TextEncoder === 'undefined') {
+    global.TextEncoder = TextEncoder;
+}
+if (typeof global.TextDecoder === 'undefined') {
+    global.TextDecoder = TextDecoder;
+}
+global.fetch = fetchPolyfill as any;
+global.Headers = Headers as any;
+global.Request = Request as any;
+global.Response = Response as any;
 // ------------------------------------------
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
@@ -7203,7 +7220,22 @@ export default function App() {
                 `;
             }
 
-            const response = await callLLM(prompt, "You are a professional editor.", false, null);
+            let response = "";
+            try {
+                // Ensure contents is formatted properly for callLLM_Stream
+                const contents = [{ role: "user", parts: [{ text: prompt }] }];
+                response = await callLLM_Stream(
+                    contents,
+                    "You are a professional editor.",
+                    (chunk) => {
+                        // Dynamically stream text to the frontend
+                        setGenerationData(chunk);
+                    },
+                    null // modelOverride
+                );
+            } catch (err: any) {
+                response = "Error: " + err.message;
+            }
 
             if (!response || response.startsWith("Error")) {
                 throw new Error("Generation failed: " + response);
@@ -11271,7 +11303,20 @@ RETURN ONLY THE SUMMARY TEXT starting with "I...".`;
         prompt += `\n\nVISUAL REQUIREMENT:
     At the very end of your response, strictly on a new line, provide a detailed image generation prompt to create a cover or scene for this chapter. Format: IMAGE_PROMPT: <prompt>`;
 
-        const rawContent = await callLLM(prompt, systemRole);
+        let rawContent = "";
+        try {
+            const contents = [{ role: "user", parts: [{ text: prompt }] }];
+            rawContent = await callLLM_Stream(
+                contents,
+                systemRole,
+                (chunk) => {
+                    setGenerationData(chunk);
+                },
+                null // modelOverride
+            );
+        } catch (err: any) {
+            rawContent = "Error: " + err.message;
+        }
 
         // NEW: Check for error before saving
         if (rawContent.startsWith("Error")) {
@@ -11948,7 +11993,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
                     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                         method: "POST",
                         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payload),
+                        // @ts-ignore
+                        reactNative: { textStreaming: true }
                     });
                     if (response.ok) {
                         const data = await response.json();
@@ -12032,7 +12079,9 @@ NO META-COMMENTARY ON PROFILE: Do NOT explicitly mention the user's profile deta
 
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    // @ts-ignore
+                    reactNative: { textStreaming: true }
                 });
 
                 if (response.status === 429) {
@@ -12148,7 +12197,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             stream: true,
                             max_tokens: 8192,
                             temperature: 0.7
-                        })
+                        }),
+                        // @ts-ignore - react-native-fetch-api specific option
+                        reactNative: { textStreaming: true }
                     });
 
                     if (!response.ok) continue;
@@ -12164,7 +12215,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         if (done) break;
 
                         const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                        const lines = chunk.split('\n').filter((line: string) => line.trim() !== '');
 
                         for (const line of lines) {
                             if (line.includes('[DONE]')) break;
@@ -12203,7 +12254,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                     body: JSON.stringify({
                         systemInstruction: { parts: [{ text: fullSystemInstruction }] },
                         contents: Array.isArray(contents) ? contents : [{ role: "user", parts: [{ text: contents }] }]
-                    })
+                    }),
+                    // @ts-ignore - react-native-fetch-api specific option
+                    reactNative: { textStreaming: true }
                 });
 
                 if (!response.ok) continue;
