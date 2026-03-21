@@ -3,7 +3,7 @@ import React from 'react';
 import { 
     View, 
     Text, 
-    ScrollView, 
+    FlatList,
     TouchableOpacity, 
     StyleSheet, 
     Platform, 
@@ -53,7 +53,7 @@ interface GeminiChatProps {
     grammarHints: Record<string, string>;
     msgLanguages: Record<string, string>;
     displayLanguage: string;
-    scrollRef: React.RefObject<ScrollView | null>;
+    scrollRef: React.RefObject<FlatList | null>;
 }
 
 const GeminiChat: React.FC<GeminiChatProps> = ({
@@ -94,19 +94,23 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
             keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
         >
             <ResponsiveWrapper maxWidth={900}>
-                <ScrollView 
+                <FlatList 
                     ref={scrollRef}
                     style={{ flex: 1 }}
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
+                    data={messages}
+                    keyExtractor={(item) => item.id}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={5}
+                    windowSize={5}
                     onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-                >
-                    {messages.map((msg, idx) => {
+                    renderItem={({ item: msg }) => {
                         const isUser = msg.role === 'user';
                         const isAssistant = msg.role === 'assistant';
                         
                         return (
-                            <View key={msg.id} style={[
+                            <View style={[
                                 styles.messageContainer,
                                 isUser ? styles.userContainer : styles.assistantContainer
                             ]}>
@@ -166,9 +170,8 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
                                 </View>
                             </View>
                         );
-                    })}
-                    
-                    {isTyping && (
+                    }}
+                    ListFooterComponent={isTyping ? (
                         <View style={styles.typingContainer}>
                             <View style={[styles.avatar, { backgroundColor: theme.uiBg }]}>
                                 <AppIcon size={20} />
@@ -177,8 +180,8 @@ const GeminiChat: React.FC<GeminiChatProps> = ({
                                 <ActivityIndicator size="small" color={primaryColor} />
                             </View>
                         </View>
-                    )}
-                </ScrollView>
+                    ) : null}
+                />
 
                 {/* Bottom Control Area */}
                 <View style={[styles.inputContainer, { backgroundColor: theme.bg }]}>

@@ -202,7 +202,8 @@ const InteractiveText = React.memo(({
                     cleanSeg = cleanSeg.replace(/(\*\*|__|\*|_|`|~|\\|\[|\]|#)/g, '');
                     cleanSeg = cleanSeg.replace(/\s+/g, ' ');
                 }
-                const words = cleanSeg.split(/(\s+)/);
+                // Match words with their trailing spaces to reduce <Text> node count in half
+                const words = cleanSeg.match(/\S+\s*|\s+/g) || [];
                 words.forEach(word => {
                     if (!word) return;
                     lineWords.push({
@@ -369,7 +370,7 @@ const InteractiveText = React.memo(({
                                         } else if (isUrl) {
                                             Linking.openURL(word.replace(/[.,;)]$/, '')).catch(() => {});
                                         } else if (tapToDefineEnabled) {
-                                            onWordPress?.(word.replace(/[.,/#!$%^&*;:{}=\-_`~()"'?]/g, ""));
+                                            onWordPress?.(word.trim().replace(/[.,/#!$%^&*;:{}=\-_`~()"'?]/g, ""));
                                         }
                                     } : undefined}
                                 >

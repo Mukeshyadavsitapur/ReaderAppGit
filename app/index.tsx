@@ -5273,7 +5273,7 @@ export default function App() {
     const [chatbotBrainstormHints, setChatbotBrainstormHints] = useState<Record<string, string>>({});
     const [chatbotGrammarCheckingMsgId, setChatbotGrammarCheckingMsgId] = useState<string | null>(null);
     const [chatbotGrammarHints, setChatbotGrammarHints] = useState<Record<string, string>>({});
-    const chatbotScrollRef = useRef<ScrollView>(null);
+    const chatbotScrollRef = useRef<FlatList>(null);
     const chatbotInputRef = useRef<TextInput>(null);
     const [questionsViewMode, setQuestionsViewMode] = useState<any>('quizzes');
     const [selectedWord, setSelectedWord] = useState<any>(null);
