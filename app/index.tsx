@@ -32,8 +32,6 @@ import {
     GEMINI_MODELS, 
     GROQ_MODELS, 
     IMAGE_MODELS, 
-    TTS_MODELS, 
-    GROQ_TTS_MODELS, 
     STT_GROQ_MODELS,
     STT_GEMINI_MODELS,
     GEMINI_IMAGE_MODELS,
@@ -4940,7 +4938,6 @@ export default function App() {
         availableLanguages: ["English"],
         primaryLanguage: "English", // NEW
         voice: "Kore",
-        onlineTtsEnabled: false,
         offlineSttEnabled: true, // NEW: Offline STT Fallback
         imageGenerationEnabled: true,
         llmProvider: "groq", // UPDATED: Default to Groq
@@ -4965,8 +4962,7 @@ export default function App() {
         textModels: [...GEMINI_MODELS], // Centralized
         groqModels: [...GROQ_MODELS], // Centralized
         imageModels: [...IMAGE_MODELS], // Centralized
-        ttsModels: [...TTS_MODELS], // Centralized
-        groqTtsModels: [...GROQ_TTS_MODELS], // Centralized
+
         sttGroqModels: [...STT_GROQ_MODELS], // Centralized
         sttGeminiModels: ['gemini-3.1-pro', 'gemini-3-flash', 'gemini-3.1-flash-lite'], // Updated for March 2026
     });
@@ -7892,7 +7888,8 @@ export default function App() {
 
                 // Advance offset by full length (Title + Content)
                 const cleanContent = cleanTextForDisplay(cardContent);
-                const fullCardText = titleText + cleanContent;
+                // Matched logic from cleanTextForDisplay: [[CONCEPT_CARD: title]] is replaced by 'title. '
+                const fullCardText = titleText + ". " + cleanContent;
 
                 if (fullCardText.length > 0) offset += fullCardText.length + 1;
 
@@ -9245,14 +9242,11 @@ export default function App() {
                         preventSleep: parsed.preventSleep || false,
                         dictionaryLimit: parsed.dictionaryLimit || 10000,
                         libraryLimit: parsed.libraryLimit || 2000,
-                        onlineTtsEnabled: parsed.onlineTtsEnabled !== undefined ? parsed.onlineTtsEnabled : true,
                         imageGenerationEnabled: parsed.imageGenerationEnabled !== undefined ? parsed.imageGenerationEnabled : true,
                         tapToDefine: parsed.tapToDefine !== undefined ? parsed.tapToDefine : true,
                         textModels: [...new Set([...GEMINI_MODELS, ...(parsed.textModels || [])])],
                         groqModels: [...new Set([...GROQ_MODELS, ...(parsed.groqModels || [])])],
                         imageModels: [...new Set([...IMAGE_MODELS, ...(parsed.imageModels || [])])],
-                        ttsModels: [...new Set([...TTS_MODELS, ...(parsed.ttsModels || [])])],
-                        groqTtsModels: [...new Set([...GROQ_TTS_MODELS, ...(parsed.groqTtsModels || [])])],
                         sttGroqModels: [...new Set([...STT_GROQ_MODELS, ...(parsed.sttGroqModels || [])])],
                         sttGeminiModels: [...new Set([...STT_GEMINI_MODELS, ...(parsed.sttGeminiModels || [])])],
                         keepLabelsEnglish: parsed.keepLabelsEnglish !== undefined ? parsed.keepLabelsEnglish : false,
@@ -12512,178 +12506,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
     // UPDATED: Removed multiSpeakerConfig support as it is now obsolete
     // UPDATED: Added voiceOverride parameter to support previews
     // UPDATED: Returns { pcmData: string, switched: boolean } to support toast notifications
-    const generateGeminiTTS = async (text: string, voiceOverride: string | null = null): Promise<{ pcmData: string, switched: boolean }> => {
-        const geminiKey = customApiKey || apiKey;
-        const groqKey = displaySettings.groqApiKey;
-        const preferredProvider = displaySettings.llmProvider || "groq"; // Default to Groq
-        let lastError: any = null;
 
-        const tryGroq = async () => {
-            if (!groqKey) return null;
-            for (const modelId of (displaySettings.groqTtsModels || GROQ_TTS_MODELS)) {
-                try {
-                    console.log(`[TTS] Attempting Groq TTS: ${modelId}`);
-                    let groqVoice = voiceOverride || displaySettings.voice || "Hannah";
-                    if (modelId.includes("arabic")) {
-                        const isMale = MALE_VOICES.includes(groqVoice);
-                        groqVoice = isMale ? "fahad" : "noura";
-                    } else {
-                        const isMale = MALE_VOICES.includes(groqVoice);
-                        if (groqVoice === "Kore" || !isMale) groqVoice = "hannah";
-                        else if (groqVoice === "Fenrir" || isMale) groqVoice = "daniel";
-                    }
-                    const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${groqKey}`
-                        },
-                        body: JSON.stringify({
-                            model: modelId,
-                            input: text,
-                            voice: groqVoice,
-                            response_format: "wav"
-                        })
-                    });
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        const reader = new FileReader();
-                        return new Promise<string>((resolve, reject) => {
-                            reader.onloadend = () => {
-                                const base64data = (reader.result as string).split(',')[1];
-                                resolve(base64data);
-                            };
-                            reader.onerror = reject;
-                            reader.readAsDataURL(blob);
-                        });
-                    } else {
-                        const err = await response.text();
-                        console.error(`[TTS] Groq model ${modelId} failed (${response.status}):`, err);
-                        lastError = new Error(`Groq TTS Error: ${response.status} - ${err}`);
-                    }
-                } catch (e: any) {
-                    console.error(`[TTS] Groq model ${modelId} connection error:`, e.message || e);
-                    lastError = e;
-                }
-            }
-            return null;
-        };
-
-        const tryGemini = async () => {
-            if (!geminiKey) return null;
-            let rateLimitHit = false;
-            for (const modelId of (displaySettings.ttsModels || TTS_MODELS)) {
-                try {
-                    console.log(`[TTS] Attempting Gemini TTS: ${modelId}`);
-                    const payload = {
-                        contents: [{ parts: [{ text: text }] }],
-                        generationConfig: {
-                            responseModalities: ["AUDIO"],
-                            speechConfig: {
-                                voiceConfig: {
-                                    prebuiltVoiceConfig: {
-                                        voiceName: voiceOverride || displaySettings.voice || "Kore"
-                                    }
-                                }
-                            }
-                        }
-                    };
-                    let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${geminiKey}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-                    if (response.status === 429) {
-                        console.warn(`Gemini TTS Model ${modelId} rate limited.`);
-                        rateLimitHit = true;
-                        continue;
-                    }
-                    if (!response.ok) {
-                        const errText = await response.text();
-                        console.warn(`Gemini TTS Model ${modelId} failed: ${response.status}`);
-                        continue;
-                    }
-                    const data = await response.json();
-                    const pcmData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-                    if (pcmData) return pcmData;
-                } catch (e) {
-                    console.warn(`Gemini TTS Error on ${modelId}:`, e);
-                    continue;
-                }
-            }
-            if (rateLimitHit) throw new Error("API_LIMIT_REACHED");
-            return null;
-        };
-
-        // --- EXECUTION FLOW ---
-        if (preferredProvider === "groq") {
-            const groqPcm = await tryGroq();
-            if (groqPcm) return { pcmData: groqPcm, switched: false };
-            const geminiPcm = await tryGemini();
-            if (geminiPcm) return { pcmData: geminiPcm, switched: true };
-        } else {
-            const geminiPcm = await tryGemini();
-            if (geminiPcm) return { pcmData: geminiPcm, switched: false };
-            const groqPcm = await tryGroq();
-            if (groqPcm) return { pcmData: groqPcm, switched: true };
-        }
-
-        throw new Error(lastError ? lastError.message : "All TTS models failed to generate audio.");
-    };
-
-    // NEW: Function to play or generate a preview for a specific voice
-    const playVoicePreview = async (voiceName: string) => {
-        const key = customApiKey || apiKey;
-        // Stop any currently playing sound to prevent overlap
-        if (currentSound.current) {
-            try {
-                currentSound.current.pause();
-            } catch (e) { }
-            currentSound.current = null;
-        }
-
-        const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-        // Unique filename for this voice's preview
-        const fileName = `preview_${voiceName}.wav`;
-        const uri = docDir + fileName;
-
-        try {
-            // 1. Check if we already have a cached preview
-            const info = await fs.getInfoAsync(uri);
-
-            if (!info.exists) {
-                // 2. If not, verify we can generate one (Allow either Gemini or Groq key)
-                const groqKey = displaySettings.groqApiKey;
-                if (!key && !groqKey) {
-                    showToast("Add an API Key (Groq or Gemini) to hear previews");
-                    return;
-                }
-
-                showToast(`Generating preview for ${voiceName}...`);
-
-                // 3. Generate short sample using the specific voice override
-                const sampleText = `Hello! I am ${voiceName}. I can read your stories and notes.`;
-                const { pcmData: pcm } = await generateGeminiTTS(sampleText, voiceName);
-
-                // 4. Save to cache
-                const wav = pcmToWav(pcm);
-                await fs.writeAsStringAsync(uri, wav, { encoding: fs.EncodingType.Base64 });
-            } else {
-                showToast(`Playing ${voiceName}...`);
-            }
-
-            // 5. Play the file (cached or newly generated)
-            const player = createAudioPlayer(uri);
-            player.play();
-            currentSound.current = player;
-
-        } catch (e: any) {
-            console.warn("Preview generation/playback failed", e);
-            if (e.message !== "API_LIMIT_REACHED") {
-                showToast("Could not play preview");
-            }
-        }
-    };
 
     // --- TTS Helper ---
     // Chunking logic separated to ensure consistency between Play and Download
@@ -12775,185 +12598,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         return { chunks: finalChunks, offsets: finalOffsets };
     }, []);
 
-    const handleDownloadAudio = async () => {
-        if (!readingSession) return;
-        setIsTtsDownloading(true);
-        setTtsDownloadProgress(0);
 
-        let keepAliveSound: any = null;
-        try {
-            const player = createAudioPlayer({ uri: `data:audio/wav;base64,${SILENT_WAV}` });
-            player.loop = true;
-            player.volume = 0;
-            player.play();
-            keepAliveSound = player;
-        } catch (e) {
-            console.warn("Could not start keep-alive sound", e);
-        }
-
-        const text = readingSession.messages[0].content;
-
-        async function proceedDownload() {
-            try {
-                // NEW: Check if Merged File already exists based on Full Text
-                const voice = displaySettings.voice || "Kore";
-                const cleanText = cleanTextForDisplay(text);
-                const fullHash = simpleHash(cleanText + voice);
-                const safeTitle = getSafeFileName(readingSession.title);
-                const docDir = fs.documentDirectory || FileSystem.documentDirectory;
-                const mergedFileUri = `${docDir}tts_${fullHash}_${safeTitle}.wav`;
-
-                const existingInfo = await fs.getInfoAsync(mergedFileUri);
-                if (existingInfo.exists) {
-                    Alert.alert("Exists", "Audio already downloaded.");
-                    return;
-                }
-
-                const { chunks } = getChunks(cleanText); // Use pre-cleaned text so offsets match
-                let savedCount = 0;
-                const key = customApiKey || apiKey;
-                const groqKey = displaySettings.groqApiKey;
-
-                if (!key && !groqKey) {
-                    Alert.alert("Error", "API Key (Groq or Gemini) required to download audio.");
-                    return;
-                }
-
-                showToast("Online TTS file downloading, please wait...");
-
-                // ACCUMULATOR for Merging
-                const pcmParts = [];
-                let totalPcmLength = 0;
-                let detectedSampleRate = 24000; // Default fallback
-
-                for (let i = 0; i < chunks.length; i++) {
-                    const chunk = chunks[i];
-                    if (!chunk.trim()) {
-                        savedCount++;
-                        continue;
-                    }
-
-                    try {
-                        const { pcmData: pcmBase64 } = await generateGeminiTTS(chunk, null);
-                        const pcmBytes = decodeBase64(pcmBase64);
-
-                        let rawBytes = pcmBytes;
-                        if (pcmBytes.length > 44 &&
-                            pcmBytes[0] === 0x52 && // R
-                            pcmBytes[1] === 0x49 && // I
-                            pcmBytes[2] === 0x46 && // F
-                            pcmBytes[3] === 0x46    // F
-                        ) {
-                            // WAV Header detected — Extract Sample Rate (Offset 24, 4 bytes)
-                            if (pcmParts.length === 0) {
-                                const chunkView = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
-                                detectedSampleRate = chunkView.getUint32(24, true);
-                                console.log(`[TTS] Detected sample rate from first chunk: ${detectedSampleRate}Hz`);
-                            }
-                            rawBytes = pcmBytes.slice(44);
-                        }
-
-                        pcmParts.push(rawBytes);
-                        totalPcmLength += rawBytes.length;
-
-                        await new Promise(r => setTimeout(r, 50));
-                    } catch (e: any) {
-                        if (e.message === "API_LIMIT_REACHED") throw e;
-                        console.warn("Chunk download failed", e);
-                        throw new Error(`Failed to generate part ${i + 1}`);
-                    }
-
-                    savedCount++;
-                    setTtsDownloadProgress(Math.floor((savedCount / chunks.length) * 100));
-                }
-
-                // MERGE PARTS
-                if (pcmParts.length > 0) {
-                    showToast("Merging Audio...");
-                    await new Promise(r => setTimeout(r, 100));
-
-                    const mergedBuffer = new Uint8Array(44 + totalPcmLength);
-                    const view = new DataView(mergedBuffer.buffer);
-
-                    // WRITE WAV HEADER (Using detected sample rate)
-                    const sampleRate = detectedSampleRate;
-                    writeString(view, 0, 'RIFF');
-                    view.setUint32(4, 36 + totalPcmLength, true);
-                    writeString(view, 8, 'WAVE');
-                    writeString(view, 12, 'fmt ');
-                    view.setUint32(16, 16, true);
-                    view.setUint16(20, 1, true); // PCM
-                    view.setUint16(22, 1, true); // Mono
-                    view.setUint32(24, sampleRate, true);
-                    view.setUint32(28, sampleRate * 2, true); // ByteRate
-                    view.setUint16(32, 2, true); // BlockAlign
-                    view.setUint16(34, 16, true); // BitsPerSample
-                    writeString(view, 36, 'data');
-                    view.setUint32(40, totalPcmLength, true);
-
-                    let offset = 44;
-                    for (const part of pcmParts) {
-                        mergedBuffer.set(part, offset);
-                        offset += part.length;
-                    }
-
-                    const finalBase64 = encodeBase64(mergedBuffer);
-                    await fs.writeAsStringAsync(mergedFileUri, finalBase64, { encoding: fs.EncodingType.Base64 });
-                }
-
-                // Update session with hasAudio AND the specific voice used
-                const currentVoice = displaySettings.voice || "Kore";
-                const updatedSession = { ...readingSession, hasAudio: true, voice: currentVoice };
-
-                await persistSession(updatedSession);
-                setReadingSession(updatedSession);
-
-                // Refresh Library List to show new file
-                loadAudioFiles();
-
-                Alert.alert("Downloaded", "Audio saved to library as a single file!");
-            } catch (e: any) {
-                console.error(e);
-                if (e.message === "API_LIMIT_REACHED") {
-                    Alert.alert(
-                        "Limit Reached",
-                        "Online TTS is not possible for today. Your API key limit is reached for today."
-                    );
-                } else {
-                    Alert.alert("Error", "Could not download audio. Check internet/API limit.");
-                }
-            } finally {
-                if (keepAliveSound) {
-                    try {
-                        await keepAliveSound.unloadAsync();
-                    } catch (e: any) { }
-                }
-                setIsTtsDownloading(false);
-                setTtsDownloadProgress(0);
-            }
-        }
-
-        if (text.length > 60000) {
-            Alert.alert(
-                "Large File Warning",
-                "This chapter is very long. Merging it into a single file might fail on some devices. Proceed?",
-                [
-                    { text: "Cancel", style: "cancel", onPress: () => setIsTtsDownloading(false) },
-                    { text: "Proceed", onPress: () => proceedDownload() }
-                ]
-            );
-        } else {
-            await proceedDownload();
-        }
-    };
-
-    // --- TTS LOGIC ---
-
-    // FIXED: Restored functionality to handle Audio Export/Download
-    const handleExportAudio = async () => {
-        // Trigger the internal download logic for offline playback
-        await handleDownloadAudio();
-    };
 
     // NEW: Handle Export Text (Save to Device) from Reader Mode
     const handleReaderExport = async () => {
@@ -13212,83 +12857,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         // --- HELPER DEFINITIONS (Moved Up) ---
 
         // Helper to recursively prefetch subsequent chunks in background
-        const triggerPrefetchChain = async (startIndex: number) => {
-            // Stop if reached end or session changed
-            const { chunks } = speechState.current;
-            if (startIndex >= chunks.length) return;
-            if (speechSessionId.current !== currentSessionId) return;
 
-            const chunk = chunks[startIndex];
-            if (!chunk || !chunk.trim()) {
-                // Skip empty, go next
-                await triggerPrefetchChain(startIndex + 1);
-                return;
-            }
-
-            // FIXED: Match hash logic with playback (Text + Voice only)
-            // Note: Ideally we predict context here too, but simple hash is safer for now.
-            // If context injection changes the hash significantly, playback will just miss cache and regen.
-            const hash = simpleHash(chunk + (displaySettings.voice || "Kore"));
-            const safeTitle = getSafeFileName(title);
-
-            // Try new format first
-            let uri = `${docDir}tts_${hash}_${safeTitle}.wav`;
-
-            // Prevent duplicate downloads for same file across chains
-            if (speechState.current.pendingDownloads.has(uri)) {
-                await triggerPrefetchChain(startIndex + 1);
-                return;
-            }
-
-            try {
-                // Check new format
-                let info = await fs.getInfoAsync(uri);
-
-                // Check old format if new doesn't exist
-                if (!info.exists) {
-                    const oldUri = `${docDir}tts_${hash}.wav`;
-                    info = await fs.getInfoAsync(oldUri);
-                }
-
-                if (!info.exists) {
-                    // Added check for onlineTtsEnabled to prevent background downloads when in offline mode
-                    const groqKey = displaySettings.groqApiKey;
-                    if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current && displaySettings.onlineTtsEnabled) {
-                        speechState.current.pendingDownloads.add(uri);
-
-                        // Increased delay to 4000ms to stay within rate limits (15 RPM) while prefetching smaller chunks
-                        await new Promise(r => setTimeout(r, 4000));
-
-                        if (speechSessionId.current !== currentSessionId) {
-                            speechState.current.pendingDownloads.delete(uri);
-                            return;
-                        }
-
-                        try {
-                            const { pcmData: pcm } = await generateGeminiTTS(chunk, null);
-                            const wav = pcmToWav(pcm);
-                            await fs.writeAsStringAsync(uri, wav, { encoding: fs.EncodingType.Base64 });
-                        } catch (err) {
-                            console.warn("Prefetch gen failed", err);
-                            // If one fails, cleanup and stop chain to prevent error loop
-                            speechState.current.pendingDownloads.delete(uri);
-                            return;
-                        }
-
-                        speechState.current.pendingDownloads.delete(uri);
-
-                        // Successfully downloaded, trigger next
-                        await triggerPrefetchChain(startIndex + 1);
-                    }
-                } else {
-                    // Already exists, check next immediately
-                    await triggerPrefetchChain(startIndex + 1);
-                }
-            } catch (e) {
-                console.warn("Prefetch chain error", e);
-                if (speechState.current.pendingDownloads) speechState.current.pendingDownloads.delete(uri);
-            }
-        };
 
 
 
@@ -13397,106 +12966,10 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
             }
         };
 
-        // --- END HELPER DEFINITIONS ---
+        // Simplified: Always use Offline TTS
+        fallbackToOffline();
 
-        // Cache Logic - hash textForTts (with context) + voice
-        const voiceForHash = (readingSession && readingSession.voice) ? readingSession.voice : (displaySettings.voice || "Kore");
-
-        // Hashing the MODIFIED text ensures that "Alice: Hello" is cached differently from "Bob: Hello"
-        // even if the raw chunk was just "Hello".
-        const chunkHash = simpleHash(textForTts + voiceForHash);
-        const safeTitle = getSafeFileName(title);
-
-        // 1. Try New Format (Robust Scan)
-        // Instead of constructing one specific URI and checking it, we scan for ANY file with the matching hash.
-        // This fixes the issue where a file exists but has a different title suffix (e.g. from an old title edit).
-        let fileUri = null;
-
-        try {
-            const files = await fs.readDirectoryAsync(docDir || "");
-            const match = files.find(f => f.startsWith(`tts_${chunkHash}`));
-
-            if (match) {
-                fileUri = docDir + match;
-                console.log("TTS Cache Hit (Hash Scan):", match);
-                await playAudioFile(fileUri);
-                return;
-            }
-
-            // If no hash match found, fallback to constructing the expected filename for NEW downloads
-            fileUri = `${docDir}tts_${chunkHash}_${safeTitle}.wav`;
-
-        } catch (e) {
-            console.warn("Cache check failed", e);
-            // Fallback default
-            fileUri = `${docDir}tts_${chunkHash}_${safeTitle}.wav`;
-        }
-
-        // If no cache, and online is disabled, fallback to offline
-        if (!displaySettings.onlineTtsEnabled) {
-            fallbackToOffline();
-            return;
-        }
-
-        // Cache Miss - Attempt Online
-        const groqKey = displaySettings.groqApiKey;
-        if ((key || groqKey) && !isRateLimited && !onlineTTSBroken.current) {
-            try {
-                setIsTtsDownloading(true);
-                setTtsDownloadProgress(0);
-
-                // --- 7s SEQUENTIAL TIMER ---
-                // nextTtsRequestAllowedAt is set to (sendTime + 7s) each time a request goes out.
-                // Before the NEXT request, we wait here until that deadline passes.
-                // This guarantees sends are always ≥ 7s apart, measured from send time.
-                const waitBeforeSend = Math.max(0, nextTtsRequestAllowedAt.current - Date.now());
-                if (waitBeforeSend > 0) {
-                    console.log(`[TTS] Sequential limit: waiting ${Math.ceil(waitBeforeSend / 1000)}s before next request...`);
-                    await new Promise(r => setTimeout(r, waitBeforeSend));
-                    // Session may have been cancelled during the wait
-                    if (!speechState.current.isActive || speechSessionId.current !== currentSessionId) {
-                        setIsTtsDownloading(false);
-                        return;
-                    }
-                }
-
-                // Mark the send moment — next request must wait until this + 7s
-                nextTtsRequestAllowedAt.current = Date.now() + 7000;
-                console.log(`[TTS] Request sent. Next request allowed in 7s.`);
-
-                // Generate FULL chunk to ensure cache reusability
-                const { pcmData, switched } = await generateGeminiTTS(textForTts, null);
-
-                if (switched) {
-                    const fallbackProvider = displaySettings.llmProvider === "groq" ? "Gemini" : "Groq";
-                    showToast(`⚠️ Switching to ${fallbackProvider} TTS (Primary failed)`);
-                }
-
-                const wavBase64 = pcmToWav(pcmData);
-
-                // Save to file
-                fileUri = `${docDir}tts_${chunkHash}_${safeTitle}.wav`;
-                await fs.writeAsStringAsync(fileUri, wavBase64, { encoding: fs.EncodingType.Base64 });
-
-                setIsTtsDownloading(false);
-
-                // Play immediately — no delay after audio is ready
-                await playAudioFile(fileUri);
-                return;
-
-            } catch (e) {
-                setIsTtsDownloading(false);
-                console.warn("Online TTS failed/save failed, falling back to offline:", e);
-
-                showToast("⚠️ Online TTS limit reached for today. Switching to Offline.");
-
-                fallbackToOffline();
-            }
-        } else {
-            fallbackToOffline();
-        }
-
-    }, [displaySettings.ttsRate, displaySettings.language, displaySettings.voice, customApiKey, isRateLimited, displaySettings.onlineTtsEnabled, displaySettings.offlineTtsLanguage, displaySettings.offlineVoice, availableVoices]);
+    }, [displaySettings.ttsRate, displaySettings.language, displaySettings.voice, displaySettings.offlineTtsLanguage, displaySettings.offlineVoice, availableVoices]);
 
     const speak = async (text: string, startOffset = 0, isAlreadyClean = false, forcePlay = false, customTitle: string | null = null, forceOffline = false) => {
         if (!text) return;
@@ -16897,172 +16370,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
     };
 
     // NEW: Handle Export Audio File directly from Library List
-    const handleExportAudioFile = async (item: any, parentGroup: any = null) => {
-        // Block if already processing
-        if (isExportingAudioId) return;
 
-        // Check availability
-        if (!(await Sharing.isAvailableAsync())) {
-            Alert.alert("Not Available", "Sharing is not available on this device.");
-            return;
-        }
-
-        setIsExportingAudioId(item.id);
-
-        try {
-            const cacheDir = fs.cacheDirectory || FileSystem.cacheDirectory;
-            let niceName = item.matchedTitle || "Audio";
-            // Sanitize filename
-            niceName = niceName.replace(/:/g, ' - ').replace(/[^a-zA-Z0-9 \-_]/g, '').trim().substring(0, 60);
-            if (!niceName) niceName = "Audio";
-
-            let finalUri = null;
-            let isGenerated = false;
-
-            // Determine Source Files for potential merge
-            let sourceFiles: any[] = [];
-
-            if (parentGroup && parentGroup.chapters) {
-                // Check for split parts (siblings with same title)
-                const siblings = parentGroup.chapters.filter((c: any) => c.matchedTitle === item.matchedTitle);
-                if (siblings.length > 0) {
-                    sourceFiles = siblings;
-                } else {
-                    sourceFiles = [item];
-                }
-            } else if (item.isGroup && item.files && item.files.length > 1) {
-                sourceFiles = item.files;
-            } else {
-                sourceFiles = [item];
-            }
-
-            // Determine if we need to merge (More than 1 file)
-            if (sourceFiles.length > 1) {
-                showToast("Merging audio parts... Please wait.");
-                // Yield to let toast appear
-                await new Promise(r => setTimeout(r, 100));
-
-                const parts = [];
-                let totalDataLength = 0;
-                let masterHeader: Uint8Array | null = null;
-
-                // Helper to find 'data' chunk
-                const findDataChunk = (bytes: Uint8Array) => {
-                    // Min header is 44 bytes
-                    if (bytes.length < 44) return { offset: 44, size: 0 };
-
-                    // RIFF check
-                    if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'RIFF') {
-                        return { offset: 44, size: 0 };
-                    }
-
-                    let pos = 12; // Skip RIFF + Size + WAVE
-                    while (pos < bytes.length - 8) {
-                        const chunkId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
-                        const chunkSize = bytes[pos + 4] | (bytes[pos + 5] << 8) | (bytes[pos + 6] << 16) | (bytes[pos + 7] << 24);
-
-                        if (chunkId === 'data') {
-                            return { offset: pos + 8, size: chunkSize };
-                        }
-
-                        pos += 8 + chunkSize;
-                    }
-                    return { offset: 44, size: 0 };
-                };
-
-                for (let i = 0; i < sourceFiles.length; i++) {
-                    const f = sourceFiles[i];
-                    try {
-                        const b64 = await fs.readAsStringAsync(f.uri, { encoding: fs.EncodingType.Base64 });
-                        const bytes = decodeBase64(b64);
-
-                        const chunkInfo = findDataChunk(bytes);
-
-                        // WAV Header is 44 bytes minimum
-                        if (bytes.length < 44) continue;
-
-                        if (i === 0) {
-                            // Keep header from first file to use as template
-                            // We use the offset discovered to keep ALL metadata chunks
-                            masterHeader = bytes.slice(0, chunkInfo.offset);
-                            const data = bytes.slice(chunkInfo.offset, chunkInfo.offset + chunkInfo.size);
-                            parts.push(data);
-                            totalDataLength += data.length;
-                        } else {
-                            // Strip header from subsequent files
-                            const data = bytes.slice(chunkInfo.offset, chunkInfo.offset + chunkInfo.size);
-                            parts.push(data);
-                            totalDataLength += data.length;
-                        }
-                    } catch (e: any) {
-                        console.warn("Failed to read part " + i, e);
-                    }
-                }
-
-                if (parts.length > 0 && masterHeader) {
-                    // Construct new WAV buffer
-                    const mergedBuffer = new Uint8Array(masterHeader.length + totalDataLength);
-                    mergedBuffer.set(masterHeader, 0);
-
-                    let offset = masterHeader.length;
-                    for (const part of parts) {
-                        mergedBuffer.set(part, offset);
-                        offset += part.length;
-                    }
-
-                    // Patch Header Size Fields
-                    const view = new DataView(mergedBuffer.buffer);
-                    // Offset 4: ChunkSize = Total Size - 8
-                    view.setUint32(4, mergedBuffer.length - 8, true);
-
-                    // Offset for SubChunk2Size (Data Size) is 4 bytes before the data starts
-                    // masterHeader includes everything up to data, so size field is at end of masterHeader - 4
-                    const dataSizeOffset = masterHeader.length - 4;
-                    view.setUint32(dataSizeOffset, totalDataLength, true);
-
-                    const mergedB64 = encodeBase64(mergedBuffer);
-                    const tempUri = cacheDir + `${niceName}_Merged.wav`;
-                    await fs.writeAsStringAsync(tempUri, mergedB64, { encoding: fs.EncodingType.Base64 });
-
-                    finalUri = tempUri;
-                    isGenerated = true;
-                } else {
-                    Alert.alert("Error", "Failed to merge audio files.");
-                    return;
-                }
-            } else {
-                // Single file (Orphan or Group with 1 file)
-                if (sourceFiles.length > 0) {
-                    finalUri = sourceFiles[0].uri;
-                } else {
-                    finalUri = item.uri;
-                }
-            }
-
-            if (!finalUri) return;
-
-            // If we didn't generate a new file (i.e. existing single file), copy it to cache with nice name
-            let shareUri = finalUri;
-            if (!isGenerated) {
-                const niceUri = cacheDir + `${niceName}.wav`;
-                // Copy to ensure nice filename in share dialog (and avoid modifying original)
-                await fs.copyAsync({ from: finalUri, to: niceUri });
-                shareUri = niceUri;
-            }
-
-            await Sharing.shareAsync(shareUri, {
-                dialogTitle: `Save Audio: ${niceName}`,
-                UTI: 'com.microsoft.waveform-audio',
-                mimeType: 'audio/wav'
-            });
-
-        } catch (e) {
-            console.log("Export error", e);
-            Alert.alert("Error", "Could not export audio file.");
-        } finally {
-            setIsExportingAudioId(null);
-        }
-    };
 
     // NEW: Handle Export All Data (Backup Library & Notes & Dictionary)
     const handleExportAllData = async () => {
@@ -26498,41 +25806,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                 placeholder="Add Image model id..."
                             />
 
-                            <EditableSelectionList
-                                label="GEMINI TTS MODELS"
-                                items={displaySettings.ttsModels || [...TTS_MODELS]}
-                                onSelect={() => { }}
-                                onAdd={(model: string) => {
-                                    const current = displaySettings.ttsModels || [...TTS_MODELS];
-                                    if (!current.includes(model)) {
-                                        saveSettings({ ttsModels: [model, ...current] });
-                                    }
-                                }}
-                                onDelete={(model: string) => {
-                                    const current = displaySettings.ttsModels || [...TTS_MODELS];
-                                    saveSettings({ ttsModels: current.filter((m: string) => m !== model) });
-                                }}
-                                theme={theme}
-                                placeholder="Add Gemini TTS model id..."
-                            />
 
-                            <EditableSelectionList
-                                label="GROQ TTS MODELS"
-                                items={displaySettings.groqTtsModels || [...GROQ_TTS_MODELS]}
-                                onSelect={() => { }}
-                                onAdd={(model: string) => {
-                                    const current = displaySettings.groqTtsModels || [...GROQ_TTS_MODELS];
-                                    if (!current.includes(model)) {
-                                        saveSettings({ groqTtsModels: [model, ...current] });
-                                    }
-                                }}
-                                onDelete={(model: string) => {
-                                    const current = displaySettings.groqTtsModels || [...GROQ_TTS_MODELS];
-                                    saveSettings({ groqTtsModels: current.filter((m: string) => m !== model) });
-                                }}
-                                theme={theme}
-                                placeholder="Add Groq TTS model id..."
-                            />
 
                             <EditableSelectionList
                                 label="GEMINI STT MODELS (CHATBOT)"
@@ -26572,54 +25846,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
 
                             <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 20 }} />
 
-                            {/* Online TTS */}
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                                <View style={{ flex: 1, marginRight: 10 }}>
-                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.text, marginBottom: 4 }}>Online TTS</Text>
-                                    <Text style={{ fontSize: 12, color: theme.secondary }}>
-                                        High quality AI narrator
-                                    </Text>
-                                    {displaySettings.onlineTtsEnabled && (
-                                        <Text style={{ fontSize: 11, color: '#f97316', marginTop: 4, fontStyle: 'italic' }}>
-                                            ⚠️ Note: Online TTS may slow down AI response times.
-                                        </Text>
-                                    )}
-                                </View>
-                                <TouchableOpacity
-                                    activeOpacity={0.8}
-                                    onPress={() => saveSettings({ onlineTtsEnabled: !displaySettings.onlineTtsEnabled })}
-                                    style={{
-                                        width: 60,
-                                        height: 32,
-                                        backgroundColor: displaySettings.onlineTtsEnabled ? '#22c55e' : theme.buttonBg,
-                                        borderRadius: 16, // Round/Pill shape
-                                        borderWidth: 1,
-                                        borderColor: displaySettings.onlineTtsEnabled ? '#22c55e' : theme.border,
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        paddingHorizontal: 4,
-                                        justifyContent: displaySettings.onlineTtsEnabled ? 'flex-end' : 'flex-start'
-                                    }}
-                                >
-                                    {displaySettings.onlineTtsEnabled && (
-                                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold', marginRight: 6 }}>ON</Text>
-                                    )}
-                                    <View style={{
-                                        width: 24,
-                                        height: 24,
-                                        borderRadius: 12, // Circular thumb
-                                        backgroundColor: 'white',
-                                        shadowColor: "#000",
-                                        shadowOffset: { width: 0, height: 1 },
-                                        shadowOpacity: 0.2,
-                                        shadowRadius: 1,
-                                        elevation: 2
-                                    }} />
-                                    {!displaySettings.onlineTtsEnabled && (
-                                        <Text style={{ color: theme.secondary, fontSize: 10, fontWeight: 'bold', marginLeft: 6 }}>OFF</Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
+
 
                             {/* Offline STT */}
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -28720,22 +27947,7 @@ Review the following raw transcribed text:
 
                                                                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                                                 {/* Export Button (Cloud Download Icon) - Always Visible */}
-                                                                                <TouchableOpacity
-                                                                                    onPress={() => handleExportAudioFile(item)}
-                                                                                    disabled={isExportingAudioId !== null} // Disable if ANY export is happening
-                                                                                    style={{ padding: 10 }}
-                                                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                                                >
-                                                                                    {isExportingAudioId === item.id ? (
-                                                                                        <ActivityIndicator size="small" color={theme.text} />
-                                                                                    ) : (
-                                                                                        <DownloadCloud
-                                                                                            size={22}
-                                                                                            color={isExportingAudioId ? theme.secondary : theme.text}
-                                                                                            style={{ opacity: isExportingAudioId ? 0.5 : 1 }}
-                                                                                        />
-                                                                                    )}
-                                                                                </TouchableOpacity>
+
 
                                                                                 <View style={{ padding: 10 }}>
                                                                                     <PlayCircle size={24} color={primaryColor} />

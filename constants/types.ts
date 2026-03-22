@@ -113,7 +113,6 @@ export interface DisplaySettings {
     ttsRate?: number;
     availableLanguages?: string[];
     primaryLanguage?: string;
-    onlineTtsEnabled?: boolean;
     imageGenerationEnabled?: boolean;
     llmProvider?: string;
     groqApiKey?: string;
@@ -131,8 +130,6 @@ export interface DisplaySettings {
     textModels?: string[];
     groqModels?: string[];
     imageModels?: string[];
-    ttsModels?: string[];
-    groqTtsModels?: string[];
     sttGroqModels?: string[];
     sttGeminiModels?: string[];
 }

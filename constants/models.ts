@@ -35,16 +35,6 @@ export const IMAGE_MODELS = [
     ...GROQ_IMAGE_MODELS
 ];
 
-export const TTS_MODELS = [
-    "eleven_multilingual_v2",
-    "alloy"
-];
-
-export const GROQ_TTS_MODELS = [
-    "canopylabs/orpheus-v1-english",
-    "canopylabs/orpheus-arabic-saudi"
-];
-
 export const STT_GROQ_MODELS = [
     "whisper-large-v3-turbo",
     "whisper-large-v3"
