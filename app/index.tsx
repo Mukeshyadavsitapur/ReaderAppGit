@@ -12874,14 +12874,18 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 xhr.send(body);
             });
 
+        let modelsToTry: string[] = [];
         for (const provider of providersToTry) {
-            let modelsToTry: string[] = [];
             if (provider.id === 'gemini') {
-                modelsToTry = (displaySettings.imageModels || IMAGE_MODELS).filter((m: string) => GEMINI_IMAGE_MODELS.includes(m) || m.includes('imagen'));
-                if (modelsToTry.length === 0) modelsToTry = GEMINI_IMAGE_MODELS;
+                modelsToTry = (displaySettings.imageModels || IMAGE_MODELS).filter((m: string) => 
+                    GEMINI_IMAGE_MODELS.includes(m) || m.toLowerCase().includes('imagen')
+                );
+                if (modelsToTry.length === 0) modelsToTry = [...GEMINI_IMAGE_MODELS];
             } else {
-                modelsToTry = (displaySettings.imageModels || IMAGE_MODELS).filter((m: string) => GROQ_IMAGE_MODELS.includes(m) || !m.includes('imagen'));
-                if (modelsToTry.length === 0) modelsToTry = GROQ_IMAGE_MODELS;
+                modelsToTry = (displaySettings.imageModels || IMAGE_MODELS).filter((m: string) => 
+                    GROQ_IMAGE_MODELS.includes(m) || (!m.toLowerCase().includes('imagen') && !GEMINI_IMAGE_MODELS.includes(m))
+                );
+                if (modelsToTry.length === 0) modelsToTry = [...GROQ_IMAGE_MODELS];
             }
 
             console.log(`Provider ${provider.id} queued models: ${modelsToTry.join(', ')}`);
@@ -12900,10 +12904,11 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             );
 
                             if (result.status === 429) {
-                                console.warn(`Image Model ${modelId} limit reached (429).`);
+                                console.warn(`Groq Image Model ${modelId} rate limited (429).`);
                                 break;
                             }
                             if (result.status === 503 || result.status >= 500) {
+                                console.warn(`Groq Service Error (${result.status}). Retrying...`);
                                 attempts++;
                                 if (attempts <= MAX_RETRIES) {
                                     await new Promise(r => setTimeout(r, Math.pow(2, attempts) * 1000));
@@ -12922,6 +12927,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             break;
                         } else {
                             // Gemini
+                            // IMPROVED: Added try/catch within fetch and more detailed error logging
                             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:predict?key=${provider.key}`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -12932,11 +12938,11 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             });
 
                             if (response.status === 429) {
-                                console.warn(`Image Model ${modelId} limit reached (429).`);
+                                console.warn(`Gemini Image Model ${modelId} rate limited (429).`);
                                 break;
                             }
                             if (response.status === 503 || response.status >= 500) {
-                                console.warn(`Image Model ${modelId} service error (${response.status}). Retrying...`);
+                                console.warn(`Gemini Service Error (${response.status}). Retrying...`);
                                 attempts++;
                                 if (attempts <= MAX_RETRIES) {
                                     await new Promise(r => setTimeout(r, Math.pow(2, attempts) * 1000));
@@ -12946,7 +12952,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             }
                             if (!response.ok) {
                                 const errorText = await response.text();
-                                console.warn(`Image Model ${modelId} failed with ${response.status}: ${errorText}`);
+                                console.warn(`Gemini Image Model ${modelId} failed (${response.status}): ${errorText}`);
                                 break;
                             }
 
@@ -12956,11 +12962,12 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                 if (isRateLimited) setIsRateLimited(false);
                                 return `data:image/png;base64,${base64}`;
                             } else {
+                                console.warn(`Gemini success but no image data returned for ${modelId}`);
                                 break;
                             }
                         }
                     } catch (e: any) {
-                        console.error(`Image Gen Connection Error with ${modelId}:`, e);
+                        console.error(`Image Gen Exception with ${modelId} via ${provider.id}:`, e);
                         attempts++;
                         if (attempts <= MAX_RETRIES) {
                             await new Promise(r => setTimeout(r, 2000));
@@ -12971,7 +12978,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 }
             }
         }
-        console.log("Image generation failed for all queued providers.");
+        console.log("Image generation failed for all queued providers/models.");
         return null;
     };
 

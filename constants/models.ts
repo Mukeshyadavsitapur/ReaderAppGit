@@ -23,7 +23,8 @@ export const GROQ_MODELS = [
 ];
 
 export const GEMINI_IMAGE_MODELS = [
-    "imagen-3.5"
+    "imagen-3.0-generate-001",
+    "imagen-3.0-fast-generate-001"
 ];
 
 export const GROQ_IMAGE_MODELS = [

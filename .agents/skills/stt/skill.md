@@ -6,40 +6,80 @@ description: Detailed instructions and implementation patterns for the Offline S
 # Offline Speech-to-Text (STT) Implementation
 
 ## Overview
-This application uses `expo-speech-recognition` for its offline STT (Speech-to-Text) capabilities. The implementation is designed to handle cross-platform discrepancies between iOS and Android, manage permissions efficiently, and provide a Live Chatbot mode that uses volume-based silence detection.
+> [!IMPORTANT]
+> **Online STT (Gemini/Groq) has been fully removed from the application.**
+> The app now exclusively uses `expo-speech-recognition` for all voice features. This ensures 100% privacy, zero API costs, and near-instant feedback even without an internet connection.
 
-## Key Components
+This skill documents the robust offline STT implementation that handles cross-platform discrepancies between iOS and Android, manages permissions efficiently, and provides a "Live Chatbot" mode with volume-based silence detection.
 
-### 1. States and Refs
-The implementation relies heavily on `useRef` to maintain consistency across asynchronous OS events without triggering unnecessary React renders.
-- `offlineTranscript` (State): Holds the current visible transcript to update the UI.
-- `latestOfflineTranscriptRef` (Ref): Holds the absolute latest transcript, referenced safely during `end` or `error` callbacks.
-- `accumulatedOfflineTranscriptRef` (Ref): Stores previously confirmed speech from `isFinal` events. This is crucial for properly appending partial sentences and neutralizing differences between iOS (which frequently clears memory) and Android (which accumulates natively).
-- `sttPermissionGranted` (Ref): Caches the microphone permission grant to skip the ~1s OS permission round-trip on subsequent usages.
-- `chatbotSilenceTimer` (Ref): Used in Live Chatbot mode to automatically stop the microphone after prolonged silence.
+---
 
-### 2. Event Listeners (`useSpeechRecognitionEvent`)
-The STT lifecycle is managed exclusively through event listeners:
-- **`start`**: Resets all state and accumulator refs, and switches the UI to recording mode.
-- **`result`**:
-  - Takes only the highest-confidence transcript (`event.results?.[0]?.transcript`) to avoid Android's bug of duplicating alternative context guesses.
-  - Compares the incoming string with `accumulatedOfflineTranscriptRef`. If it starts with the accumulator, it replaces it (native accumulation). If it doesn't, it prepends the accumulator (fresh context).
-- **`volumechange`**: 
-  - Monitors the microphone volume (values typically range between -2 and 10).
-  - Actively checks if the volume drops below the `4.5` threshold (silence). If it stays silent beyond `silenceTimeoutMs` (e.g., 3000ms), it automatically stops recording.
-- **`end` / `error`**: Cleans up silence timers and resolves the main `getOfflineSTT()` promise.
+## Detailed Logic (Beginner Friendly)
 
-### 3. Core Methods
-- **`getOfflineSTT()`**: 
-  - Validates module existence and permissions.
-  - Registers the custom `resolve` function to a ref so the event listeners can fulfill the promise.
-  - Starts the engine with `continuous: true` and enables `volumeChangeEventOptions`.
-- **`stopOfflineSTT()`**: 
-  - Optimistically updates UI states instantly to remove the 2-3s input lag caused by the OS terminating the mic sequentially.
-  - Calls `ExpoSpeechRecognitionModule.stop()`.
+### 1. The "Accumulator" Pattern
+One of the hardest parts of STT is preventing text from repeating or disappearing when the OS "refreshes" the recognition session. We use the `accumulatedOfflineTranscriptRef` to bridge this gap.
+
+**How it works:**
+1. User speaks: "Hello world."
+2. STT Engine sends: `event.isFinal = true`.
+3. We save "Hello world." into the **Accumulator**.
+4. User speaks more: "How are you?"
+5. We append the new partial text to the Accumulator: "Hello world. How are you?"
+
+**Why we do this:**
+On Android, the engine often includes previous sentences in new delivery packets. On iOS, it might clear them. By managing our own "Accumulator", we ensure the text stays stable regardless of the platform.
+
+### 2. Smart Silence Detection (Volume Thresholds)
+Instead of relying on the system to decide when you've stopped talking (which is often too slow or too aggressive), we monitor the actual microphone volume in real-time.
+
+```javascript
+// Threshold logic inside the volumechange event
+const SILENCE_THRESHOLD = 4.5; // Decibel-relative value
+if (volume < SILENCE_THRESHOLD) {
+    // Start a timer. If it hits 3 seconds, STOP the mic automatically.
+} else {
+    // User is still talking! Reset the timer.
+}
+```
+
+---
+
+## Core Methods & Flow
+
+### `getOfflineSTT(options)`
+This is the main entry point. It returns a `Promise<string>` that resolves when the user stops talking or the silence timer triggers.
+
+**Internal Flow:**
+1. **Permission Check**: Checks if the mic is allowed.
+2. **Setup Listeners**: Attaches `start`, `result`, `error`, and `end` handlers.
+3. **Start Engine**: Calls `ExpoSpeechRecognitionModule.start()` with `continuous: true`.
+4. **Volume Monitoring**: Actively calculates silence.
+5. **Resolve**: When the mic stops, the `end` event triggers the `resolve()` of the promise with the final transcript.
+
+### `handleVoiceToggle()`
+In `app/index.tsx`, this function is now extremely simple:
+```typescript
+const handleVoiceToggle = async () => {
+   // 1. Visually show 'recording' state
+   // 2. Await the voice input
+   const transcript = await getOfflineSTT();
+   // 3. Put the transcript into the input field!
+}
+```
+
+---
 
 ## Best Practices & Handling Gotchas
-1. **Prevent Android Duplication**: Never blindly concatenate all elements in the `event.results` array. Always grab just `[0]`, otherwise text duplicates like "Ram eats food, Ram eats food ramesh goes to...".
-2. **Handle Context Disconnects**: iOS and Android differ on how they aggregate text over a long continuous session. Always use a custom JS-side `accumulatorTarget` to merge `isFinal` parts securely.
-3. **Manual Silence Detection**: Do not trust the native OS silence timeout as it often cuts off trailing speech abruptly. Use `continuous: true` and calculate silence manually using the `volumechange` event instead.
-4. **Optimistic State Toggles**: Trigger `.stop()` inside `try/catch` and immediately toggle UI buttons to `false` instead of waiting for the `end` event to make the application feel highly responsive.
+
+1. **Avoid Duplicates**: Always take the *first* result (`event.results?.[0]`) from the results array. Android sometimes sends multiple "alternative" guesses that can lead to stuttering text if not filtered.
+2. **Optimistic UI**: When calling `stopOfflineSTT()`, toggle your UI buttons to `false` **immediately**. Do not wait for the `end` event. The OS takes a few seconds to shut down the hardware, and "waiting" makes the app feel laggy.
+3. **Volume Calibration**: The threshold of `4.5` is a "sweet spot" for most mobile microphones. If users find the mic cuts off too early, consider lowering this to `3.5`.
+
+---
+
+## Example Usage (GeminiChat)
+When the microphone button is pressed:
+- `isRecording` state becomes `true`.
+- `getOfflineSTT()` starts listening.
+- As the user speaks, `offlineTranscript` updates the UI in real-time.
+- On completion, the text is automatically sent to the AI.
