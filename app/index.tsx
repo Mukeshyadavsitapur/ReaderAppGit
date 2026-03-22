@@ -4938,6 +4938,7 @@ export default function App() {
         voice: "Kore",
         offlineSttEnabled: true, 
         imageGenerationEnabled: true,
+        groqImageBaseUrl: "https://api.groq.com/openai/v1", 
         llmProvider: "groq", 
         showPersonalDictionary: true,
         preventSleep: false,
@@ -9158,6 +9159,7 @@ export default function App() {
                         dictionaryLimit: parsed.dictionaryLimit || 10000,
                         libraryLimit: parsed.libraryLimit || 2000,
                         imageGenerationEnabled: parsed.imageGenerationEnabled !== undefined ? parsed.imageGenerationEnabled : true,
+                        groqImageBaseUrl: parsed.groqImageBaseUrl || "https://api.groq.com/openai/v1",
                         tapToDefine: parsed.tapToDefine !== undefined ? parsed.tapToDefine : true,
                         textModels: [...new Set([...GEMINI_MODELS, ...(parsed.textModels || [])])],
                         groqModels: [...new Set([...GROQ_MODELS, ...(parsed.groqModels || [])])],
@@ -12897,8 +12899,9 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         console.log(`Attempting Image Gen with: ${modelId} via ${provider.id} (Attempt ${attempts + 1})`);
 
                         if (provider.id === 'groq') {
+                            const baseUrl = displaySettings.groqImageBaseUrl || "https://api.groq.com/openai/v1";
                             const result = await xhrPost(
-                                `https://api.groq.com/openai/v1/images/generations`,
+                                `${baseUrl}/images/generations`,
                                 { "Content-Type": "application/json", "Authorization": `Bearer ${provider.key}` },
                                 JSON.stringify({ prompt: prompt, model: modelId, response_format: 'b64_json', n: 1 })
                             );
@@ -24609,6 +24612,32 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                             )}
                         </TouchableOpacity>
                     </View>
+
+                    {displaySettings.llmProvider === 'groq' && (
+                        <View style={{ marginBottom: 20 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>
+                                Groq Image Base URL (Optional)
+                            </Text>
+                            <TextInput
+                                style={{
+                                    padding: 12,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: theme.border,
+                                    backgroundColor: theme.inputBg,
+                                    color: theme.text,
+                                    fontSize: 14,
+                                }}
+                                placeholder="https://api.groq.com/openai/v1"
+                                placeholderTextColor={theme.secondary}
+                                value={displaySettings.groqImageBaseUrl}
+                                onChangeText={(txt) => saveSettings({ groqImageBaseUrl: txt })}
+                            />
+                            <Text style={{ fontSize: 11, color: theme.secondary, marginTop: 5, fontStyle: 'italic' }}>
+                                Use a custom endpoint if your Groq key supports image generation via a proxy or compatible service.
+                            </Text>
+                        </View>
+                    )}
 
                     {/* NEW: AI INTELLIGENCE SETTINGS MOVED HERE */}
                     <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 20 }} />
