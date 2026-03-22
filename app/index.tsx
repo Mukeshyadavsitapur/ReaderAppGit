@@ -16271,7 +16271,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         return [w.toLowerCase(), true];
                     }));
 
-                    for (const item of dictionaryToImport) {
+                    for (const item of wordsToImport) {
                         // Normalize format
                         let wordString = "";
                         let wordData = null;
