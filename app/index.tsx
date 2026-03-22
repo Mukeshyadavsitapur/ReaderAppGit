@@ -13055,12 +13055,18 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                 // 1. Identify the Persona
                 const allTools = getAllTools();
                 const currentTool = allTools.find(t => t.id === readingSession.toolId);
+                const selectedHomeFeature = homeFeatureId ? allTools.find(t => t.id === homeFeatureId) : null;
 
                 let systemRole = "Assistant";
                 let contextInstruction = "You are a helpful AI assistant.";
                 let detailedInstruction = "Provide a comprehensive, detailed response.";
 
-                if (currentTool) {
+                // GLOBAL OVERRIDE: Use selected home feature if it's an assistant and current session isn't already a custom tool
+                if (selectedHomeFeature && (!currentTool || !currentTool.isCustom)) {
+                    systemRole = selectedHomeFeature.title;
+                    contextInstruction = `You are ${selectedHomeFeature.title}. Act strictly according to your instructions: "${selectedHomeFeature.systemPrompt || selectedHomeFeature.prompt}". FORMULA RULE: Do NOT use LaTeX delimiters like $$ or \[. Use original mathematical symbols (e.g., f_{w,b}(x) = wx + b) and keep formulas on their own lines for readability.`;
+                    detailedInstruction = "Maintain your specific persona constraints and style. Be detailed and helpful.";
+                } else if (currentTool) {
                     if (currentTool.isCustom) {
                         systemRole = currentTool.title;
                         contextInstruction = `You are ${currentTool.title}. Act strictly according to your instructions: "${currentTool.systemPrompt}".`;
@@ -13218,7 +13224,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         setGenerationData(isReaderContext ? "Searching..." : "Searching deeply...");
 
         const selectedHomeFeature = homeFeatureId ? getAllTools().find(t => t.id === homeFeatureId) : null;
-        const systemInstruction = selectedHomeFeature 
+        const systemInstruction = selectedHomeFeature
             ? `You are ${selectedHomeFeature.title}. ${selectedHomeFeature.systemPrompt || selectedHomeFeature.prompt}. FORMULA RULE: Do NOT use LaTeX delimiters like $$ or \[. Use original mathematical symbols (e.g., f_{w,b}(x) = wx + b) and keep formulas on their own lines for readability.`
             : "You are a helpful AI assistant, similar to Google Gemini. Provide direct, quick, and easy-to-understand answers. Focus on the user's specific query and avoid unnecessary elaboration.";
 
@@ -21778,7 +21784,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                     style={[styles.menuItem, { opacity: 0.8, borderStyle: 'dashed', borderWidth: 1, borderColor: theme.border, marginTop: 8 }]}
                                 >
                                     <Plus size={20} color={theme.secondary} />
-                                    <Text style={[styles.menuItemText, { color: theme.secondary }]}>+ generate new feature</Text>
+                                    <Text style={[styles.menuItemText, { color: theme.secondary }]}>Generate New Feature</Text>
                                 </TouchableOpacity>
 
                                 {/* Custom Menu Features */}

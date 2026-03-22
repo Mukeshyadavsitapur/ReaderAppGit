@@ -12,10 +12,13 @@ ReaderApp is designed for deep learning. All generated educational content, espe
 
 ### 1. Beginner-Friendly Structure
 - **Depth**: Even if a topic is complex, start with a high-level, clear analogy.
-- **Examples**: Provide at least 2-3 practical, relatable examples for every new concept.
+- **Detailed Examples**: Provide substantial practical examples (more than 2-3 if needed) to ensure the user perfectly understands.
 - **Clarity**: Avoid jargon unless explained immediately.
+- **Offline Chapters**: When creating offline chapters, add extra detail and practice examples to make them beginner-friendly and comprehensive.
 
-### 2. Machine Learning Notes
+### 2. Machine Learning Notes & Naming
+- **Dynamic Naming**: If the user suggests a new name for a machine learning chapter, update it globally (including references in the hamburger/side menu).
+- **Rich Content**: For ML notes, prioritize adding more details, examples, diagrams, and images to explain concepts thoroughly.
 - **Visual Policy**: Do NOT prompt the LLM to generate `IMAGE_PROMPT` tags for standard articles, book chapters, or machine learning notes. This saves generation time and prevents layout shifts.
 - **Exceptions**: Automatic image generation is reserved ONLY for **Quizzes** (where visuals are requested on-demand for specific questions).
 - **Interactive Elements**: Use `ConceptCard` for key definitions and `SimpleTable` for comparisons (e.g., Supervised vs. Unsupervised Learning).
