@@ -7397,9 +7397,10 @@ export default function App() {
     // FIX: Corrected the SyntaxError in filteredLibraryItems
     const filteredLibraryItems = useMemo(() => {
         if (libraryTab === 'chats') {
-            // 1. Get all assistant sessions (excluding notes, stories, quizzes, editorials, flashcards, and audio)
-            const rawChats = (Object.values(chatSessions || {}) as any[])
-                .filter(s => s.toolId !== 'quick_notes' && s.toolId !== 'story_generator' && s.toolId !== 'quiz_save' && s.toolId !== 'editorial_writer' && s.toolId !== 'flashcards' && s.toolId !== 'audio_player')
+            // 1. Get all candidate sessions (excluding notes, quizzes, flashcards, and audio)
+            // But INCLUDE story_generator and editorial_writer (previously in Studio)
+            const rawItems = (Object.values(chatSessions || {}) as any[])
+                .filter(s => s.toolId !== 'quick_notes' && s.toolId !== 'quiz_save' && s.toolId !== 'flashcards' && s.toolId !== 'audio_player')
                 .filter(s => {
                     // Apply Search Filter
                     if (librarySearchQuery.trim()) {
@@ -7411,34 +7412,20 @@ export default function App() {
                     return true;
                 });
 
-            // 2. Sort List (Pinned first, then Newest)
-            return rawChats.sort((a, b) => {
-                if (a.pinned && !b.pinned) return -1;
-                if (!a.pinned && b.pinned) return 1;
-                return (b.timestamp || '').localeCompare(a.timestamp || '');
-            });
-
-        } else if (libraryTab === 'stories') {
-            // NEW: Include Editorial Writer in Studio/Stories tab
-            const rawStories = Object.values(chatSessions || {})
-                .filter((s: any) => (s.toolId === 'story_generator' || s.toolId === 'editorial_writer'));
-
-            // 1. Grouping Logic
+            // 2. Grouping Logic for Stories and Editorials
             const groups: any = {};
             const standalone: any[] = [];
 
-            rawStories.forEach((s: any) => {
-                // Apply Search Filter
-                if (librarySearchQuery.trim()) {
-                    const q = librarySearchQuery.toLowerCase();
-                    const matchesTitle = s.title?.toLowerCase().includes(q);
-                    const matchesContent = s.messages?.[0]?.content?.toLowerCase().includes(q);
-                    if (!matchesTitle && !matchesContent) {
-                        return;
-                    }
+            rawItems.forEach((s: any) => {
+                // Determine if this item should be grouped (Story or Editorial)
+                const isGroupable = s.toolId === 'story_generator' || s.toolId === 'editorial_writer';
+
+                if (!isGroupable) {
+                    standalone.push(s);
+                    return;
                 }
 
-                // NEW: Group all Editorials together
+                // Group Editorials
                 if (s.toolId === 'editorial_writer') {
                     const groupTitle = "Editorials";
                     if (!groups[groupTitle]) {
@@ -7453,24 +7440,19 @@ export default function App() {
                             hasAudio: false
                         };
                     }
-
                     groups[groupTitle].chapters.push(s);
-
-                    // Update group metadata
                     if (new Date(s.timestamp) > new Date(groups[groupTitle].timestamp)) {
                         groups[groupTitle].timestamp = s.timestamp;
                     }
                     if (s.pinned) groups[groupTitle].pinned = true;
                     if (s.hasAudio) groups[groupTitle].hasAudio = true;
-
-                    return; // Skip standard processing
+                    return;
                 }
 
-                // Identify Book Title (Format: "Book Title: Chapter Title")
+                // Group Stories (by Book Title)
                 const separatorIdx = s.title?.indexOf(':') ?? -1;
-                if (separatorIdx > 0) {
+                if (separatorIdx > 0 && s.toolId === 'story_generator') {
                     const bookTitle = s.title.substring(0, separatorIdx).trim();
-
                     if (!groups[bookTitle]) {
                         groups[bookTitle] = {
                             id: `group_${simpleHash(bookTitle)}`,
@@ -7483,40 +7465,31 @@ export default function App() {
                             hasAudio: false
                         };
                     }
-
                     groups[bookTitle].chapters.push(s);
-
-                    // Update group metadata
                     if (new Date(s.timestamp) > new Date(groups[bookTitle].timestamp)) {
-                        groups[bookTitle].timestamp = s.timestamp; // Keep latest timestamp
+                        groups[bookTitle].timestamp = s.timestamp;
                     }
-                    if (s.pinned) groups[bookTitle].pinned = true; // Pin group if any chapter is pinned
+                    if (s.pinned) groups[bookTitle].pinned = true;
                     if (s.hasAudio) groups[bookTitle].hasAudio = true;
-                    // Use image from the first encountered chapter that has one (or keep updating to latest)
                     if (!groups[bookTitle].image && s.image) groups[bookTitle].image = s.image;
-
                 } else {
                     standalone.push(s);
                 }
             });
 
-            // 2. Flatten Groups and handle singles
+            // 3. Flatten Groups and handle singles
             const finalItems: any[] = [];
-
             Object.values(groups).forEach((g: any) => {
                 if (g.chapters.length > 1) {
-                    // Sort chapters inside the group by timestamp (Newest -> Oldest)
                     g.chapters.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
                     finalItems.push(g);
                 } else {
-                    // Only 1 chapter found for this book? Treat as standalone session
                     finalItems.push(g.chapters[0]);
                 }
             });
-
             finalItems.push(...standalone);
 
-            // 3. Sort Final List (Newest modified books/stories first)
+            // 4. Sort Final List (Pinned first, then Newest)
             return finalItems.sort((a, b) => {
                 if (a.pinned && !b.pinned) return -1;
                 if (!a.pinned && b.pinned) return 1;
@@ -26210,21 +26183,23 @@ Review the following raw transcribed text:
 
     const renderLibraryItem = useCallback(({ item }: { item: any }) => {
         if (item.isGroup) {
+            const isStoryGroup = item.id === 'group_editorials' || item.id?.startsWith('group_');
             return (
                 <LibraryGroupItem
                     session={item}
                     theme={theme}
                     isSelectionMode={isLibrarySelectionMode}
                     selectedLibraryIds={selectedLibraryIds}
-                    isExpanded={!!expandedJournalGroups[item.id]}
+                    isExpanded={!!(isStoryGroup ? expandedStoryGroups[item.id] : expandedJournalGroups[item.id])}
                     isLandscape={isLandscape}
                     primaryColor={primaryColor}
-                    onToggleExpand={onLibraryGroupToggle}
+                    onToggleExpand={isStoryGroup ? onLibraryStoryGroupToggle : onLibraryGroupToggle}
                     onGroupSelect={onLibraryGroupSelect}
                     onChildPress={onLibraryChildPress}
                     onChildLongPress={onLibraryChildLongPress}
                     onGroupLongPress={onLibraryGroupLongPress}
                     styles={styles}
+                    isStoriesTab={isStoryGroup}
                 />
             );
         }
@@ -26241,43 +26216,8 @@ Review the following raw transcribed text:
                 styles={styles}
             />
         );
-    }, [theme, isLibrarySelectionMode, selectedLibraryIds, expandedJournalGroups, isLandscape, primaryColor, onLibraryGroupToggle, onLibraryGroupSelect, onLibraryChildPress, onLibraryChildLongPress, onLibraryGroupLongPress, onLibraryItemPress, onLibraryItemLongPress, styles]);
+    }, [theme, isLibrarySelectionMode, selectedLibraryIds, expandedJournalGroups, expandedStoryGroups, isLandscape, primaryColor, onLibraryGroupToggle, onLibraryStoryGroupToggle, onLibraryGroupSelect, onLibraryChildPress, onLibraryChildLongPress, onLibraryGroupLongPress, onLibraryItemPress, onLibraryItemLongPress, styles]);
 
-    const renderStoryItem = useCallback(({ item }: { item: any }) => {
-        if (item.isGroup) {
-            return (
-                <LibraryGroupItem
-                    session={item}
-                    theme={theme}
-                    isSelectionMode={isLibrarySelectionMode}
-                    selectedLibraryIds={selectedLibraryIds}
-                    isExpanded={!!expandedStoryGroups[item.id]}
-                    isLandscape={isLandscape}
-                    primaryColor={primaryColor}
-                    onToggleExpand={onLibraryStoryGroupToggle}
-                    onGroupSelect={onLibraryGroupSelect}
-                    onChildPress={onLibraryChildPress}
-                    onChildLongPress={onLibraryChildLongPress}
-                    onGroupLongPress={onLibraryGroupLongPress}
-                    styles={styles}
-                    isStoriesTab={true}
-                />
-            );
-        }
-        return (
-            <LibrarySessionItem
-                session={item}
-                theme={theme}
-                isSelected={selectedLibraryIds.includes(item.id)}
-                isSelectionMode={isLibrarySelectionMode}
-                isLandscape={isLandscape}
-                primaryColor={primaryColor}
-                onPress={onLibraryItemPress}
-                onLongPress={onLibraryItemLongPress}
-                styles={styles}
-            />
-        );
-    }, [theme, isLibrarySelectionMode, selectedLibraryIds, expandedStoryGroups, isLandscape, primaryColor, onLibraryStoryGroupToggle, onLibraryGroupSelect, onLibraryChildPress, onLibraryChildLongPress, onLibraryGroupLongPress, onLibraryItemPress, onLibraryItemLongPress, styles]);
 
     // NEW: Unified Search Bar (AI + Library)
     const renderHomeSearchBar = () => (
@@ -26540,11 +26480,10 @@ Review the following raw transcribed text:
                                 ) : activeTab === 'library' ? (
                                     <View style={{ flex: 1 }}>
                                         <View style={{ borderBottomWidth: 1, borderBottomColor: theme.border }}>
-                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: 15, gap: 12 }}>
+                                            <View style={{ flexDirection: 'row', padding: 15, gap: 12 }}>
                                                 {[
-                                                    { id: 'chats', label: 'Assistant', icon: NotebookPen },
-                                                    { id: 'stories', label: 'Studio', icon: BookOpenText },
-                                                    { id: 'questions', label: 'Test', icon: MonitorCheck },
+                                                    { id: 'chats', label: 'Assistant' },
+                                                    { id: 'questions', label: 'Test' },
                                                 ].map((tab: any) => {
                                                     const isActive = libraryTab === tab.id;
                                                     return (
@@ -26552,16 +26491,14 @@ Review the following raw transcribed text:
                                                             key={tab.id}
                                                             onPress={() => setLibraryTab(tab.id)}
                                                             style={{
-                                                                paddingVertical: 12,
-                                                                paddingHorizontal: 20,
+                                                                flex: 1,
+                                                                paddingVertical: 10,
                                                                 borderRadius: 12,
                                                                 backgroundColor: isActive ? primaryColor : theme.uiBg,
                                                                 borderWidth: 1,
                                                                 borderColor: isActive ? primaryColor : theme.border,
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center',
-                                                                gap: 6,
-                                                                minWidth: 85,
                                                                 shadowColor: "#000",
                                                                 shadowOffset: { width: 0, height: 2 },
                                                                 shadowOpacity: isActive ? 0.2 : 0.05,
@@ -26569,12 +26506,11 @@ Review the following raw transcribed text:
                                                                 elevation: isActive ? 3 : 1
                                                             }}
                                                         >
-                                                            <tab.icon size={20} color={isActive ? 'white' : theme.text} />
                                                             <Text style={{ color: isActive ? 'white' : theme.text, fontWeight: 'bold', fontSize: 13 }}>{tab.label}</Text>
                                                         </TouchableOpacity>
                                                     );
                                                 })}
-                                            </ScrollView>
+                                            </View>
                                         </View>
 
                                         {/* NEW: Library Search Bar OR Selection Header */}
@@ -26713,44 +26649,6 @@ Review the following raw transcribed text:
                                                     onEndReachedThreshold={0.3}
                                                 />
 
-                                            ) : libraryTab === 'stories' ? (
-                                                <FlatList
-                                                    key={isLandscape ? 'lib_land_stories' : 'lib_port_stories'} // Force remount on orientation change
-                                                    numColumns={isLandscape ? 2 : 1}
-                                                    columnWrapperStyle={isLandscape ? { justifyContent: 'space-between', gap: 15 } : null}
-                                                    contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
-                                                    initialNumToRender={10}
-                                                    maxToRenderPerBatch={10}
-                                                    windowSize={5}
-                                                    removeClippedSubviews={true}
-                                                    // Use memoized filtered data
-                                                    data={filteredLibraryItems}
-                                                    ListFooterComponent={
-                                                        <View style={{ paddingVertical: 20, alignItems: 'center', gap: 10 }}>
-                                                            <View style={{ height: 20 }} />
-                                                        </View>
-                                                    }
-                                                    keyExtractor={(item) => item.id}
-                                                    ListEmptyComponent={
-                                                        <View style={{ alignItems: 'center', marginTop: 50 }}>
-                                                            {librarySearchQuery ? (
-                                                                <>
-                                                                    <Search size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>No matches found.</Text>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <BookOpenText size={48} color={theme.secondary} style={{ opacity: 0.3 }} />
-                                                                    <Text style={{ color: theme.secondary, marginTop: 10 }}>{uiData.staticText?.library?.empty || "No stories saved yet."}</Text>
-                                                                    <TouchableOpacity onPress={() => setActiveTab('story')} style={{ marginTop: 20 }}>
-                                                                        <Text style={{ color: '#2563eb' }}>{uiData.staticText?.library?.emptySub || "Write a Story"}</Text>
-                                                                    </TouchableOpacity>
-                                                                </>
-                                                            )}
-                                                        </View>
-                                                    }
-                                                    renderItem={renderStoryItem}
-                                                />
                                              ) : (
                                                 <View style={{ flex: 1 }}>
                                                     <View style={{ flexDirection: 'row', margin: 15, marginTop: 0, backgroundColor: theme.buttonBg, borderRadius: 12, padding: 4 }}>
