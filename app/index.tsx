@@ -6871,40 +6871,31 @@ export default function App() {
 
     // NEW: Effect to handle auto-progression for Stories and Audio Tracks
     useEffect(() => {
-        if (ttsFinishedNaturally > 0 && readingSession) {
-            // 1. LIBRARY AUDIO TAB PROGRESSION
-            // Check if we are playing an orphan file (Library Audio)
-            if (playingMeta?.id && playingMeta.id.startsWith('orphan_')) {
-                const originalId = playingMeta.id.replace('orphan_', '');
-                setTtsFinishedNaturally(0);
-                return;
-            }
-
-            // 2. STORY PROGRESSION LOGIC
-            // If we are in a story and it has a linked next chapter, load it
-            if (readingSession.nextChapterId && chatSessions[readingSession.nextChapterId]) {
-                const nextSession = chatSessions[readingSession.nextChapterId];
-                // Small delay to allow user to process the end of the chapter
-                setTimeout(() => {
-                    showToast("Opening next chapter...");
-                    autoPlayRef.current = true; // Signal auto-play for the next session
-                    loadHistorySession(nextSession, 'reader');
-                }, 1500);
-                setTtsFinishedNaturally(0);
-                return;
-            }
-
-            setTtsFinishedNaturally(0);
-            // 3. LIVE CHATBOT MODE LOGIC
-            // Automatically start the microphone when TTS finishes speaking the assistant's response
-            setTimeout(() => {
-                if (isLiveChatbotMode && !isOfflineRecognizing) {
-                    handleChatbotVoiceToggle();
+        if (ttsFinishedNaturally > 0) {
+            // 1. SESSION-DEPENDENT LOGIC (Requires readingSession)
+            if (readingSession) {
+                // A. LIBRARY AUDIO TAB PROGRESSION
+                if (playingMeta?.id && playingMeta.id.startsWith('orphan_')) {
+                    const originalId = playingMeta.id.replace('orphan_', '');
+                    setTtsFinishedNaturally(0);
+                    return;
                 }
-            }, 500);
+            }
+
+            // 2. SESSION-INDEPENDENT LOGIC
+            // A. LIVE CHATBOT MODE LOGIC
+            // Automatically start the microphone when TTS finishes speaking the assistant's response
+            if (isLiveChatbotMode) {
+                setTimeout(() => {
+                    if (isLiveChatbotMode && !isOfflineRecognizing) {
+                        handleChatbotVoiceToggle();
+                    }
+                }, 500);
+            }
+
             setTtsFinishedNaturally(0);
         }
-    }, [ttsFinishedNaturally, isLiveChatbotMode, isOfflineRecognizing, activeChatbotChar]);
+    }, [ttsFinishedNaturally, isLiveChatbotMode, isOfflineRecognizing, readingSession, activeChatbotChar]);
 
     const [isExportingAudio, setIsExportingAudio] = useState(false);
     const [ttsDownloadProgress, setTtsDownloadProgress] = useState(0);
@@ -12908,6 +12899,11 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
 
                             if (result.status === 429) {
                                 console.warn(`Groq Image Model ${modelId} rate limited (429).`);
+                                break;
+                            }
+                            if (result.status === 404) {
+                                console.warn(`Groq Image failed: 404. This is expected as Groq lacks native image gen. Please set a custom Base URL in Settings.`);
+                                showToast("Groq needs a custom Image Base URL in Settings.");
                                 break;
                             }
                             if (result.status === 503 || result.status >= 500) {
@@ -24613,31 +24609,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                         </TouchableOpacity>
                     </View>
 
-                    {displaySettings.llmProvider === 'groq' && (
-                        <View style={{ marginBottom: 20 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>
-                                Groq Image Base URL (Optional)
-                            </Text>
-                            <TextInput
-                                style={{
-                                    padding: 12,
-                                    borderRadius: 8,
-                                    borderWidth: 1,
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.inputBg,
-                                    color: theme.text,
-                                    fontSize: 14,
-                                }}
-                                placeholder="https://api.groq.com/openai/v1"
-                                placeholderTextColor={theme.secondary}
-                                value={displaySettings.groqImageBaseUrl}
-                                onChangeText={(txt) => saveSettings({ groqImageBaseUrl: txt })}
-                            />
-                            <Text style={{ fontSize: 11, color: theme.secondary, marginTop: 5, fontStyle: 'italic' }}>
-                                Use a custom endpoint if your Groq key supports image generation via a proxy or compatible service.
-                            </Text>
-                        </View>
-                    )}
+
 
                     {/* NEW: AI INTELLIGENCE SETTINGS MOVED HERE */}
                     <View style={{ height: 1, backgroundColor: theme.border, marginBottom: 20 }} />
@@ -24725,7 +24697,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                 placeholder="Add Groq model id..."
                             />
 
-                            <EditableSelectionList
+                             <EditableSelectionList
                                 label="IMAGE GENERATION MODELS"
                                 items={displaySettings.imageModels || [...IMAGE_MODELS]}
                                 onSelect={() => { }}
@@ -24742,6 +24714,32 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                 theme={theme}
                                 placeholder="Add Image model id..."
                             />
+
+                            {displaySettings.llmProvider === 'groq' && (
+                                <View style={{ marginTop: 10, marginBottom: 20 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.secondary, marginBottom: 10, textTransform: 'uppercase' }}>
+                                        Groq Image Base URL
+                                    </Text>
+                                    <TextInput
+                                        style={{
+                                            padding: 12,
+                                            borderRadius: 8,
+                                            borderWidth: 1,
+                                            borderColor: theme.border,
+                                            backgroundColor: theme.inputBg,
+                                            color: theme.text,
+                                            fontSize: 14,
+                                        }}
+                                        placeholder="https://api.groq.com/openai/v1"
+                                        placeholderTextColor={theme.secondary}
+                                        value={displaySettings.groqImageBaseUrl}
+                                        onChangeText={(txt) => saveSettings({ groqImageBaseUrl: txt })}
+                                    />
+                                    <Text style={{ fontSize: 11, color: theme.secondary, marginTop: 5, fontStyle: 'italic' }}>
+                                        Use a custom endpoint if your Groq key supports image generation via a proxy or compatible service.
+                                    </Text>
+                                </View>
+                            )}
 
 
 
