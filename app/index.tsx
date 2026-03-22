@@ -5188,6 +5188,7 @@ export default function App() {
 
     const [lastQuizSubject, setLastQuizSubject] = useState<any>("General");
     const [selectedScenario, setSelectedScenario] = useState<any>(null);
+    const [homeFeatureId, setHomeFeatureId] = useState<string | null>(null);
     // UPDATED: Added isLanguageLearning to schoolConfig state
     const [schoolConfig, setSchoolConfig] = useState<any>({ input: "", length: "Medium", complexity: "Intermediate", subject: "General", isLanguageLearning: false });
     const [chatSessions, setChatSessions] = useState<any>({});
@@ -13216,16 +13217,19 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
         setAppMode("generating");
         setGenerationData(isReaderContext ? "Searching..." : "Searching deeply...");
 
-        const prompt = `
-    You are a helpful AI assistant, similar to Google Gemini. Provide direct, quick, and easy-to-understand answers. Focus on the user's specific query and avoid unnecessary elaboration.
+        const selectedHomeFeature = homeFeatureId ? getAllTools().find(t => t.id === homeFeatureId) : null;
+        const systemInstruction = selectedHomeFeature 
+            ? `You are ${selectedHomeFeature.title}. ${selectedHomeFeature.systemPrompt || selectedHomeFeature.prompt}. FORMULA RULE: Do NOT use LaTeX delimiters like $$ or \[. Use original mathematical symbols (e.g., f_{w,b}(x) = wx + b) and keep formulas on their own lines for readability.`
+            : "You are a helpful AI assistant, similar to Google Gemini. Provide direct, quick, and easy-to-understand answers. Focus on the user's specific query and avoid unnecessary elaboration.";
 
-    User Query: "${queryToUse}"
-    
-    User Query: "${queryToUse}"
-    `;
+        const prompt = `
+            ${systemInstruction}
+
+            User Query: "${queryToUse}"
+        `;
 
         try {
-            const personaName = selectedScenario?.title || "Personal Tutor";
+            const personaName = selectedHomeFeature?.title || selectedScenario?.title || "Personal Tutor";
             let rawContent = "";
             try {
                 const callContents = [{ role: "user", parts: [{ text: prompt }] }];
@@ -21774,7 +21778,7 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                     style={[styles.menuItem, { opacity: 0.8, borderStyle: 'dashed', borderWidth: 1, borderColor: theme.border, marginTop: 8 }]}
                                 >
                                     <Plus size={20} color={theme.secondary} />
-                                    <Text style={[styles.menuItemText, { color: theme.secondary }]}></Text>
+                                    <Text style={[styles.menuItemText, { color: theme.secondary }]}>+ generate new feature</Text>
                                 </TouchableOpacity>
 
                                 {/* Custom Menu Features */}
@@ -21784,9 +21788,16 @@ STRICT REQUIREMENT: You MUST prioritize the "Specific AI Instructions/Bio" above
                                         onPress={() => {
                                             toggleSideMenu(false);
                                             setIsChatbotMode(false);
-                                            setSelectedScenario(feature);
-                                            saveSchoolConfig({ input: "", length: "Medium", complexity: "Intermediate", subject: "General" });
-                                            setAppMode('setup');
+                                            if (feature.type === 'assistant') {
+                                                const isCurrentlySelected = homeFeatureId === feature.id;
+                                                setHomeFeatureId(isCurrentlySelected ? null : feature.id);
+                                                setActiveTab('home');
+                                                showToast(`${isCurrentlySelected ? 'Deselected' : 'Selected'} ${feature.title}`);
+                                            } else {
+                                                setSelectedScenario(feature);
+                                                saveSchoolConfig({ input: "", length: "Medium", complexity: "Intermediate", subject: "General" });
+                                                setAppMode('setup');
+                                            }
                                         }}
                                         onLongPress={() => handleLongPressCustomFeature(feature)}
                                         style={[styles.menuItem, (selectedScenario?.id === feature.id && appMode === 'setup') && { backgroundColor: theme.highlight }]}
@@ -25907,8 +25918,9 @@ Quick Tip: [explanation]`;
                                                 displayLanguage={displaySettings.language}
                                                 allTools={(() => {
                                                     const tools = getAllTools ? getAllTools() : [];
-                                                    return tools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner');
+                                                    return tools.filter((t: any) => !t.hidden && t.id !== 'examiner' && t.id !== 'ai_tutor' && t.id !== 'visual_learner' && !t.isCustom);
                                                 })()}
+                                                selectedFeature={homeFeatureId ? getAllTools().find(t => t.id === homeFeatureId) : undefined}
                                                 onToolPress={(tool) => {
                                                     setLastUsedTools((prev: any) => {
                                                         const newOrder = [tool.id, ...prev.filter((id: string) => id !== tool.id)];

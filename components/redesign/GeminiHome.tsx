@@ -33,6 +33,7 @@ interface GeminiHomeProps {
     onVisionPress: () => void;
     cycleGlobalLanguage: () => void;
     renderHomeSearchBar: () => React.ReactNode; 
+    selectedFeature?: Tool;
     isKeyboardVisible?: boolean;
     keyboardHeight?: number;
 }
@@ -50,6 +51,7 @@ const GeminiHome: React.FC<GeminiHomeProps> = ({
     onVisionPress,
     cycleGlobalLanguage,
     renderHomeSearchBar,
+    selectedFeature,
     isKeyboardVisible = false,
     keyboardHeight = 0
 }) => {
@@ -109,7 +111,11 @@ const GeminiHome: React.FC<GeminiHomeProps> = ({
                                     </View>
                                     <TouchableOpacity onPress={cycleGlobalLanguage} activeOpacity={0.7} style={{ marginTop: 8 }}>
                                         <Text style={[styles.subtitle, { color: theme.secondary, textAlign: 'left', lineHeight: 24 }]}>
-                                            How can I help you learn <Text style={{ color: primaryColor, fontWeight: 'bold' }}>{displayLanguage}</Text> today?
+                                            {selectedFeature ? (
+                                                <>How can I help you learn <Text style={{ color: primaryColor, fontWeight: 'bold' }}>{displayLanguage}</Text> today? I am your <Text style={{ color: primaryColor, fontWeight: 'bold' }}>{selectedFeature.title}</Text></>
+                                            ) : (
+                                                <>How can I help you learn <Text style={{ color: primaryColor, fontWeight: 'bold' }}>{displayLanguage}</Text> today?</>
+                                            )}
                                         </Text>
                                     </TouchableOpacity>
                                 </View>
